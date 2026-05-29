@@ -1,4 +1,4 @@
-# Events (MQ events and zone)
+﻿# Events (MQ events and zone)
 
 The bot subscribes to MQ (game) events in `botevents.BindEvents()`. Handlers run when `mq.doevents()` is called from the **doEvents** hook. This page charts which events exist and how they update state or runconfig.
 
@@ -57,7 +57,7 @@ Used by the **zoneCheck** hook (when `zonename != Zone.ShortName()`) and by MQ z
     - If runState is `dead`, clears run state.
     - Sets `zonename` to current zone short name.
     - Clears camp: `makecamp` and `campstatus = false`.
-    - Turns off `dopull`; clears `engageTargetId` and global `APTarget`.
+    - Turns off `dopull` via `botpull.DisablePull('zone')`; clears `engageTargetId` and global `APTarget`.
     - Runs mobfilter for exclude and priority (zone).
     - Cleans spellstates mob list; resets `MountCastFailed`.
 3. Clears `statusMessage`.
@@ -70,6 +70,7 @@ See [Run state machine](run-state-machine.md) and [hook AddSpawnCheck](hook-adds
 
 Runs when the character is slain or "Returning to Bind Location" or "You died." (hover).
 
+- **charState** also calls `botpull.DisablePull('death')` each tick while dead/hover.
 - Prints remaining hover time; runs `/consent group`, `/consent raid`, `/consent guild`.
 - Sets `HoverTimer = mq.gettime() + 30000` so CharState can throttle calling Event_Slain again.
 

@@ -1,4 +1,4 @@
----@class RunConfig
+﻿---@class RunConfig
 ---@field ScriptList table
 ---@field SubOrder table
 ---@field zonename string
@@ -61,7 +61,7 @@
 ---@field sitTimer number|nil mq.gettime() until which we should not auto-sit (set when hit; cleared when expired or no mobs in camp)
 ---@field spellNotInBook table|nil
 ---@field statusMessage string User-facing activity line for GUI
----@field pullHealerManaWait { name: string, pct: number }|nil when set, puller is waiting on this healer's mana before next pull; status tab shows it
+---@field pullHealerManaWait { name: string, pct: number, current?: number }|nil when set, puller is waiting on this healer's mana before next pull; status tab shows it
 ---@field OutOfSpace boolean|nil true when inventory was full (cursor item); cleared when space available again
 ---@field forageExpectCursor boolean|nil after /doability Forage: expect item on cursor; CharState /autoinv only while set
 ---@field forageCursorUntil number|nil mq.gettime() deadline for stale clear when forage yields nothing

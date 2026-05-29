@@ -1,4 +1,4 @@
--- Status tab: status line, Camp section, and doXXX flag On/Off buttons.
+﻿-- Status tab: status line, Camp section, and doXXX flag On/Off buttons.
 
 local ImGui = require('ImGui')
 local mq = require('mq')
@@ -96,17 +96,21 @@ local STATE_NUM_TO_LABEL = {
     [state.STATES.unstuck] = 'Unstuck',
     [state.STATES.raid_mechanic] = 'Raid mechanic',
     [state.STATES.sumcorpse_pending] = 'Sum corpse',
-    [state.STATES.resume_doHeal] = 'Buffs/Cures',
-    [state.STATES.resume_doDebuff] = 'Buffs/Cures',
-    [state.STATES.resume_doBuff] = 'Buffs/Cures',
-    [state.STATES.resume_doCure] = 'Buffs/Cures',
-    [state.STATES.resume_priorityCure] = 'Buffs/Cures',
+    [state.STATES.resume_doHeal] = 'Resuming heals',
+    [state.STATES.resume_doDebuff] = 'Resuming debuffs',
+    [state.STATES.resume_doBuff] = 'Resuming buffs',
+    [state.STATES.resume_doCure] = 'Resuming cures',
+    [state.STATES.resume_priorityCure] = 'Resuming priority cure',
 }
 
 local function getStatusLine()
     local rc = state.getRunconfig()
     if rc.pullHealerManaWait and rc.pullHealerManaWait.name then
-        return string.format("Waiting on %s's mana to be > %d%%", rc.pullHealerManaWait.name, rc.pullHealerManaWait.pct)
+        local w = rc.pullHealerManaWait
+        if w.current ~= nil then
+            return string.format("Waiting on %s's mana (%d%% <= %d%%)", w.name, w.current, w.pct)
+        end
+        return string.format("Waiting on %s's mana (must be > %d%%)", w.name, w.pct)
     end
     if rc.statusMessage and rc.statusMessage ~= '' then return rc.statusMessage end
     local runState = state.getRunState()

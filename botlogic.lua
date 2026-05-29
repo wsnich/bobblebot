@@ -1,4 +1,4 @@
-local mq = require('mq')
+﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local botgui = require('gui.components.botgui')
 local commands = require('lib.commands')
@@ -11,6 +11,7 @@ local botevents = require('botevents')
 local utils = require('lib.utils')
 local tankrole = require('lib.tankrole')
 local charinfo = require('plugin.charinfo')
+local botpull = require('botpull')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -63,6 +64,7 @@ local function charState_Always()
             end
         end
     end
+    spellutils.clearOrphanedSpellStateIfNeeded()
 
     local rc = state.getRunconfig()
     local mustStand = false
@@ -161,6 +163,7 @@ end
 --- Returns true if dead/hover; caller should return. Sets dead state and HoverTimer/HoverEchoTimer, may call Event_Slain.
 local function charState_DeadOrHover()
     if mq.TLO.Me.State() ~= 'DEAD' and (mq.TLO.Me.State() ~= 'HOVER' or not mq.TLO.Me.Hovering()) then return false end
+    botpull.DisablePull('death')
     state.clearRunState()
     state.getRunconfig().CurSpell = {}
     state.getRunconfig().statusMessage = ''

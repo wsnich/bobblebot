@@ -1,4 +1,4 @@
-local mq = require('mq')
+﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local spellutils = require('lib.spellutils')
 local spellstates = require('lib.spellstates')
@@ -656,10 +656,17 @@ function botdebuff.getHookFn(name)
             if not (myconfig.settings.dodebuff or state.isTravelAttackOverriding()) or not (myconfig.debuff.spells and #myconfig.debuff.spells > 0) then return end
             local rc = state.getRunconfig()
             if not rc.MobList[1] then
-                local p = state.getRunStatePayload()
-                if not (state.getRunState() == state.STATES.casting and p and p.spellcheckResume and p.spellcheckResume.hook == 'doDebuff') then
+                if state.getRunState() == state.STATES.resume_doDebuff then
+                    state.clearRunState()
+                    rc.CurSpell = {}
+                    rc.statusMessage = ''
                     return
                 end
+                if state.getRunState() == state.STATES.casting and rc.CurSpell and rc.CurSpell.sub == 'debuff' then
+                    spellutils.clearCastingStateOrResume()
+                    return
+                end
+                return
             end
             if state.getRunState() == state.STATES.idle then rc.statusMessage = 'Debuff Check' end
             botdebuff.DebuffCheck(bothooks.getPriority(hookName))

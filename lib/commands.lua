@@ -1,4 +1,4 @@
--- Command parser for /cz: dispatches to per-command handlers.
+﻿-- Command parser for /cz: dispatches to per-command handlers.
 -- Uses globals and modules from the CZBot environment (state.getRunconfig(), botconfig, etc.).
 
 local M = {}
@@ -60,23 +60,21 @@ local function cmd_toggle(args)
     if args[2] == 'on' then
         setVal(true)
     elseif args[2] == 'off' then
-        setVal(false)
-        if args[1] == 'dopull' then
-            if APTarget and APTarget.ID() then APTarget = nil end
-            if botconfig.config.pull.hunter then
-                rc.makecamp = { x = nil, y = nil, z = nil }
-            end
-            mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
+        if isDopull then
+            botpull.DisablePull('command')
+        else
+            setVal(false)
         end
     else
         if getVal() then
-            setVal(false)
-            if args[1] == 'dopull' or args[1] == 'domelee' then
-                if APTarget and APTarget.ID() then APTarget = nil end
-                mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
-            end
-            if args[1] == 'dopull' and botconfig.config.pull.hunter then
-                rc.makecamp = { x = nil, y = nil, z = nil }
+            if isDopull then
+                botpull.DisablePull('command')
+            else
+                setVal(false)
+                if args[1] == 'domelee' then
+                    if APTarget and APTarget.ID() then APTarget = nil end
+                    mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
+                end
             end
         else
             setVal(false)

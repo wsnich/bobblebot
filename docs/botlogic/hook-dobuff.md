@@ -1,4 +1,4 @@
-# Hook: doBuff
+﻿# Hook: doBuff
 
 **Priority:** 1100  
 **Provider:** botbuff
@@ -7,7 +7,7 @@
 
 Runs the phase-first spell check for the **buff** section. Phase order: self, byname, tank, groupbuff, groupmember, pc, mypet, pet.
 
-**Guards:** doBuff is skipped when travel mode is on, when `dobuff` is off or there is no buff config, or when the bot is a **cleric** and there are PC corpses in camp (within acleash radius)—so clerics focus on heal cycles (including rez) until corpses are cleared. **Buffs remain skipped during travel even when `/cz attack` is active** (only melee/heal/cure/debuff are temporarily enabled).
+**Guards:** doBuff is skipped when travel mode is on, when `dobuff` is off or there is no buff config, or when the bot is a **cleric** in a group and a **group member** has a PC corpse within **acleash**—so clerics focus on heal/rez for downed groupmates. Nearby corpses that are not group members (or any corpses when not grouped) do not defer buffing. **Buffs remain skipped during travel even when `/cz attack` is active** (only melee/heal/cure/debuff are temporarily enabled).
 
 ```mermaid
 flowchart TB

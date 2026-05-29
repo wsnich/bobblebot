@@ -1,4 +1,4 @@
----@class ConfigSettings
+﻿---@class ConfigSettings
 ---@field dodebuff boolean|nil
 ---@field doheal boolean|nil
 ---@field dobuff boolean|nil
@@ -762,6 +762,9 @@ function M.Load(path)
     end
     if type(M.config.pull.manaclass) ~= 'table' then
         M.config.pull.manaclass = { 'CLR', 'DRU', 'SHM' }
+    end
+    if M.config.pull.mana ~= nil then
+        M.config.pull.mana = tonumber(M.config.pull.mana) or 60
     end
     M.config.pull.radiusSq = (M.config.pull.radius or 0) * (M.config.pull.radius or 0)
     local r40 = (M.config.pull.radius or 0) + 40

@@ -1,4 +1,4 @@
-local mq = require('mq')
+﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local combat = require('lib.combat')
 local state = require('lib.state')
@@ -133,6 +133,29 @@ local function clearPullState(reason)
     end
 end
 
+--- Turn off runtime pull (dopull), clear pull target/state, and stop nav/combat movement.
+---@param reason string|nil e.g. zone, death, follow, command
+function botpull.DisablePull(reason)
+    local rc = state.getRunconfig()
+    local wasOn = rc.dopull == true
+    local activePull = rc.pullState ~= nil and rc.pullState ~= ''
+        or state.getRunState() == state.STATES.pulling
+    if not wasOn and not activePull then return end
+
+    rc.dopull = false
+    if APTarget and APTarget.ID() then APTarget = nil end
+    if activePull then
+        clearPullState(reason)
+    end
+    if botconfig.config.pull.hunter then
+        rc.makecamp = { x = nil, y = nil, z = nil }
+    end
+    mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
+    if wasOn then
+        printf('\ayCZBot:\axDisabling pull (%s)', reason or 'off')
+    end
+end
+
 function botpull.LoadPullConfig()
     local rc = state.getRunconfig()
     rc.pulledmob = nil
@@ -212,6 +235,47 @@ function botpull.EngageCheck()
     return false
 end
 
+-- Group checks: offline/corpse always block; healer mana gate when manaclass non-empty and pull.mana > 0.
+-- Sets rc.pullHealerManaWait on mana failure. Returns true if pull must not start.
+local function groupBlocksPull(rc)
+    local members = mq.TLO.Group.Members()
+    if not members or members <= 0 then return false end
+
+    local threshold = tonumber(myconfig.pull.mana) or 0
+    local manaclass = myconfig.pull.manaclass
+    local manaGateEnabled = threshold > 0 and type(manaclass) == 'table' and #manaclass > 0
+    local checked
+    if manaGateEnabled then
+        checked = {}
+        for _, c in ipairs(manaclass) do
+            checked[string.upper(tostring(c))] = true
+        end
+    end
+
+    for i = 1, members do
+        local member = mq.TLO.Group.Member(i)
+        if member then
+            local memberId = member.ID()
+            if not memberId or memberId == 0 then return true end
+            local spawn = member.Spawn
+            if spawn and spawn.Type() and string.lower(spawn.Type()) == 'corpse' then return true end
+            if manaGateEnabled and member.Class and member.Class.ShortName() then
+                local cls = string.upper(member.Class.ShortName() or '')
+                if checked[cls] then
+                    local pct = tonumber(member.PctMana())
+                    if pct == nil then pct = 0 end
+                    if pct <= threshold then
+                        local name = (spawn and spawn.CleanName()) or member.Name() or 'healer'
+                        rc.pullHealerManaWait = { name = name, pct = threshold, current = pct }
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
 -- Pre-checks: return false if we should not start a pull.
 local function canStartPull(rc)
     rc.pullHealerManaWait = nil
@@ -266,26 +330,7 @@ local function canStartPull(rc)
         state.getRunconfig().dopull = false
         return false
     end
-    if mq.TLO.Group() then
-        for iter = 1, mq.TLO.Group() do
-            local grpSpawn = mq.TLO.Group.Member(iter).Spawn
-            if not grpSpawn.ID() or grpSpawn.ID() == 0 then return false end
-            local grpType = grpSpawn.Type()
-            if grpType and string.lower(grpType) == 'corpse' then return false end
-            if myconfig.pull.mana and grpSpawn.Class.ShortName() and type(myconfig.pull.manaclass) == 'table' then
-                local grpClass = string.upper(grpSpawn.Class.ShortName() or '')
-                for _, entry in ipairs(myconfig.pull.manaclass) do
-                    if string.upper(tostring(entry)) == grpClass then
-                        if grpSpawn.PctMana() and myconfig.pull.mana > grpSpawn.PctMana() then
-                            rc.pullHealerManaWait = { name = grpSpawn.CleanName() or 'healer', pct = myconfig.pull.mana }
-                            return false
-                        end
-                        break
-                    end
-                end
-            end
-        end
-    end
+    if groupBlocksPull(rc) then return false end
     return true
 end
 

@@ -1,4 +1,4 @@
-local mq = require('mq')
+﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local charm = require('lib.charm')
 local immune = require('lib.immune')
@@ -8,6 +8,7 @@ local mobfilter = require('lib.mobfilter')
 local chchain = require('lib.chchain')
 local follow = require('lib.follow')
 local casting = require('lib.casting')
+local botpull = require('botpull')
 
 local botevents = {}
 
@@ -26,6 +27,7 @@ local function DelayOnZone()
     state.getRunconfig().campstatus = false
     if state.getRunconfig().engageTargetId then state.getRunconfig().engageTargetId = nil end
     if APTarget then APTarget = nil end
+    botpull.DisablePull('zone')
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
     mobfilter.process('charm', 'zone')

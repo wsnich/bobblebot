@@ -1,4 +1,4 @@
--- Combat tab: melee settings (assist, offtank, stick, minmana) at top, then pull config.
+﻿-- Combat tab: melee settings (assist, offtank, stick, minmana) at top, then pull config.
 -- Uses gui/widgets for modals, combos, inputs, layout, spell_entry.
 -- ImGui Lua API (return values, e.g. Checkbox → value, pressed) is defined in typings/imgui.d.lua.
 
@@ -257,7 +257,7 @@ function M.draw()
         return false
     end
     ImGui.Text('Healers: ')
-    if ImGui.IsItemHovered() then ImGui.SetTooltip('Classes checked for mana %% before allowing a pull.') end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Classes checked for mana %% before allowing a pull. If none are checked, the mana gate is disabled.') end
     ImGui.SameLine()
     for _, label in ipairs(manaclassOptions) do
         local checked = inManaclass(label)
@@ -280,7 +280,7 @@ function M.draw()
         ImGui.SameLine()
     end
     ImGui.Text('Mana %')
-    if ImGui.IsItemHovered() then ImGui.SetTooltip('Minimum mana %% required for designated healer classes before a new pull.') end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Healers must be strictly above this mana %% before a pull. Set to 0 to disable the mana gate.') end
     ImGui.SameLine()
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local mana = pull.mana or 60

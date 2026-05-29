@@ -1,4 +1,4 @@
-local mq = require('mq')
+﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local spellbands = require('lib.spellbands')
 local spellutils = require('lib.spellutils')
@@ -321,13 +321,33 @@ function botbuff.BuffCheck(runPriority)
         buffTargetNeedsSpell, ctx, options)
 end
 
+--- True when a PC corpse within acleash belongs to a current group member (cleric defers buff for rez focus).
+local function clericDeferBuffForGroupCorpse(acleash)
+    if not mq.TLO.Group.Members() or mq.TLO.Group.Members() == 0 then
+        return false
+    end
+    local count = mq.TLO.SpawnCount('pccorpse radius ' .. acleash)()
+    if not count or count == 0 then return false end
+    for i = 1, count do
+        local spawn = mq.TLO.NearestSpawn(i, 'pccorpse radius ' .. acleash)
+        local name = spawn.CleanName()
+        if name then
+            name = string.gsub(name, "'s corpse", "")
+            if mq.TLO.Group.Member(name).Index() then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 function botbuff.getHookFn(name)
     if name == 'doBuff' then
         return function(hookName)
             if state.isTravelMode() then return end
             local myconfig = botconfig.config
             if not myconfig.settings.dobuff or not (myconfig.buff.spells and #myconfig.buff.spells > 0) then return end
-            if mq.TLO.Me.Class.ShortName() == 'CLR' and (mq.TLO.SpawnCount('pccorpse radius ' .. (myconfig.settings.acleash or 75))() or 0) > 0 then return end
+            if mq.TLO.Me.Class.ShortName() == 'CLR' and clericDeferBuffForGroupCorpse(myconfig.settings.acleash or 75) then return end
             if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Buff Check' end
             botbuff.BuffCheck(bothooks.getPriority(hookName))
         end

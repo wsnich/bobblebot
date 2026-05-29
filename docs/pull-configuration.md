@@ -1,4 +1,4 @@
-# Pull Configuration and Logic
+﻿# Pull Configuration and Logic
 
 This document explains how to configure and control the bot’s **pulling** behavior: how the bot finds mobs, navigates to them, gets aggro, and returns to camp. It is intended for human operators who need to set up the config file and use runtime commands.
 
@@ -35,8 +35,8 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 | **pullMinLevel** / **pullMaxLevel** | 1 / 125   | When **usePullLevels** is `true`, only mobs with level in this range are considered for pulling.                                           |
 | **chainpullcnt**            | 0                 | Allow chain-pulling when current mob count is ≤ this value. See [When does the bot start a pull?](#when-does-the-bot-start-a-pull).       |
 | **chainpullhp**             | 0                 | When the current engage target’s HP % is ≤ this (and chain conditions are met), the bot may start the next pull.                          |
-| **mana**                    | 60                | Minimum mana % required for designated healer classes before a new pull is allowed.                                                       |
-| **manaclass**               | `{ 'CLR', 'DRU', 'SHM' }` | List of uppercase class short names (CLR, DRU, SHM) that are checked for **mana** before allowing a pull.                              |
+| **mana**                    | 60                | Healer mana gate threshold. When **> 0** and at least one class is checked in **manaclass**, each in-group member whose class is checked must have mana **strictly above** this value before a pull. Set to **0** to disable the mana gate. |
+| **manaclass**               | `{ 'CLR', 'DRU', 'SHM' }` | List of uppercase class short names (CLR, DRU, SHM) checked for **mana** before allowing a pull. Uncheck all classes (empty list) to disable the mana gate regardless of **mana**. |
 | **leash**                   | 500               | While returning to camp with a mob, navigation is paused if the mob is farther than this distance (avoids over-chasing).                  |
 | **addAbortRadius**          | 50                | While navigating to a pull target, NPCs within this radius (units) with line-of-sight can trigger an abort (return to camp).             |
 | **usepriority**             | `false`           | If `true`, prefer mobs that match the runtime **Priority** list over path distance when choosing a pull target.                           |
@@ -139,7 +139,7 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 - **MasterPause** — Global pause is on; pull is skipped.
 - **No MQ2Nav mesh** — No navigation mesh is loaded. Pull is skipped and **dopull** is turned off with an in-game message. Generate a mesh before using pulling.
 - **Your HP ≤ 45%** — No new pull is started; an in-progress pull may also abort.
-- **Group mana** — If any group member’s class is in **manaclass** and their mana % is below **mana**, no new pull.
+- **Group mana** — Disabled when **mana** is 0 or **manaclass** is empty. When enabled ( **mana** > 0 and at least one class checked), no new pull if any in-group member whose class is checked has mana **≤ mana** (must be strictly above **mana**). Unreadable mana is treated as 0. Checked classes not present in the group do not block.
 - **Group corpse** — Any group member is dead (corpse); no new pull.
 - **Return timer** — After pulling a mob, a short return timer blocks starting another pull until the previous pull’s mob is cleared (e.g. dead or out of range) or the timer expires.
 
@@ -155,6 +155,7 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 ## Runtime control (commands)
 
 - **Toggle pulling:** `/cz dopull on` or `/cz dopull off`. You can also toggle without arguments (e.g. `/cz dopull`). Turning **off** clears target, stops nav/stick/attack; if **hunter** is true, it also clears the makecamp anchor.
+- **Auto-disable:** Pull (`dopull`) is turned off automatically when you **die**, **zone**, or start **follow** (`/cz follow`, chat follow, or `/cz travel`).
 - **Directional pulling:** `/cz xarc <degrees>` — Restrict pulls to an arc in front of the bot (e.g. `90` for a 90° cone). Use with no argument to turn directional pulling off.
 - **Exclude / priority:** **ExcludeList** and **PriorityList** are **runtime** (runconfig), not in the pull config file. Use **`/cz exclude <name>`** to add a mob to the exclude list (pull target selection will skip it) and **`/cz exclude remove [name]`** to remove one; use **`/cz priority <name>`** to add and **`/cz priority remove [name]`** to remove. When **pull.usepriority** is `true`, the bot prefers priority mobs over path distance. You can target a mob and use `/cz exclude` or `/cz priority` (or their remove forms) without a name to use the target’s name. The GUI **Mob lists** tab also lets you view and edit both lists for the current zone. All changes are saved automatically to **cz_common.lua** in the per-zone block **zones**[*zone*] (excludelist, prioritylist, charmlist, nuke flavors, immune).
 

@@ -1,4 +1,4 @@
-local mq = require('mq')
+﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local spellsdb = require('lib.spellsdb')
 local immune = require('lib.immune')
@@ -13,6 +13,7 @@ local utils = require('lib.utils')
 local casting = require('lib.casting')
 local spellutils = {}
 local _deps = {}
+local _instantDebuffCastPending = nil
 
 local CASTING_STUCK_MS = 20000
 --- Delay (ms) after cast start when spell must be memorized, so casting state is visible before next tick and charState won't stand for hysteresis.
@@ -730,6 +731,105 @@ function spellutils.getResumeCursor(hookName)
     return state.getRunStatePayload()
 end
 
+--- True when spawn exists, is targetable, and (optionally) is in camp mob list.
+function spellutils.isSpawnValidCastTarget(spawnId, mobList)
+    if not spawnId or spawnId <= 0 then return false end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
+    local typ = sp.Type and sp.Type()
+    if typ == 'Corpse' or typ == 'Untargetable' then return false end
+    if mobList then
+        for _, v in ipairs(mobList) do
+            local vid = v.ID and v.ID() or v
+            if vid == spawnId then return true end
+        end
+        return false
+    end
+    return true
+end
+
+local HOOK_SETTING_AND_SECTION = {
+    doHeal = { setting = 'doheal', section = 'heal', travelAllowed = true },
+    doDebuff = { setting = 'dodebuff', section = 'debuff', travelAllowed = true },
+    doBuff = { setting = 'dobuff', section = 'buff', travelAllowed = false },
+    doCure = { setting = 'docure', section = 'cure', travelAllowed = true },
+    priorityCure = { setting = 'docure', section = 'cure', travelAllowed = true },
+}
+
+--- Mirrors hook early-return guards: true when the hook would run spell check this tick.
+function spellutils.isSpellHookActive(hookName)
+    local cfg = HOOK_SETTING_AND_SECTION[hookName]
+    if not cfg then return true end
+    local myconfig = botconfig.config
+    if state.isTravelMode() then
+        if not cfg.travelAllowed then return false end
+        if not state.isTravelAttackOverriding() then return false end
+    end
+    if hookName == 'doDebuff' and utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return false end
+    local settingOn = myconfig.settings[cfg.setting] or state.isTravelAttackOverriding()
+    if hookName == 'doBuff' and state.isTravelMode() then return false end
+    if not settingOn then return false end
+    local spells = myconfig[cfg.section] and myconfig[cfg.section].spells
+    return spells and #spells > 0
+end
+
+--- Clear resume/casting spell state when the owning hook is inactive or debuff camp is empty.
+function spellutils.clearOrphanedSpellStateIfNeeded()
+    local rc = state.getRunconfig()
+    local rs = state.getRunState()
+
+    for hookName, resumeNum in pairs(state.RESUME_BY_HOOK) do
+        if rs == resumeNum and not spellutils.isSpellHookActive(hookName) then
+            state.clearRunState()
+            rc.CurSpell = {}
+            rc.statusMessage = ''
+            return
+        end
+    end
+
+    if rs == state.STATES.casting and rc.CurSpell and rc.CurSpell.sub then
+        local subToHook = { heal = 'doHeal', debuff = 'doDebuff', buff = 'doBuff', cure = 'doCure' }
+        local hookName = subToHook[rc.CurSpell.sub]
+        if hookName and not spellutils.isSpellHookActive(hookName) then
+            spellutils.clearCastingStateOrResume()
+        end
+    end
+end
+
+local function tryClearBlockedDebuffAbilityResume(hookName, sub, cursor, getTargetsFn, context)
+    if hookName ~= 'doDebuff' or sub ~= 'debuff' or not cursor or not cursor.spellIndex or not cursor.phase then
+        return false
+    end
+    local entry = botconfig.getSpellEntry('debuff', cursor.spellIndex)
+    if not entry or (entry.gem ~= 'ability' and entry.gem ~= 'disc') then return false end
+    local targets = getTargetsFn(cursor.phase, context)
+    local target = targets and targets[cursor.targetIndex or 1]
+    local targetId = target and target.id
+    local mobList = context and context.mobList
+    if not spellutils.isSpawnValidCastTarget(targetId, mobList)
+        or not spellutils.CheckGemReadiness('debuff', cursor.spellIndex, entry) then
+        state.clearRunState()
+        return true
+    end
+    return false
+end
+
+--- When another sub owns CurSpell, clear if precast/cast deadline expired (foreign hook may not run).
+local function clearForeignCurSpellIfExpired(sub, rc)
+    if not rc.CurSpell or not rc.CurSpell.sub or rc.CurSpell.sub == sub then return false end
+    if spellutils.IsMemorizing() then return false end
+    local phase = rc.CurSpell.phase
+    if phase ~= 'precast' and phase ~= 'precast_wait_move' and phase ~= 'casting' then return false end
+    local deadlinePassed = mq.gettime() >= (rc.CurSpell.deadline or 0)
+    if state.getRunState() == state.STATES.casting and state.runStateDeadlinePassed() then
+        deadlinePassed = true
+    end
+    if not deadlinePassed then return false end
+    if phase == 'casting' and (mq.TLO.Me.CastTimeLeft() or 0) > 0 then return false end
+    spellutils.clearCastingStateOrResume()
+    return true
+end
+
 --- Single exit from casting: clears CurSpell/statusMessage, then sets hookName_resume (if spellcheckResume) or clearRunState().
 --- All code that leaves the "casting" busy state must call this so CurSpell and runState stay in sync.
 function spellutils.clearCastingStateOrResume()
@@ -884,7 +984,16 @@ function spellutils.handleSpellCheckReentry(sub, options)
                 return true
             end
         else
-            if rc.CurSpell.sub ~= 'debuff' then
+            local entry = botconfig.getSpellEntry(rc.CurSpell.sub, rc.CurSpell.spell)
+            local gem = entry and entry.gem
+            if rc.CurSpell.sub == 'debuff' and (gem == 'ability' or gem == 'disc') then
+                spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
+                if options.afterCast then
+                    options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
+                end
+                spellutils.clearCastingStateOrResume()
+                return true
+            elseif rc.CurSpell.sub ~= 'debuff' then
                 spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
                 if options.afterCast then
                     options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
@@ -898,8 +1007,10 @@ function spellutils.handleSpellCheckReentry(sub, options)
     end
 
     if rc.CurSpell and rc.CurSpell.phase == 'precast_wait_move' then
-        -- Only the hook for this sub advances the pipeline; other hooks skip their phase loop until the owning hook runs.
-        if rc.CurSpell.sub ~= sub then return true end
+        if rc.CurSpell.sub ~= sub then
+            if clearForeignCurSpellIfExpired(sub, rc) then return false end
+            return true
+        end
         if mq.TLO.Me.Moving() then
             if mq.gettime() < (rc.CurSpell.deadline or 0) then return true end
             spellutils.clearCastingStateOrResume()
@@ -913,7 +1024,10 @@ function spellutils.handleSpellCheckReentry(sub, options)
     end
 
     if rc.CurSpell and rc.CurSpell.phase == 'precast' then
-        if rc.CurSpell.sub ~= sub then return true end
+        if rc.CurSpell.sub ~= sub then
+            if clearForeignCurSpellIfExpired(sub, rc) then return false end
+            return true
+        end
         local preEntry = botconfig.getSpellEntry(rc.CurSpell.sub, rc.CurSpell.spell)
         local skipPrecastTargetWait = preEntry and rc.CurSpell.target == mq.TLO.Me.ID() and
             (spellutils.IsSelfTargetSpell(preEntry) or
@@ -932,6 +1046,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
 
     -- Another sub is casting; do not run our phase loop or we overwrite CurSpell and get stuck (e.g. heal fizzles, we set CurSpell=buff, storedId stays heal).
     if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub and rc.CurSpell.sub ~= sub then
+        if clearForeignCurSpellIfExpired(sub, rc) then return false end
         return true
     end
 
@@ -1006,6 +1121,16 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
     end
     if cursor and options.entryValid and cursor.spellIndex and not options.entryValid(cursor.spellIndex) then
         state.clearRunState()
+        cursor = nil
+        startPhaseIdx = 1
+        startTargetIdx = 1
+        startSpellIdx = 1
+    end
+    if tryClearBlockedDebuffAbilityResume(hookName, sub, cursor, getTargetsFn, context) then
+        cursor = nil
+        startPhaseIdx = 1
+        startTargetIdx = 1
+        startSpellIdx = 1
     end
 
     for phaseIdx = startPhaseIdx, #phaseOrder do
@@ -1050,6 +1175,11 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                                     return false
                                 end
                                 if spellutils.CastSpell(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
+                                    if _instantDebuffCastPending and options.afterCast then
+                                        local ic = _instantDebuffCastPending
+                                        _instantDebuffCastPending = nil
+                                        options.afterCast(ic.spell, ic.target, ic.targethit)
+                                    end
                                     return false
                                 end
                             end
@@ -1532,7 +1662,8 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if tankid ~= meId then mtSelfCastInCombat = false end
     end
     local skipSelfRetarget = (EvalID == meId and spellutils.IsSelfTargetSpell(entry)) or
-        (sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(entry))
+        (sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(entry)) or
+        (sub == 'debuff' and (gem == 'ability' or gem == 'disc') and EvalID == rc.engageTargetId and mq.TLO.Target.ID() == EvalID)
     if not useCastingLib and mq.TLO.Target.ID() ~= EvalID and not mtSelfCastInCombat and not skipSelfRetarget then
         mq.cmdf('/tar id %s', EvalID)
         rc.CurSpell.phase = 'precast'
@@ -1587,6 +1718,13 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         return true
     end
     spellutils.ExecuteNativeCast(gem, spell, sub, index)
+    if sub == 'debuff' and (gem == 'ability' or gem == 'disc') then
+        rc.CurSpell.phase = 'casting'
+        spellutils.OnCastComplete(index, EvalID, targethit, sub)
+        _instantDebuffCastPending = { spell = index, target = EvalID, targethit = targethit }
+        spellutils.clearCastingStateOrResume()
+        return true
+    end
     rc.CurSpell.phase = 'casting'
     dbgCastPhase('casting(native)', sub, index, runPriority)
     state.setRunState(state.STATES.casting,

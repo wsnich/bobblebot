@@ -1,10 +1,11 @@
--- Follow logic: StartFollow(name) and registerEvents() for group/raid chat "follow".
+﻿-- Follow logic: StartFollow(name) and registerEvents() for group/raid chat "follow".
 -- Option C (chchain-style): module owns event registration and core behavior.
 -- Used by lib/commands (cmd_follow) and botevents (follow.registerEvents only).
 
 local mq = require('mq')
 local state = require('lib.state')
 local botmove = require('botmove')
+local botpull = require('botpull')
 local charinfo = require("plugin.charinfo")
 
 local follow = {}
@@ -19,6 +20,7 @@ function follow.StartFollow(name)
     local rc = state.getRunconfig()
     local campSet = rc.campstatus or (rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z))
     if campSet then botmove.MakeCamp('off') end
+    botpull.DisablePull('follow')
     local followId = spawn.ID()
     if not followId then return end
     rc.followid = followId
