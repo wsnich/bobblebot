@@ -143,7 +143,7 @@ end
 
 -- Canonical default spell entry per section. getDefaultSpellEntry returns a copy so callers do not mutate.
 local defaultSpellEntries = {
-    heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, inCombat = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, healResource = 'hp', precondition = nil },
+    heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, inCombat = false, bands = { { targetphase = { 'self', 'tank', 'groupmember' }, validtargets = { 'all' }, min = 0, max = 60 } }, healResource = 'hp', precondition = nil },
     buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, inCombat = false, inIdle = true, combatOnly = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = nil },
     debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'matar', 'notmatar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil, onlyMT = false },
     cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = { 'all' }, enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = nil },
@@ -728,7 +728,7 @@ function M.Load(path)
     if (M.config.settings.zradius == nil) then M.config.settings.zradius = 75 end
     if (M.config.settings.campRestDistance == nil) then M.config.settings.campRestDistance = 15 end
     M.config.settings.campRestDistanceSq = (M.config.settings.campRestDistance or 0) * (M.config.settings.campRestDistance or 0)
-    if (M.config.settings.TankName == nil) then M.config.settings.TankName = "manual" end
+    if (M.config.settings.TankName == nil) then M.config.settings.TankName = "automatic" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end
     if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings
         .TargetFilter) or 0 end

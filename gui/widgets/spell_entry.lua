@@ -479,17 +479,19 @@ function M.draw(spell, opts)
                         columns = targetsColumns,
                         onToggle = function(key, isChecked)
                             if isChecked then
-                                local exists = false
-                                for _, selected in ipairs(band.validtargets) do
-                                    if selected == key then
-                                        exists = true
-                                        break
+                                if key == 'all' then
+                                    band.validtargets = { 'all' }
+                                else
+                                    local exists = false
+                                    for _, selected in ipairs(band.validtargets) do
+                                        if selected == key then
+                                            exists = true
+                                            break
+                                        end
                                     end
-                                end
-                                if not exists then
-                                    band.validtargets[#band.validtargets + 1] = key
-                                end
-                                if key ~= 'all' then
+                                    if not exists then
+                                        band.validtargets[#band.validtargets + 1] = key
+                                    end
                                     for i = #band.validtargets, 1, -1 do
                                         if band.validtargets[i] == 'all' then
                                             table.remove(band.validtargets, i)
