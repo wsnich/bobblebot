@@ -1,13 +1,13 @@
 ﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local charm = require('lib.charm')
-local immune = require('lib.immune')
 local state = require('lib.state')
 local spellstates = require('lib.spellstates')
 local mobfilter = require('lib.mobfilter')
 local chchain = require('lib.chchain')
 local follow = require('lib.follow')
 local casting = require('lib.casting')
+local spellutils = require('lib.spellutils')
 local botpull = require('botpull')
 local spawnutils = require('lib.spawnutils')
 
@@ -66,22 +66,8 @@ function botevents.Event_CastImm(line)
         casting.notifyImmune()
         return
     end
-    local curtarget = mq.TLO.Target.ID()
-    local sub = state.getRunconfig().CurSpell.sub
-    local spell = state.getRunconfig().CurSpell.spell
-    local spellid = mq.TLO.Spell(botconfig.config[sub .. spell].spell).ID()
-    if not spellid then return end
     if string.find(line, "(with this spell)") then return false end
-    if casting.storedSpellId() == spellid then
-        if mq.TLO.Spell(spellid).TargetType() ~= "Targeted AE" and mq.TLO.Spell(spellid).TargetType() ~= "PB AE" then
-            if state.getRunconfig().CurSpell.target then
-                if state.getRunconfig().CurSpell.target == curtarget then
-                    local immuneID = state.getRunconfig().CurSpell.target
-                    immune.processList(immuneID)
-                end
-            end
-        end
-    end
+    spellutils.handleTargetImmuneEvent(line)
 end
 
 function botevents.Event_MissedNote()

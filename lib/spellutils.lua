@@ -157,6 +157,160 @@ function spellutils.ImmuneCheck(Sub, ID, EvalID)
     if t[spell] and t[spell][targetname] then return false else return true end
 end
 
+local IMMUNE_CONFIG_SECTIONS = { 'debuff', 'buff', 'cure', 'heal' }
+local IMMUNE_GEM_SECTIONS = { 'debuff', 'buff', 'cure' }
+
+local function spellNameFromEntry(entry)
+    if not entry or not entry.spell or entry.spell == '' then return nil end
+    return mq.TLO.Spell(entry.spell)() or entry.spell
+end
+
+--- Config entry whose spell ID matches (enabled entries with spell name).
+function spellutils.findConfigEntryBySpellId(spellId)
+    if not spellId or spellId <= 0 then return nil, nil, nil end
+    for _, section in ipairs(IMMUNE_CONFIG_SECTIONS) do
+        local cnt = botconfig.getSpellCount(section)
+        for i = 1, cnt do
+            local entry = botconfig.getSpellEntry(section, i)
+            if entry and entry.enabled ~= false and entry.spell and entry.spell ~= '' then
+                local id = mq.TLO.Spell(entry.spell).ID()
+                if id and id == spellId then
+                    return section, i, entry
+                end
+            end
+        end
+    end
+    return nil, nil, nil
+end
+
+--- Config entry by numeric gem; if multiple share a gem, debuff wins over buff over cure.
+function spellutils.findConfigEntryByGem(gem)
+    if type(gem) ~= 'number' or gem < 1 or gem > 12 then return nil, nil, nil end
+    for _, section in ipairs(IMMUNE_GEM_SECTIONS) do
+        local cnt = botconfig.getSpellCount(section)
+        for i = 1, cnt do
+            local entry = botconfig.getSpellEntry(section, i)
+            if entry and entry.enabled ~= false and entry.gem == gem and entry.spell and entry.spell ~= '' then
+                return section, i, entry
+            end
+        end
+    end
+    return nil, nil, nil
+end
+
+--- Resolve spell context for immunity events (CurSpell, Me.Casting, config, twist-once hint).
+function spellutils.resolveImmuneSpellContext()
+    local rc = state.getRunconfig()
+    local cur = rc and rc.CurSpell
+    local ctx = {
+        spellName = nil,
+        spellId = nil,
+        sub = nil,
+        index = nil,
+        curSpellTarget = cur and cur.target or nil,
+        fromTwistOnceGem = false,
+    }
+
+    if cur and cur.sub and cur.spell then
+        local entry = botconfig.getSpellEntry(cur.sub, cur.spell)
+        if entry then
+            ctx.sub = cur.sub
+            ctx.index = cur.spell
+            ctx.spellName = spellNameFromEntry(entry)
+            if entry.spell then ctx.spellId = mq.TLO.Spell(entry.spell).ID() end
+            if ctx.spellName then return ctx end
+        end
+    end
+
+    local castingTlo = mq.TLO.Me.Casting()
+    if castingTlo then
+        local okId, castId = pcall(function() return castingTlo.ID() end)
+        local okName, castName = pcall(function() return castingTlo.Name() end)
+        if okId and castId and castId > 0 then
+            ctx.spellId = castId
+            local section, index, entry = spellutils.findConfigEntryBySpellId(castId)
+            if entry then
+                ctx.sub = section
+                ctx.index = index
+                ctx.spellName = spellNameFromEntry(entry)
+            elseif okName and castName and castName ~= '' then
+                ctx.spellName = mq.TLO.Spell(castName)() or castName
+            end
+            if ctx.spellName then return ctx end
+        end
+    end
+
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        local gem = bardtwist.getLastTwistOnceGem()
+        if gem then
+            local section, index, entry = spellutils.findConfigEntryByGem(gem)
+            if entry then
+                ctx.sub = section
+                ctx.index = index
+                ctx.spellName = spellNameFromEntry(entry)
+                if entry.spell then ctx.spellId = mq.TLO.Spell(entry.spell).ID() end
+                ctx.fromTwistOnceGem = true
+                if ctx.spellName then return ctx end
+            end
+        end
+    end
+
+    return ctx
+end
+
+local function immuneEventMatchesOurCast(ctx)
+    local spellId = ctx.spellId
+    local storedId = casting.storedSpellId() or 0
+    if storedId > 0 and spellId and spellId > 0 then
+        return storedId == spellId
+    end
+    local castingTlo = mq.TLO.Me.Casting()
+    if castingTlo and spellId and spellId > 0 then
+        local ok, castId = pcall(function() return castingTlo.ID() end)
+        if ok and castId and castId == spellId then return true end
+    end
+    if ctx.fromTwistOnceGem then return true end
+    local curtarget = mq.TLO.Target.ID()
+    if ctx.curSpellTarget and ctx.curSpellTarget > 0 then
+        return ctx.curSpellTarget == curtarget
+    end
+    return curtarget and curtarget > 0
+end
+
+--- Handle CastImm / SlowImm when not using MQ2Cast (e.g. bard twist, empty CurSpell).
+function spellutils.handleTargetImmuneEvent(_line)
+    local ctx = spellutils.resolveImmuneSpellContext()
+    local curtarget = mq.TLO.Target.ID()
+
+    if not ctx.spellName or ctx.spellName == '' then
+        if curtarget and curtarget > 0 then
+            local name = mq.TLO.Spawn(curtarget).CleanName() or tostring(curtarget)
+            printf('\ayCZBot:\ax\at%s\ax is \arimmune\ax (unknown spell)', name)
+        else
+            printf('\ayCZBot:\axTarget is \arimmune\ax (unknown spell)')
+        end
+        return
+    end
+
+    local spellId = ctx.spellId
+    if not spellId and ctx.spellName then
+        spellId = mq.TLO.Spell(ctx.spellName).ID()
+    end
+    if spellId and spellId > 0 then
+        local targetType = mq.TLO.Spell(spellId).TargetType()
+        if targetType == 'Targeted AE' or targetType == 'PB AE' then
+            return
+        end
+    end
+
+    if not immuneEventMatchesOurCast(ctx) then return end
+
+    local immuneID = curtarget
+    if immuneID and immuneID > 0 then
+        immune.processList(immuneID, { spellName = ctx.spellName })
+    end
+end
+
 --Check Distance (uses distance squared for comparisons)
 function spellutils.DistanceCheck(Sub, ID, EvalID)
     local entry = botconfig.getSpellEntry(Sub, ID)

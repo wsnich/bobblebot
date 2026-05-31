@@ -1,4 +1,4 @@
--- Bard MQ2Twist integration: twist list builders, mode, ensure, stop/resume, twist once.
+﻿-- Bard MQ2Twist integration: twist list builders, mode, ensure, stop/resume, twist once.
 -- Requires mq, botconfig, state. No dependency on spellutils/botbuff to avoid circular refs.
 
 local mq = require('mq')
@@ -8,6 +8,14 @@ local state = require('lib.state')
 
 local bardtwist = {}
 local twistOnceActive = false
+local lastTwistOnceGem = nil
+local lastTwistOnceAt = 0
+local TWIST_ONCE_GEM_TTL_MS = 10000
+
+local function clearTwistOnceGemHint()
+    lastTwistOnceGem = nil
+    lastTwistOnceAt = 0
+end
 
 --- Parse entry.bands for a phase token (buff: self, cbt, pull).
 local function buffHasPhase(entry, phase)
@@ -210,6 +218,7 @@ function bardtwist.EnsureTwistForMode(mode)
     if twistOnceActive then
         if twistListsEqual(currentGems, desiredGems) then
             twistOnceActive = false
+            clearTwistOnceGemHint()
         end
         return
     end
@@ -224,6 +233,7 @@ end
 
 function bardtwist.StopTwist()
     twistOnceActive = false
+    clearTwistOnceGemHint()
     if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
         mq.cmd('/twist stop')
     end
@@ -249,11 +259,23 @@ end
 function bardtwist.SetTwistOnce(gemList)
     if not gemList or #gemList == 0 then return end
     twistOnceActive = true
+    lastTwistOnceGem = gemList[1]
+    lastTwistOnceAt = mq.gettime()
     mq.cmd('/twist once ' .. table.concat(gemList, ' '))
 end
 
 function bardtwist.SetTwistOnceGem(gem)
     if gem then bardtwist.SetTwistOnce({ gem }) end
+end
+
+--- Gem used by last /twist once (mez, pull engage). Nil if outside TTL window.
+function bardtwist.getLastTwistOnceGem()
+    if not lastTwistOnceGem then return nil end
+    if mq.gettime() - lastTwistOnceAt > TWIST_ONCE_GEM_TTL_MS then
+        clearTwistOnceGemHint()
+        return nil
+    end
+    return lastTwistOnceGem
 end
 
 return bardtwist

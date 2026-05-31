@@ -1,4 +1,4 @@
-local mq = require('mq')
+﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local state = require('lib.state')
 local M = {}
@@ -28,9 +28,20 @@ function M.add(spell, zone, mobName)
     M.save()
 end
 
-function M.processList(immuneID)
-    local entry = botconfig.getSpellEntry(state.getRunconfig().CurSpell.sub, state.getRunconfig().CurSpell.spell)
-    local spell = entry and mq.TLO.Spell(entry.spell)() or nil
+---@param immuneID number|nil spawn ID of immune target
+---@param opts table|nil optional { spellName = string } canonical spell name for immune list; else CurSpell.sub/spell
+function M.processList(immuneID, opts)
+    local spell
+    if opts and opts.spellName and opts.spellName ~= '' then
+        spell = mq.TLO.Spell(opts.spellName)() or opts.spellName
+    else
+        local rc = state.getRunconfig()
+        local cur = rc and rc.CurSpell
+        if cur and cur.sub and cur.spell then
+            local entry = botconfig.getSpellEntry(cur.sub, cur.spell)
+            spell = entry and mq.TLO.Spell(entry.spell)() or nil
+        end
+    end
     local zone = mq.TLO.Zone.ShortName()
     if immuneID and spell and mq.TLO.Spawn(immuneID).ID() and mq.TLO.Spawn(immuneID).Type() ~= 'Corpse' then
         local mobName = mq.TLO.Spawn(immuneID).CleanName()
