@@ -93,6 +93,8 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **linkaugs**      | `<slot>`                                      | Print augments in the given slot.                                                                                   |
 | **spread**        | —                                             | Spread bots (nav to positions).                                                                                     |
 | **raid**          | `save` / `load` `<name>`                      | Save or load a raid configuration by name. See [Raid mode](raid-mode.md) for save/load behavior and raid formation. |
+| **clickdoor**     | —                                             | Run `/doortarget`, wait 500 ms, then `/click left door`.                                                            |
+| **saytarget**     | `<spawnId> <message>`                         | Target spawn by ID, wait for target to switch, then `/say` the message. For group hotkeys: `/rc group /cz saytarget ${Me.Target.ID} travel to butcherblock`. |
 
 ### Master pause
 

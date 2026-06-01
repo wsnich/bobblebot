@@ -25,6 +25,7 @@ local utils = require('lib.utils')
 local command_dispatcher = require('lib.command_dispatcher')
 local follow = require('lib.follow')
 local spawnutils = require('lib.spawnutils')
+local targeting = require('lib.targeting')
 local unpack = unpack
 
 local TOGGLELIST = {
@@ -679,6 +680,31 @@ local function cmd_echo(args)
     end
 end
 
+local function cmd_clickdoor()
+    mq.cmd('/doortarget')
+    mq.delay(500)
+    mq.cmd('/click left door')
+end
+
+local function cmd_saytarget(args, str)
+    local id = args[2] and tonumber(args[2])
+    local message
+    if args[3] then
+        message = table.concat(args, ' ', 3)
+    elseif str then
+        message = str:match('saytarget%s+%S+%s+(.+)')
+    end
+    if not id or id == 0 or not message or message == '' then
+        printf('\ayCZBot:\ax usage: /cz saytarget <spawnId> <message>')
+        return
+    end
+    if not targeting.TargetAndWait(id, 500) then
+        printf('\ayCZBot:\ax failed to target spawn id %s', id)
+        return
+    end
+    mq.cmdf('/say %s', message)
+end
+
 -- CHChain: stop, setup, start, tank, pause
 local function cmd_chchain(args)
     local rc = state.getRunconfig()
@@ -916,6 +942,8 @@ local handlers = {
     refresh = cmd_refresh,
     refreshspells = cmd_refresh,
     echo = cmd_echo,
+    clickdoor = cmd_clickdoor,
+    saytarget = cmd_saytarget,
     chchain = cmd_chchain,
     draghack = cmd_draghack,
     linkitem = cmd_linkitem,
