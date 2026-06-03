@@ -7,10 +7,12 @@ local utils = require('lib.utils')
 local charinfo = require('plugin.charinfo')
 local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
+local targeting = require('lib.targeting')
 
 local botheal = {}
 local AHThreshold = {}
 local XTList = {}
+local rezCorpsePreparedId = nil
 
 local function defaultHealEntry()
     return botconfig.getDefaultSpellEntry('heal')
@@ -392,6 +394,20 @@ local function healTargetNeedsSpell(spellIndex, targetId, targethit, context, ph
     return nil, nil
 end
 
+--- Target corpse and /corpse once before rez cast (consent failure is OK).
+local function healBeforeCast(_spellIndex, evalId, hit)
+    if hit ~= 'corpse' or not evalId then return true end
+    if rezCorpsePreparedId == evalId then return true end
+    rezCorpsePreparedId = evalId
+    targeting.TargetAndWait(evalId, 500)
+    mq.cmd('/corpse')
+    return true
+end
+
+local function healAfterCast(_spellIndex, _evalId, hit)
+    if hit == 'corpse' then rezCorpsePreparedId = nil end
+end
+
 function botheal.HealCheck(runPriority)
     local count = botconfig.getSpellCount('heal')
     if count <= 0 then return false end
@@ -399,6 +415,8 @@ function botheal.HealCheck(runPriority)
     if not ctx then return false end
     local options = {
         runPriority = runPriority,
+        beforeCast = healBeforeCast,
+        afterCast = healAfterCast,
         entryValid = function(i)
             local entry = botconfig.getSpellEntry('heal', i)
             if not entry then return false end
