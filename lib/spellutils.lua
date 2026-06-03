@@ -14,6 +14,19 @@ local casting = require('lib.casting')
 local spellutils = {}
 local _deps = {}
 local _instantDebuffCastPending = nil
+local prepareImmediateCastFn = nil
+
+function spellutils.setPrepareImmediateCastFn(fn)
+    prepareImmediateCastFn = fn
+end
+
+local function invokePrepareImmediateCast(sub, index, evalId, targethit)
+    if not prepareImmediateCastFn then return end
+    local rc = state.getRunconfig()
+    if rc.CurSpell and rc.CurSpell.corpseDragDone then return end
+    prepareImmediateCastFn(sub, index, evalId, targethit)
+    if rc.CurSpell then rc.CurSpell.corpseDragDone = true end
+end
 
 local CASTING_STUCK_MS = 20000
 --- Delay (ms) after cast start when spell must be memorized, so casting state is visible before next tick and charState won't stand for hysteresis.
@@ -1835,6 +1848,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     if sub == 'debuff' and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
         return false
     end
+    invokePrepareImmediateCast(sub, index, EvalID, targethit)
     if entry.announce then
         printf("\ayCZBot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
     end

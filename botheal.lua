@@ -12,7 +12,6 @@ local targeting = require('lib.targeting')
 local botheal = {}
 local AHThreshold = {}
 local XTList = {}
-local rezCorpsePreparedId = nil
 
 local function defaultHealEntry()
     return botconfig.getDefaultSpellEntry('heal')
@@ -280,6 +279,29 @@ end
 
 local HEAL_PHASE_ORDER = { 'corpse', 'self', 'groupheal', 'tank', 'groupmember', 'pc', 'mypet', 'pet', 'xtgt' }
 
+local function healEntryValid(spellIndex)
+    local entry = botconfig.getSpellEntry('heal', spellIndex)
+    if not entry then return false end
+    if entry.enabled == false or entry.gem == 0 then return false end
+    local minmanapct = entry.minmanapct
+    local maxmanapct = entry.maxmanapct
+    if minmanapct == nil then minmanapct = 0 end
+    if maxmanapct == nil then maxmanapct = 100 end
+    local mymana = mq.TLO.Me.PctMana()
+    if mymana and (mymana < minmanapct or mymana > maxmanapct) then return false end
+    return spellutils.SpellCheck('heal', spellIndex)
+end
+
+local function healHasCastableCorpseSpell()
+    local count = botconfig.getSpellCount('heal')
+    for idx = 1, count do
+        if AHThreshold[idx] and AHThreshold[idx].corpse and healEntryValid(idx) then
+            return true
+        end
+    end
+    return false
+end
+
 local function healGetTargetsForPhase(phase, context)
     if phase == 'self' then return castutils.getTargetsSelf() end
     if phase == 'tank' then return castutils.getTargetsTank(context) end
@@ -300,13 +322,9 @@ local function healGetTargetsForPhase(phase, context)
         return out
     end
     if phase == 'corpse' then
-        local count = botconfig.getSpellCount('heal')
-        for idx = 1, count do
-            if AHThreshold[idx] and AHThreshold[idx].corpse then
-                local rezid = CorpseRezIdForFilter()
-                if rezid then return { { id = rezid, targethit = 'corpse' } } end
-            end
-        end
+        if not healHasCastableCorpseSpell() then return {} end
+        local rezid = CorpseRezIdForFilter()
+        if rezid then return { { id = rezid, targethit = 'corpse' } } end
         return {}
     end
     return {}
@@ -394,26 +412,13 @@ local function healTargetNeedsSpell(spellIndex, targetId, targethit, context, ph
     return nil, nil
 end
 
---- Target corpse and /corpse once before rez cast (consent failure is OK).
-local function healBeforeCast(_spellIndex, evalId, hit)
-    if hit ~= 'corpse' or not evalId then return true end
-    if mq.TLO.Me.CastTimeLeft() > 0 then return true end
-    local rc = state.getRunconfig()
-    local cur = rc.CurSpell
-    if rezCorpsePreparedId == evalId then
-        if cur and cur.sub == 'heal' and cur.target == evalId then return true end
-        rezCorpsePreparedId = nil
-    end
-    rezCorpsePreparedId = evalId
+spellutils.setPrepareImmediateCastFn(function(sub, _index, evalId, targethit)
+    if sub ~= 'heal' or targethit ~= 'corpse' or not evalId then return end
+    if mq.TLO.Me.CastTimeLeft() > 0 then return end
     targeting.TargetAndWait(evalId, 500)
     mq.cmd('/corpse')
     mq.delay(100)
-    return true
-end
-
-local function healAfterCast(_spellIndex, _evalId, hit)
-    if hit == 'corpse' then rezCorpsePreparedId = nil end
-end
+end)
 
 function botheal.HealCheck(runPriority)
     local count = botconfig.getSpellCount('heal')
@@ -422,20 +427,7 @@ function botheal.HealCheck(runPriority)
     if not ctx then return false end
     local options = {
         runPriority = runPriority,
-        beforeCast = healBeforeCast,
-        afterCast = healAfterCast,
-        entryValid = function(i)
-            local entry = botconfig.getSpellEntry('heal', i)
-            if not entry then return false end
-            if entry.enabled == false or entry.gem == 0 then return false end
-            local minmanapct = entry.minmanapct
-            local maxmanapct = entry.maxmanapct
-            if minmanapct == nil then minmanapct = 0 end
-            if maxmanapct == nil then maxmanapct = 100 end
-            local mymana = mq.TLO.Me.PctMana()
-            if mymana and (mymana < minmanapct or mymana > maxmanapct) then return false end
-            return true
-        end,
+        entryValid = healEntryValid,
     }
     local function getSpellIndices(phase, _target)
         return spellutils.getSpellIndicesForPhase(count, phase, healBandHasPhase)
