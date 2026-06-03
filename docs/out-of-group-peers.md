@@ -1,4 +1,4 @@
-# Out-of-group peers
+﻿# Out-of-group peers
 
 This document explains how the bot interacts with **peers** who are not in the bot’s group: who counts as a peer, how the bot sees their state, and how healing, buffing, curing, corpse rez, and corpse dragging treat them.
 
@@ -25,7 +25,7 @@ All of this works for peers who are outside the bot’s group, as long as the re
 | **Healing (pets)** | None. | Any peer’s pet in range with HP in band can be healed. |
 | **Buffing** | **`groupmember`** = in-group only (incl. non-bot group members). **`pc`** = all peers. | Any peer in range that matches the band and needs the buff can be buffed. The **only** out-of-group **non-bot** PC we buff is the **explicitly configured tank** (TankName). See [Buffing configuration](buffing-configuration.md). |
 | **Curing** | **`groupmember`** = in-group only (incl. non-bot group members via Group TLO). **`groupcure`** = group AE cure. **`pc`** = all peers. | Out-of-group peers can be cured in the **pc** pass. The **only** out-of-group **non-bot** PC we cure is the **explicitly configured tank** (TankName). See [Curing configuration](curing-configuration.md). |
-| **Corpse rez** | No “in group” requirement for the **bots** validtarget. | With **corpse** in targetphase and **bots** in **validtargets**, any peer’s corpse in range can be rezzed. |
+| **Corpse rez** | Eligible if charinfo peer, group member, raid member, or guild member. | With **corpse** in targetphase, any eligible corpse in range can be rezzed (including out-of-group peers, groupmates, raidmates, and guildmates). |
 | **Corpse drag** | None. | Any peer’s corpse in range can be dragged. See [Corpse dragging](corpse-dragging.md). |
 
 ## Configuration knobs

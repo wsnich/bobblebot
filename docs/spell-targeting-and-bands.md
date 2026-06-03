@@ -27,7 +27,7 @@ Heal spells use the phase-first pattern above. The **phase order** is the evalua
 
 The heal phase order is:
 
-1. **corpse** (rez) — Corpses in range; subject to rezoffset and **validtargets** for corpse (`all`, `bots`, `raid`). Spell-level **inCombat** allows rez in combat when set on the spell entry.
+1. **corpse** (rez) — Eligible corpses in range (charinfo, group, raid, or guild); subject to **rezoffset**. Spell-level **inCombat** allows rez in combat when set on the spell entry.
 2. **self** — Yourself.
 3. **groupheal** (group/AE) — Group heal; requires enough group members in the spell’s HP band and in AE range (see **tarcnt** below).
 4. **tank** — The resolved Main Tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
@@ -45,7 +45,7 @@ For a given target, the first heal spell (in config order) that has that phase i
 
 ### Bands
 
-Each band has **targetphase** (phase tokens: corpse, self, groupheal, tank, pc, groupmember, mypet, pet, xtgt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; `all`, `bots`, or `raid` for corpse). Spell-level **inCombat** (not in targetphase) allows corpse rez in combat when set on the spell entry. **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. For heal and buff, groupmember-phase targets exclude self and the configured main tank; pc-phase targets exclude the configured main tank (cure is unchanged). Special tokens are described in [Healing configuration](healing-configuration.md).
+Each band has **targetphase** (phase tokens: corpse, self, groupheal, tank, pc, groupmember, mypet, pet, xtgt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; corpse has no validtargets). Spell-level **inCombat** (not in targetphase) allows corpse rez in combat when set on the spell entry. **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. For heal and buff, groupmember-phase targets exclude self and the configured main tank; pc-phase targets exclude the configured main tank (cure is unchanged). Special tokens are described in [Healing configuration](healing-configuration.md).
 
 ---
 

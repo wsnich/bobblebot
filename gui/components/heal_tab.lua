@@ -1,4 +1,4 @@
--- Heal tab: dedicated panel for heal config (one spell_entry per heal).
+﻿-- Heal tab: dedicated panel for heal config (one spell_entry per heal).
 
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
@@ -46,13 +46,6 @@ local function bandHasPhase(entry, phase)
     return false
 end
 
--- Corpse-phase target options (who to rez).
-local VALIDTARGETS_OPTIONS_CORPSE = {
-    { key = 'all',  label = 'All',  tooltip = 'Any PC corpse in range.' },
-    { key = 'bots', label = 'Bots', tooltip = 'Bot corpses only.' },
-    { key = 'raid', label = 'Raid', tooltip = 'Raid member corpses only.' },
-}
-
 -- PC/groupmember-phase target options (class filter). Keys match spellbands CLASS_TOKENS.
 local VALIDTARGETS_OPTIONS_PC_GROUP = {
     { key = 'all', label = 'All', tooltip = 'All classes.' },
@@ -76,7 +69,6 @@ local VALIDTARGETS_OPTIONS_PC_GROUP = {
 
 -- Options per phase for Option B: show only targets relevant to selected phases.
 local VALIDTARGETS_OPTIONS_PER_PHASE_HEAL = {
-    corpse = VALIDTARGETS_OPTIONS_CORPSE,
     groupmember = VALIDTARGETS_OPTIONS_PC_GROUP,
     pc = VALIDTARGETS_OPTIONS_PC_GROUP,
 }

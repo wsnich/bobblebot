@@ -1,4 +1,4 @@
-# Healing Configuration
+﻿# Healing Configuration
 
 This document explains how to configure the bot’s **healing** behavior: which spells are used, who gets healed and at what HP, resurrection, and related options. It is intended for operators who set up the config file and use runtime commands.
 
@@ -55,8 +55,8 @@ Each entry in **`heal.spells`** can have:
 
 Bands define **who** can receive the spell and **at what HP %**. Each band has two distinct concepts:
 
-- **targetphase:** Phase stages at which this spell is considered. Only stage tokens go here: `corpse`, `self`, `groupheal`, `tank`, `pc`, `groupmember`, `mypet`, `pet`, `xtgt`. Do **not** put `all`, `bots`, or `raid` in targetphase — those go in **validtargets** for the corpse phase. Spell-level **inCombat** (see [Special tokens](#special-tokens-targetphase)) controls whether corpse rez is allowed in combat; do not put `cbt` in targetphase.
-- **validtargets:** Within a phase stage, which target types to consider. For **corpse** phase use `all`, `bots`, or `raid` (which corpses to rez). For **pc** or **groupmember** phases use class tokens (`war`, `clr`, etc.) or `all`. Absent or empty = treat as `all`. When the config is written, absent validtargets is written as `validtargets = { 'all' }`. **Tank** and **self** need no validtargets.
+- **targetphase:** Phase stages at which this spell is considered. Only stage tokens go here: `corpse`, `self`, `groupheal`, `tank`, `pc`, `groupmember`, `mypet`, `pet`, `xtgt`. Spell-level **inCombat** (see [Special tokens](#special-tokens-targetphase)) controls whether corpse rez is allowed in combat; do not put `cbt` in targetphase.
+- **validtargets:** Within a phase stage, which target types to consider. For **pc** or **groupmember** phases use class tokens (`war`, `clr`, etc.) or `all`. Absent or empty = treat as `all`. When the config is written, absent validtargets is written as `validtargets = { 'all' }`. **Corpse**, **tank**, and **self** need no validtargets.
 - **min** / **max:** HP % range (0–100). The target’s HP must be in this range to be considered. For corpse-related targets the effective max is 200 (special).
 
 **Phase order**
@@ -77,7 +77,7 @@ If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bo
 
 **Heal bands: behavior summary**
 
-- **targetphase vs validtargets:** targetphase = at which phase stage; validtargets = what target types within that stage (classes for pc/groupmember; all/bots/raid for corpse).
+- **targetphase vs validtargets:** targetphase = at which phase stage; validtargets = what target types within that stage (classes for pc/groupmember only).
 - **self vs pc:** Add `'self'` in targetphase for self-heals; they are evaluated before tank, groupmember, and pc (see evaluation order above).
 - **tank:** No validtargets needed; main tank by role; `'tank'` alone in targetphase is enough.
 - **groupheal vs groupmember:** **groupheal** = group AE heal (count group members in band, cast on group/self). **groupmember** = single-target heals only for characters in the bot’s (EQ) group; if no group member needs a heal, out-of-group PCs are not considered. Add **pc** in targetphase to also heal peers outside the group (evaluated after groupmember in the order above).
@@ -91,7 +91,7 @@ If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bo
 
 HoT spells are **autodetected** from spell data (SPA 100); no configuration is needed. The bot will not recast them on targets who already have the effect (buff or shortbuff). For **single-target** heals, a target is not considered to need the spell if they already have it. For **group heals**, when counting how many group members need the heal for **tarcnt**, members who already have the HoT are excluded; the group HoT is only cast when the number of members who are in HP band, in range, and do not already have the HoT is at least **tarcnt**. Group HoT **tarcnt** is most accurate when group members are peers (known via charinfo); non-peer group members are counted as “need” when in band if their buff state is unknown.
 
-**validtargets for corpse:** Use `all`, `bots`, or `raid` to choose which corpses to consider (any corpse, peers’ corpses, or raid corpses).
+**Corpse rez eligibility:** When **corpse** is in targetphase, the bot only rezzes corpses whose player is in charinfo, in your EQ group, in your raid, or in your guild (same guild name as you). Random nearby corpses are ignored. Legacy `validtargets` on corpse bands (`all`, `bots`, `raid`) are ignored.
 
 For a general overview of bands and targeting across spell sections, see [Spell targeting and bands](spell-targeting-and-bands.md).
 
@@ -146,6 +146,6 @@ heal = {
 
 ## Behavior summary
 
-- **Corpse rez:** Spells with **corpse** in targetphase can target corpses in range; **validtargets** for that phase use `all`, `bots`, or `raid` to choose which corpses. **rezoffset** skips the first N matching corpses. Rez is only considered when the spell’s band allows it and (for non-**cbt**) no mobs are in the camp list if the band is not combat.
+- **Corpse rez:** Spells with **corpse** in targetphase can target eligible corpses in range (charinfo peer, group member, raid member, or guild member). **rezoffset** skips the first N matching corpses. Rez is only considered when the spell’s band allows it and (for non-**cbt**) no mobs are in the camp list if the band is not combat.
 - **Interrupt:** **interruptlevel** is used when deciding whether to interrupt the current cast for another heal (e.g. tank drop).
 - **XT targets:** If **xttargets** lists slot numbers, spells with **xtgt** in bands can heal those extended target slots when their HP is in the spell’s band.

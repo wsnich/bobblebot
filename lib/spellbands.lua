@@ -1,6 +1,6 @@
 ﻿-- Single parse/apply for spell bands across heal, buff, cure, event, debuff.
 -- entry.bands = { { targetphase = { 'tank', 'pc' }, validtargets = { 'war', 'clr' }, min = 0, max = 80 }, ... }
--- targetphase = priority stages; validtargets = within-phase types (classes, or all/bots/raid for corpse).
+-- targetphase = priority stages; validtargets = within-phase types (classes for pc/groupmember).
 
 local spellbands = {}
 
@@ -13,7 +13,6 @@ local function normalizeDebuffTargetPhase(token)
 end
 
 local DEBUFF_SPECIAL_MAX = 200
-local HEAL_CORPSE_TARGETS = { all = true, bots = true, raid = true }
 
 --- Apply entry.bands to build the runtime structure for this spell index.
 --- @param section string 'heal'|'buff'|'cure'|'debuff'
@@ -48,17 +47,8 @@ function spellbands.applyBands(section, entry, index)
                         else
                             rt[p] = { min = minVal, max = maxVal }
                             if p == 'corpse' then
-                            rt[p].max = DEBUFF_SPECIAL_MAX
-                            if type(validTgts) == 'table' and #validTgts > 0 then
-                                for _, v in ipairs(validTgts) do
-                                    if type(v) == 'string' and HEAL_CORPSE_TARGETS[v] then
-                                        rt[v] = { min = minVal, max = DEBUFF_SPECIAL_MAX }
-                                    end
-                                end
-                            else
-                                rt.all = { min = minVal, max = DEBUFF_SPECIAL_MAX }
-                            end
-                        elseif p == 'pc' then
+                                rt[p].max = DEBUFF_SPECIAL_MAX
+                            elseif p == 'pc' then
                             if type(validTgts) == 'table' and #validTgts > 0 then
                                 for _, c in ipairs(validTgts) do
                                     if type(c) == 'string' and c ~= '' then

@@ -1,4 +1,4 @@
-local mq = require('mq')
+﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local spellbands = require('lib.spellbands')
 local spellutils = require('lib.spellutils')
@@ -82,8 +82,50 @@ local function healBuildContext()
     return HPEvalContext(1)
 end
 
+local function corpsePlayerName(spawn)
+    local name = spawn.CleanName()
+    if not name then return nil end
+    return string.gsub(name, "'s corpse", "")
+end
+
+local function corpseClassForName(name)
+    if not name or name == '' then return nil end
+    local peer = charinfo.GetInfo(name)
+    if peer and peer.Class then return peer.Class.ShortName end
+    if mq.TLO.Group.Member(name).Index() then
+        return mq.TLO.Group.Member(name).Class.ShortName()
+    end
+    local raidMembers = mq.TLO.Raid.Members()
+    if raidMembers and raidMembers > 0 then
+        for k = 1, raidMembers do
+            if mq.TLO.Raid.Member(k).Name() == name then
+                return mq.TLO.Raid.Member(k).Class.ShortName()
+            end
+        end
+    end
+    return mq.TLO.Spawn('pc =' .. name).Class.ShortName()
+end
+
+local function isCorpseRezEligible(name)
+    if not name or name == '' then return false end
+    if charinfo.GetInfo(name) then return true end
+    if mq.TLO.Group.Member(name).Index() then return true end
+    local raidMembers = mq.TLO.Raid.Members()
+    if raidMembers and raidMembers > 0 then
+        for k = 1, raidMembers do
+            if mq.TLO.Raid.Member(k).Name() == name then return true end
+        end
+    end
+    local myGuild = mq.TLO.Me.Guild()
+    if myGuild and myGuild ~= '' then
+        local theirGuild = mq.TLO.Spawn('pc =' .. name).Guild()
+        if theirGuild and theirGuild ~= '' and myGuild == theirGuild then return true end
+    end
+    return false
+end
+
 -- Build list of matching corpses with class priority for rez order (healers first: clr, shm, dru, etc.).
-local function _corpseRezCandidates(ctx, filter)
+local function _corpseRezCandidates()
     local myconfig = botconfig.config
     local corpsecount = mq.TLO.SpawnCount('pccorpse radius ' .. myconfig.settings.acleash)()
     if not corpsecount or corpsecount == 0 then return {} end
@@ -91,34 +133,10 @@ local function _corpseRezCandidates(ctx, filter)
     local candidates = {}
     for i = 1, corpsecount do
         local spawn = mq.TLO.NearestSpawn(i, 'pccorpse radius ' .. corpsedist)
-        local nearcorpse = spawn.CleanName()
-        if nearcorpse then nearcorpse = string.gsub(nearcorpse, "'s corpse", "") end
+        local playerName = corpsePlayerName(spawn)
         local rezid = spawn.ID()
-        local match, class = false, nil
-        if filter == 'all' then
-            match = true
-        elseif filter == 'bots' and ctx.bots then
-            for k = 1, #ctx.bots do
-                local botname = ctx.bots[k]
-                if botname == nearcorpse then
-                    match = true
-                    local peer = charinfo.GetInfo(botname)
-                    if peer and peer.Class then
-                        class = peer.Class.ShortName
-                    end
-                    break
-                end
-            end
-        elseif filter == 'raid' and mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0 then
-            for k = 1, mq.TLO.Raid.Members() do
-                if mq.TLO.Raid.Member(k).Name() == nearcorpse then
-                    match = true
-                    class = mq.TLO.Raid.Member(k).Class.ShortName()
-                    break
-                end
-            end
-        end
-        if match and rezid then
+        if playerName and rezid and isCorpseRezEligible(playerName) then
+            local class = corpseClassForName(playerName)
             local priority = spellutils.GetClassOrderPriority(class)
             candidates[#candidates + 1] = { rezid = rezid, priority = priority }
         end
@@ -127,9 +145,9 @@ local function _corpseRezCandidates(ctx, filter)
     return candidates
 end
 
-local function CorpseRezIdForFilter(ctx, filter)
+local function CorpseRezIdForFilter()
     local myconfig = botconfig.config
-    local candidates = _corpseRezCandidates(ctx, filter)
+    local candidates = _corpseRezCandidates()
     if #candidates == 0 then return nil end
     local corpsecount = #candidates
     local rezoffset = myconfig.heal.rezoffset or 0
@@ -146,12 +164,8 @@ local function HPEvalCorpse(index, ctx)
     if not AHThreshold[index].inCombat and state.getRunconfig().MobList and state.getRunconfig().MobList[1] then
         return nil, nil
     end
-    for _, filter in ipairs({ 'all', 'bots', 'raid' }) do
-        if AHThreshold[index][filter] then
-            local rezid = CorpseRezIdForFilter(ctx, filter)
-            if rezid then return rezid, 'corpse' end
-        end
-    end
+    local rezid = CorpseRezIdForFilter()
+    if rezid then return rezid, 'corpse' end
     return nil, nil
 end
 
@@ -287,9 +301,7 @@ local function healGetTargetsForPhase(phase, context)
         local count = botconfig.getSpellCount('heal')
         for idx = 1, count do
             if AHThreshold[idx] and AHThreshold[idx].corpse then
-                local filter = AHThreshold[idx].all and 'all' or AHThreshold[idx].bots and 'bots' or
-                AHThreshold[idx].raid and 'raid' or 'all'
-                local rezid = CorpseRezIdForFilter(context, filter)
+                local rezid = CorpseRezIdForFilter()
                 if rezid then return { { id = rezid, targethit = 'corpse' } } end
             end
         end
