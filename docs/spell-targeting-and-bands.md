@@ -21,7 +21,7 @@ For heal, buff, debuff, and cure, the bot uses the same pattern. It evaluates **
 
 ## Heal targeting
 
-Heal spells use the phase-first pattern above. The **phase order** is the evaluation order. For each phase, the bot gets the list of targets for that phase (e.g. self, tank, group members, peers), then for **each target** checks **all** heal spells that have that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. Bands define **who** can receive the spell and **at what HP %**.
+Heal spells use the phase-first pattern above, split into **two resource passes**. **Pass 1 (HP):** all spells with default **healResource** `'hp'` (including corpse rez). **Pass 2 (Mana):** only **healResource** `'mana'` spells (e.g. cannibalize), and only when pass 1 found nothing to cast. Within each pass, the **phase order** is the evaluation order. For each phase, the bot gets the list of targets for that phase (e.g. self, tank, group members, peers), then for **each target** checks **all** heal spells of that resource type that have that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. Bands define **who** can receive the spell and **at what HP %**.
 
 ### Phase order
 
@@ -37,7 +37,7 @@ The heal phase order is:
 8. **pet** — Other peers’ pets.
 9. **xtgt** — Extended target (XTarget) slots when **heal.xttargets** is set.
 
-For a given target, the first heal spell (in config order) that has that phase in its bands and for which the target is in HP band and in range is the one cast.
+For a given target within a pass, the first heal spell (in config order) of that resource type that has that phase in its bands and for which the target is in HP band and in range is the one cast. Mana heals are deferred until the HP pass completes without casting.
 
 ### tarcnt (heal)
 

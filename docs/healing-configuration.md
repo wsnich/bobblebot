@@ -5,7 +5,7 @@ This document explains how to configure the bot’s **healing** behavior: which 
 ## Overview
 
 - **Master switch:** Healing runs only when **`settings.doheal`** is `true`. Default is `false`.
-- **Heal target:** The heal loop evaluates **phases** in order (see [Heal bands](#heal-bands)): corpse (rez) → self → groupheal → tank → groupmember → pc → mypet → pet → xtgt. For each phase it gets the list of targets for that phase, then for **each target** checks all heal spells that have that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
+- **Heal target:** The heal loop runs **two passes** when no cast is in progress. **Pass 1 (HP):** evaluates **phases** in order (see [Heal bands](#heal-bands)): corpse (rez) → self → groupheal → tank → groupmember → pc → mypet → pet → xtgt, using only spells where **healResource** is `'hp'` (the default, including corpse rez). For each phase it gets the list of targets for that phase, then for **each target** checks all matching heal spells (in config order). The first spell that the target needs (HP in band, in range) is cast. **Pass 2 (Mana):** runs the same phase order with only **healResource** `'mana'` spells (e.g. cannibalize), and only when pass 1 found nothing to cast. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
 - **Where to configure:** Set **`settings.doheal`** in the `settings` section and all heal options under the **`heal`** section. See [Config file reference](#config-file-reference) below.
 
 ---
@@ -61,9 +61,9 @@ Bands define **who** can receive the spell and **at what HP %**. Each band has t
 
 **Phase order**
 
-The **phase order** is the evaluation order. The bot evaluates phases in this sequence; for each phase it gets the list of targets for that phase and, for **each target**, checks all heal spells that include that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. The order is:
+The **phase order** is the evaluation order within each pass. The bot runs **pass 1 (HP spells)** first, then **pass 2 (mana spells)** only if pass 1 found no cast. Within a pass, the bot evaluates phases in this sequence; for each phase it gets the list of targets for that phase and, for **each target**, checks all heal spells of that resource type that include that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. The order is:
 
-1. **corpse** (rez)
+1. **corpse** (rez) — pass 1 only (HP pass)
 2. **self**
 3. **groupheal** (group AE)
 4. **tank**
@@ -73,7 +73,7 @@ The **phase order** is the evaluation order. The bot evaluates phases in this se
 8. **pet** (other pets)
 9. **xtgt** (extended targets)
 
-If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bot still follows this global phase order: it does not prefer one phase over another within the same spell. The first phase in the list above that has a valid, in-range target for that spell wins. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
+If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bot still follows this global phase order within the pass: it does not prefer one phase over another within the same spell. The first phase in the list above that has a valid, in-range target for that spell wins. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
 
 **Heal bands: behavior summary**
 
@@ -81,7 +81,7 @@ If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bo
 - **self vs pc:** Add `'self'` in targetphase for self-heals; they are evaluated before tank, groupmember, and pc (see evaluation order above).
 - **tank:** No validtargets needed; main tank by role; `'tank'` alone in targetphase is enough.
 - **groupheal vs groupmember:** **groupheal** = group AE heal (count group members in band, cast on group/self). **groupmember** = single-target heals only for characters in the bot’s (EQ) group; if no group member needs a heal, out-of-group PCs are not considered. Add **pc** in targetphase to also heal peers outside the group (evaluated after groupmember in the order above).
-- **Selection:** For each phase, each target is checked against all heal spells that have that phase; first spell (in config order) that the target needs is cast. Within pc/groupmember, targets are in iteration order (not lowest HP).
+- **Selection:** For each phase within a pass, each target is checked against all heal spells of that resource type that have that phase; first spell (in config order) that the target needs is cast. Within pc/groupmember, targets are in iteration order (not lowest HP). Mana heals (`healResource = 'mana'`) are never considered until the HP pass completes without casting.
 
 **Special tokens (targetphase):**
 - **inCombat** (spell-level, not in targetphase) — When the spell has **corpse** in a band, set **inCombat** `true` on the spell entry to allow rez when there are mobs in the camp list. When `false` or unset, corpse rez is only considered when there are no mobs in camp (safe rez only). The GUI shows "Allow rez in combat" only when at least one band includes **corpse**.

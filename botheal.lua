@@ -279,6 +279,24 @@ end
 
 local HEAL_PHASE_ORDER = { 'corpse', 'self', 'groupheal', 'tank', 'groupmember', 'pc', 'mypet', 'pet', 'xtgt' }
 
+local function healSpellResource(spellIndex)
+    local entry = botconfig.getSpellEntry('heal', spellIndex)
+    return (entry and entry.healResource) or 'hp'
+end
+
+local function healFilterIndicesByResource(indices, resource)
+    local out = {}
+    for _, i in ipairs(indices) do
+        if healSpellResource(i) == resource then out[#out + 1] = i end
+    end
+    return out
+end
+
+local function healPassStartedCast()
+    local cs = state.getRunconfig().CurSpell
+    return cs and cs.sub == 'heal' and cs.spell
+end
+
 local function healEntryValid(spellIndex)
     local entry = botconfig.getSpellEntry('heal', spellIndex)
     if not entry then return false end
@@ -429,11 +447,25 @@ function botheal.HealCheck(runPriority)
         runPriority = runPriority,
         entryValid = healEntryValid,
     }
-    local function getSpellIndices(phase, _target)
-        return spellutils.getSpellIndicesForPhase(count, phase, healBandHasPhase)
+    local cursor = spellutils.getResumeCursor('doHeal')
+    local resumePass
+    if cursor and cursor.spellIndex then
+        resumePass = healSpellResource(cursor.spellIndex) == 'mana' and 'mana' or 'hp'
     end
-    return spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER, healGetTargetsForPhase, getSpellIndices,
-        healTargetNeedsSpell, ctx, options)
+    local function getSpellIndicesForResource(resource)
+        return function(phase, _target)
+            return healFilterIndicesByResource(
+                spellutils.getSpellIndicesForPhase(count, phase, healBandHasPhase), resource)
+        end
+    end
+    if resumePass ~= 'mana' then
+        spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER, healGetTargetsForPhase,
+            getSpellIndicesForResource('hp'), healTargetNeedsSpell, ctx, options)
+        if healPassStartedCast() then return false end
+    end
+    spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER, healGetTargetsForPhase,
+        getSpellIndicesForResource('mana'), healTargetNeedsSpell, ctx, options)
+    return false
 end
 
 function botheal.getHookFn(name)
