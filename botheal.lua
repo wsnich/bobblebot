@@ -397,10 +397,17 @@ end
 --- Target corpse and /corpse once before rez cast (consent failure is OK).
 local function healBeforeCast(_spellIndex, evalId, hit)
     if hit ~= 'corpse' or not evalId then return true end
-    if rezCorpsePreparedId == evalId then return true end
+    if mq.TLO.Me.CastTimeLeft() > 0 then return true end
+    local rc = state.getRunconfig()
+    local cur = rc.CurSpell
+    if rezCorpsePreparedId == evalId then
+        if cur and cur.sub == 'heal' and cur.target == evalId then return true end
+        rezCorpsePreparedId = nil
+    end
     rezCorpsePreparedId = evalId
     targeting.TargetAndWait(evalId, 500)
     mq.cmd('/corpse')
+    mq.delay(100)
     return true
 end
 
