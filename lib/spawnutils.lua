@@ -11,9 +11,9 @@ local bardtwist = require('lib.bardtwist')
 local spawnutils = {}
 
 -- FTE (First To Engage) tracking: combat block + in-camp recheck vs pull unpullable window.
-local COMBAT_FTE_RECHECK_MS = 5000
+local COMBAT_FTE_RECHECK_MS = 2000
 local PULL_UNPULLABLE_MS = 300000
-local COMBAT_FTE_INITIAL_BLOCK_MS = 15000
+local COMBAT_FTE_INITIAL_BLOCK_MS = 2000
 local COMBAT_FTE_STRIKE_BLOCK_EXTRA_MS = 5000
 local FTE_STRIKE_DEBOUNCE_MS = 2000
 local FTE_RECHECK_TARGET_DELAY_MS = 300

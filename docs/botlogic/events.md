@@ -84,12 +84,12 @@ Target is Encounter Locked (FTE) to someone else.
 
 - Resolves **NPC spawn id** only (ignores PC/self target; falls back to `engageTargetId` or `pullAPTargetID` when the chat event fires while targeted on yourself).
 - Echoes message; increments `FTECount` if it was 0.
-- Records `FTEList[spawnId]` via `spawnutils.recordFTE`: short **combat** block (15s + escalation), **in-camp recheck** every 5s, and **pull unpullable** for 5 minutes when `dopull` is on.
+- Records `FTEList[spawnId]` via `spawnutils.recordFTE`: short **combat** block (2s + escalation), **in-camp recheck** every 2s, and **pull unpullable** for 5 minutes when `dopull` is on.
 - Clears `engageTargetId` when it matches the FTE spawn.
 - Runs: `/mqtarget myself`, `/attack off`, `/stopcast`, `/nav stop`, `/stick off`.
 - If `dopull` is true: `botpull.AbortPullForFTE` (return to camp when mid-pull).
 
-**Camp list** (`AddSpawnCheck` / `buildCampMobList`) excludes spawns while `combatBlockedUntil` is active; `tickCombatFTERechecks` re-targets in-camp entries every 5s and clears the combat block when no new FTE message arrives.
+**Camp list** (`AddSpawnCheck` / `buildCampMobList`) excludes spawns while `combatBlockedUntil` is active; `tickCombatFTERechecks` re-targets in-camp entries every 2s and clears the combat block when no new FTE message arrives.
 
 **Pull list** uses `pullUnpullableUntil` only (5 min), not the combat block — so a false in-camp FTE does not block pull selection for the full combat window.
 
