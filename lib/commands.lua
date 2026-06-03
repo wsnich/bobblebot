@@ -702,7 +702,7 @@ local function cmd_saytarget(args, str)
         printf('\ayCZBot:\ax failed to target spawn id %s', id)
         return
     end
-    mq.delay(math.random(10, 75) * 300)
+    mq.delay(math.random(10, 50) * 500)
     mq.cmdf('/say %s', message)
 end
 
