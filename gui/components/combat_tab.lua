@@ -106,7 +106,8 @@ function M.draw()
     ImGui.Spacing()
     ImGui.Text('Stay behind')
     if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('When on and this bot is not the Main Tank, append !front to stick while engaging.')
+        local stickTok = (mq.TLO.Me.Class.ShortName() == 'ROG') and 'behind' or '!front'
+        ImGui.SetTooltip(string.format('When on and this bot is not the Main Tank, append %s to stick while engaging.', stickTok))
     end
     ImGui.SameLine()
     local stayBehindChecked = (melee.stayBehind == true)
@@ -116,7 +117,7 @@ function M.draw()
         ImGui.SameLine()
         ImGui.Text('Behind aggro %')
         if ImGui.IsItemHovered() then
-            ImGui.SetTooltip('Above this Me.PctAggro (level 20+), stick without !front until aggro drops.')
+            ImGui.SetTooltip('Above this Me.PctAggro (level 20+), stick without behind/!front until aggro drops.')
         end
         ImGui.SameLine()
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)

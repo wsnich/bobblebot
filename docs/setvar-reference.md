@@ -68,8 +68,8 @@ Scalar pull options can be set via setvar. **pull.spell** (table: gem, spell, ra
 |------|------|---------|---------|
 | **melee.assistpct** | number | 99 | MA target HP % at or below which to sync. |
 | **melee.stickcmd** | string | `'hold uw 7'` | Stick command when engaging. |
-| **melee.stayBehind** | boolean | `false` | Non-MT: append `!front` to stick while engaging. |
-| **melee.behindAggroPct** | number | 90 | Non-MT with stayBehind: above this PctAggro, stick without `!front`. |
+| **melee.stayBehind** | boolean | `false` | Non-MT: append `behind` (rogue) or `!front` (other classes) to stick while engaging. |
+| **melee.behindAggroPct** | number | 90 | Non-MT with stayBehind: above this PctAggro, stick without positioning token until aggro drops. |
 | **melee.offtank** | boolean | `false` | This bot is an offtank. |
 | **melee.minmana** | number | 0 | Min mana % to engage. |
 | **melee.otoffset** | number | 0 | Which add to pick when MT and MA on same mob. |

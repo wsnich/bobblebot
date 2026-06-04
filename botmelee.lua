@@ -21,20 +21,33 @@ botconfig.RegisterConfigLoader(function() if botconfig.config.settings.domelee t
 state.getRunconfig().mobprobtimer = 0
 local _lastEngageStickCmd = nil
 
-local function stickCmdHasFrontToken(cmd)
-    return cmd and cmd:find('!front', 1, true) ~= nil
+local function getStayBehindStickToken()
+    if mq.TLO.Me.Class.ShortName() == 'ROG' then return 'behind' end
+    return '!front'
 end
 
-local function stripFrontToken(cmd)
+local function stickCmdHasBehindToken(cmd)
+    if not cmd then return false end
+    return cmd:match('%sbehind%s') ~= nil or cmd:match('%sbehind$') ~= nil
+        or cmd:match('^behind%s') ~= nil or cmd == 'behind'
+end
+
+local function stickCmdHasStayBehindToken(cmd)
+    return cmd and (cmd:find('!front', 1, true) ~= nil or stickCmdHasBehindToken(cmd))
+end
+
+local function stripStayBehindTokens(cmd)
     if not cmd then return '' end
     local s = cmd:gsub('%s+!front%s*', ' '):gsub('!front%s+', ''):gsub('%s+!front$', ''):gsub('^!front%s*', '')
+    s = s:gsub('%s+behind%s+', ' '):gsub('%s+behind%s*$', ''):gsub('^behind%s+', '')
     return (s:match('^%s*(.-)%s*$')) or s
 end
 
-local function withFrontToken(cmd)
-    if not cmd or cmd == '' then return '!front' end
-    if stickCmdHasFrontToken(cmd) then return cmd end
-    return cmd .. ' !front'
+local function withStayBehindToken(cmd)
+    local token = getStayBehindStickToken()
+    if not cmd or cmd == '' then return token end
+    if stickCmdHasStayBehindToken(cmd) then return cmd end
+    return cmd .. ' ' .. token
 end
 
 local function getEngageStickCmd()
@@ -45,10 +58,10 @@ local function getEngageStickCmd()
     if aggro.pctAggroAvailable() then
         local pct = aggro.getPctAggro()
         if pct ~= nil and pct > behindPct then
-            return stripFrontToken(cmd)
+            return stripStayBehindTokens(cmd)
         end
     end
-    return withFrontToken(cmd)
+    return withStayBehindToken(cmd)
 end
 
 local function isCastingBusy()

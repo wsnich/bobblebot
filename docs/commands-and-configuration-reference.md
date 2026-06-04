@@ -195,8 +195,8 @@ See [Pull Configuration and Logic](pull-configuration.md) for the full pull tabl
 | ------------- | ------------- | --------------------------------------------- |
 | **assistpct** | 99            | MA target HP % at or below which to sync.     |
 | **stickcmd**  | `'hold uw 7'` | Stick command when engaging.                  |
-| **stayBehind** | `false`    | Non-MT: append `!front` to stick while engaging. |
-| **behindAggroPct** | 90     | With stayBehind: above this PctAggro, stick without `!front`. |
+| **stayBehind** | `false`    | Non-MT: append `behind` (rogue) or `!front` (other classes) to stick while engaging. |
+| **behindAggroPct** | 90     | With stayBehind: above this PctAggro, stick without positioning token until aggro drops. |
 | **offtank**   | `false`       | This bot is an offtank.                       |
 | **otoffset**  | 0             | Which add to pick when MT and MA on same mob. |
 | **minmana**   | 0             | Min mana % to engage.                         |
