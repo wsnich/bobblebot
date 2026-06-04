@@ -235,6 +235,21 @@ function botpull.EngageCheck()
     return false
 end
 
+-- Bot peers: charinfo PctMana (MQ Group.Member/Spawn PctMana can report 100% incorrectly).
+-- Non-bot groupmates: Group.Member.PctMana().
+local function resolveMemberManaPct(member, memberName)
+    if memberName and memberName ~= '' then
+        local peer = charinfo.GetInfo(memberName)
+        if peer and peer.PctMana ~= nil then
+            return tonumber(peer.PctMana)
+        end
+    end
+    if member and member.PctMana then
+        return tonumber(member.PctMana())
+    end
+    return nil
+end
+
 -- Group checks: offline/corpse always block; healer mana gate when manaclass non-empty and pull.mana > 0.
 -- Sets rc.pullHealerManaWait on mana failure. Returns true if pull must not start.
 local function groupBlocksPull(rc)
@@ -262,10 +277,11 @@ local function groupBlocksPull(rc)
             if manaGateEnabled and member.Class and member.Class.ShortName() then
                 local cls = string.upper(member.Class.ShortName() or '')
                 if checked[cls] then
-                    local pct = tonumber(member.PctMana())
+                    local memberName = member.Name()
+                    local pct = resolveMemberManaPct(member, memberName)
                     if pct == nil then pct = 0 end
                     if pct <= threshold then
-                        local name = (spawn and spawn.CleanName()) or member.Name() or 'healer'
+                        local name = (spawn and spawn.CleanName()) or memberName or 'healer'
                         rc.pullHealerManaWait = { name = name, pct = threshold, current = pct }
                         return true
                     end
