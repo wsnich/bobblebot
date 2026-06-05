@@ -187,7 +187,7 @@ Travel mode has no config option; it is enabled by the **/cz travel** command. S
 
 ### Pull section
 
-See [Pull Configuration and Logic](pull-configuration.md) for the full pull table. Options include: **spell** (single block: gem, spell, range), **radius**, **zrange**, **pullMinCon**, **pullMaxCon**, **maxLevelDiff**, **usePullLevels**, **pullMinLevel**, **pullMaxLevel**, **chainpullcnt**, **chainpullhp**, **mana**, **manaclass**, **leash**, **addAbortRadius**, **usepriority**, **hunter**.
+See [Pull Configuration and Logic](pull-configuration.md) for the full pull table. Options include: **spell** (single block: gem, spell, range), **radius**, **zrange**, **pullMinCon**, **pullMaxCon**, **maxLevelDiff**, **usePullLevels**, **pullMinLevel**, **pullMaxLevel**, **chainpullcnt**, **chainpullhp**, **mana**, **manaclass**, **leash**, **fteLockoutSec**, **addAbortRadius**, **usepriority**, **hunter**, **roam**.
 
 ### Melee section
 

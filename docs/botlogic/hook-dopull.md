@@ -14,7 +14,7 @@ flowchart TB
     Start[doPull] --> Guards{!dopull or non-combat zone or raid_mechanic?}
     Guards -->|Yes| End[return]
     Guards -->|No| Pulling{runState == pulling?}
-    Pulling -->|Yes| Tick[PullTick: navigating aggroing returning waiting_combat]
+    Pulling -->|Yes| Tick[PullTick: camp or roam state machine]
     Pulling -->|No| Chain{MobCount <= chainpullcnt or 0?}
     Chain -->|Yes| EngageHP{engageTargetId and PctHPs <= chainpullhp and MobCount <= tempcnt?}
     EngageHP -->|Yes| StartPull[StartPull]
@@ -34,8 +34,8 @@ flowchart TB
 ```
 
 - **Map radii:** Each doPull tick (when dopull is on) calls `syncPullMapFilter`; StartPull also calls it via ensureCampAndAnchor.
-- **StartPull:** Requires canStartPull (no MasterPause, HP > 45%, nav mesh, group checks); ensureCampAndAnchor (syncPullMapFilter, makecamp or hunter anchor); buildPullMobList (spawnutils); selectPullTarget (closest by path, or priority list if usepriority). Then /attack off, /stick off, /mqtarget clear, /nav to spawn; set pullAPTargetID, pullTagTimer, pullReturnTimer, pullState = 'navigating', setRunState('pulling', { priority = doPull }).
-- **PullTick:** See [Movement and misc state](movement-and-misc.md#pull-state-machine-dopull) for navigating → aggroing → returning → waiting_combat.
+- **StartPull:** Requires canStartPull (no MasterPause, HP > 45%, nav mesh, group checks); ensureCampAndAnchor (syncPullMapFilter, makecamp or mobile anchor); buildPullMobList (spawnutils); selectPullTarget (closest by path, or priority list if usepriority). Then /attack off, /stick off, /mqtarget clear, /nav to spawn; set pullAPTargetID, pullTagTimer, setRunState('pulling', { priority = doPull }). Camp: `pullState = navigating`, pullReturnTimer set. Roam (`pull.roam`): `pullState = roam_navigating`, no return timer.
+- **PullTick:** Camp: navigating → aggroing → returning → waiting_combat. Roam: roam_navigating → roam_aggroing → roam_fighting (fight in place, advance anchor on kill). When roam idle and no targets in pull.radius, nav stopped and bot waits. See [Movement and misc state](movement-and-misc.md#pull-state-machine-dopull) for camp pull details.
 
 ## See also
 

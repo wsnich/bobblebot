@@ -23,7 +23,11 @@ local RETURNING_AFTER_ABORT_TIMEOUT_MS = 30000
 -- Pull state machine. rc fields: pullState, pullAPTargetID, pullTagTimer, pullReturnTimer, pullPhase, pullDeadline,
 -- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullHealerManaWait, pullRangedStoredItem;
 -- pulledmob, pulledmobLastDistSq, pulledmobLastCloserTime, pullreturntimer. All cleared in clearPullState().
-botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'returning', 'waiting_combat' }
+botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'returning', 'waiting_combat', 'roam_navigating', 'roam_aggroing', 'roam_fighting' }
+
+local function isRoamMode()
+    return myconfig.pull and myconfig.pull.roam == true
+end
 
 --- Returns effective pull range in units for the given pull spell entry.
 local function getPullRange(entry)
@@ -169,7 +173,7 @@ function botpull.DisablePull(reason)
     if activePull then
         clearPullState(reason)
     end
-    if botconfig.config.pull.hunter then
+    if botconfig.config.pull.hunter or botconfig.config.pull.roam then
         rc.makecamp = { x = nil, y = nil, z = nil }
     end
     mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
@@ -246,7 +250,7 @@ function botpull.EngageCheck()
             rc.makecamp.z)
         local range = getEffectiveAbilityRange()
         local rangeSq = range and (range * range) or nil
-        if targetDistSq and rangeSq and targetDistSq > rangeSq and not myconfig.pull.hunter then return false end
+        if targetDistSq and rangeSq and targetDistSq > rangeSq and not myconfig.pull.hunter and not myconfig.pull.roam then return false end
     end
     if totID and totID > 0 and totID ~= mq.TLO.Me.ID() and (totType ~= 'NPC') and totType ~= 'Corpse' then
         printf('\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arengaged\ax by someone else! Returning to camp!', target)
@@ -317,7 +321,8 @@ end
 -- Pre-checks: return false if we should not start a pull.
 local function canStartPull(rc)
     rc.pullHealerManaWait = nil
-    if rc.pulledmob then
+    if isRoamMode() and rc.pullState == 'roam_fighting' then return false end
+    if not isRoamMode() and rc.pulledmob then
         local pmob = mq.TLO.Spawn(rc.pulledmob)
         if not pmob or not pmob.ID() or pmob.Type() == 'Corpse' then
             rc.pulledmob = nil
@@ -399,16 +404,26 @@ local function shouldStartPull(rc)
     return true
 end
 
--- Camp/hunter setup and mapfilter; no mq.delay.
+-- Camp/hunter/roam setup and mapfilter; no mq.delay.
 local function ensureCampAndAnchor(rc)
     botpull.syncPullMapFilter(false)
-    if not myconfig.pull.hunter and not rc.campstatus then botmove.MakeCamp('on') end
-    if myconfig.pull.hunter and (not rc.makecamp.x or not rc.makecamp.y) then
+    if isRoamMode() then
+        if myconfig.pull.hunter then
+            print('\ayCZBot:\ax Roam hunt enabled; hunter mode ignored')
+        end
+        if not rc.makecamp.x or not rc.makecamp.y then
+            print('\ayCZBot:\ax setting Roam hunt anchor')
+            botmove.SetCampHere()
+        end
+        if rc.campstatus then botmove.MakeCamp('off') end
+    elseif not myconfig.pull.hunter and not rc.campstatus then
+        botmove.MakeCamp('on')
+    elseif myconfig.pull.hunter and (not rc.makecamp.x or not rc.makecamp.y) then
         print('\ayCZBot:\ax setting HunterMode anchor')
         botmove.SetCampHere()
         if rc.campstatus then botmove.MakeCamp('off') end
     end
-    if myconfig.pull.hunter and rc.campstatus then
+    if myconfig.pull.hunter and not isRoamMode() and rc.campstatus then
         print('Disabling makecamp because dopull is on with HunterMode enabled') -- not debug, real error message
         botmove.MakeCamp('off')
     end
@@ -479,8 +494,13 @@ function botpull.StartPull()
 
     rc.pullAPTargetID = spawn.ID()
     rc.pullTagTimer = botpull.TagTimeCalc('pull', spawn.ID())
-    rc.pullReturnTimer = botpull.TagTimeCalc('return', nil, rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
-    rc.pullState = 'navigating'
+    if isRoamMode() then
+        rc.pullReturnTimer = nil
+        rc.pullState = 'roam_navigating'
+    else
+        rc.pullReturnTimer = botpull.TagTimeCalc('return', nil, rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
+        rc.pullState = 'navigating'
+    end
     rc.pullPhase = nil
     rc.pullDeadline = nil
     rc.pullNavStartHP = mq.TLO.Me.PctHPs()
@@ -497,23 +517,37 @@ local function isPullWarp()
     return entry and entry.gem == 'script' and entry.spell and string.lower(tostring(entry.spell)) == 'warp'
 end
 
+local function markPullTargetAttempted(rc, reason)
+    if not rc.pullAPTargetID or rc.pullAPTargetID <= 0 then return end
+    local shouldMarkAttempted = reason == 'Pull target below 100% HP, picking another'
+        or reason == 'No agro after 15s, returning to camp.'
+        or reason == 'No agro after 15s, picking another target.'
+        or reason == 'navigating: EngageCheck (mob engaged by other)'
+        or reason == 'aggroing: EngageCheck (mob engaged by other)'
+        or reason == 'FTE lock detected'
+    if shouldMarkAttempted then
+        local attempted = rawget(rc, 'pullAttemptedIds')
+        if not attempted then
+            attempted = {}
+            rawset(rc, 'pullAttemptedIds', attempted)
+        end
+        attempted[rc.pullAPTargetID] = true
+    end
+end
+
+local function abortRoamHunt(reason)
+    mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
+    local rc = state.getRunconfig()
+    markPullTargetAttempted(rc, reason)
+    rc.engageTargetId = nil
+    clearPullState(reason or 'roam hunt aborted')
+    if reason then printf('\ayCZBot:\ax [Roam hunt] abort: %s', reason) end
+end
+
 local function abortPullAndReturnToCamp(reason)
     mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
     local rc = state.getRunconfig()
-    if rc.pullAPTargetID and rc.pullAPTargetID > 0 then
-        local shouldMarkAttempted = reason == 'Pull target below 100% HP, picking another'
-            or reason == 'No agro after 15s, returning to camp.'
-            or reason == 'navigating: EngageCheck (mob engaged by other)'
-            or reason == 'aggroing: EngageCheck (mob engaged by other)'
-        if shouldMarkAttempted then
-            local attempted = rawget(rc, 'pullAttemptedIds')
-            if not attempted then
-                attempted = {}
-                rawset(rc, 'pullAttemptedIds', attempted)
-            end
-            attempted[rc.pullAPTargetID] = true
-        end
-    end
+    markPullTargetAttempted(rc, reason)
     rc.engageTargetId = nil
     rc.pullState = 'returning_after_abort'
     rc.pullAPTargetID = nil
@@ -561,8 +595,33 @@ local function tickReturningAfterAbort(rc)
     end
 end
 
+local function beginRoamFighting(rc, spawn)
+    rawset(rc, 'pullAttemptedIds', {})
+    rc.pullState = 'roam_fighting'
+    rc.statusMessage = string.format('Fighting %s (%s)', spawn.Name(), spawn.ID())
+    rc.pullPhase = nil
+    rc.engageTargetId = rc.pullAPTargetID
+    mq.cmd('/nav stop log=off')
+end
+
+local function abortNavDuringPull(reason)
+    if isRoamMode() then
+        abortRoamHunt(reason)
+    else
+        abortPullAndReturnToCamp(reason)
+    end
+end
+
+local function tickRoamIdleWait(rc)
+    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+    if not rc.pullHealerManaWait then
+        rc.statusMessage = 'Waiting for pull target in radius'
+    end
+end
+
 -- One tick of navigating state.
 local function tickNavigating(rc, spawn)
+    local roam = isRoamMode()
     local spawnDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), spawn.X(), spawn.Y())
     local range = getEffectiveAbilityRange() or 0
     local rangeSq = range * range
@@ -580,13 +639,13 @@ local function tickNavigating(rc, spawn)
     if spawn.PctHPs() and spawn.PctHPs() < 100 then
         local sid = rc.pullAPTargetID
         if sid and sid > 0 then spawnutils.markPullUnpullable(rc, sid) end
-        abortPullAndReturnToCamp('Pull target below 100% HP, picking another')
+        abortNavDuringPull('Pull target below 100% HP, picking another')
         return
     end
 
     -- Add-abort: HP dropped (we took damage)
     if rc.pullNavStartHP and mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() < rc.pullNavStartHP then
-        abortPullAndReturnToCamp('Add aggro / took damage, returning to camp.')
+        abortNavDuringPull(roam and 'Add aggro / took damage, aborting hunt.' or 'Add aggro / took damage, returning to camp.')
         return
     end
     -- Add-abort: nearby NPC (not pull target, not grey, Aggressive) with LoS
@@ -600,7 +659,7 @@ local function tickNavigating(rc, spawn)
                 local conName = mq.TLO.NearestSpawn(i, addFilter).ConColor()
                 local conId = conName and botconfig.ConColorsNameToId[conName:upper()] or 0
                 if conId ~= 1 and mq.TLO.NearestSpawn(i, addFilter).LineOfSight() then -- not Grey, has LoS
-                    abortPullAndReturnToCamp('Add aggro, returning to camp.')
+                    abortNavDuringPull(roam and 'Add aggro, aborting hunt.' or 'Add aggro, returning to camp.')
                     return
                 end
             end
@@ -613,6 +672,10 @@ local function tickNavigating(rc, spawn)
     for id, _ in pairs(currentXt) do
         if not xtAtStart[id] then
             if id == rc.pullAPTargetID then
+                if roam then
+                    beginRoamFighting(rc, spawn)
+                    return
+                end
                 -- Pull target just appeared on XTarget: we have aggro, return to camp
                 mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
                 rawset(rc, 'pullAttemptedIds', {})
@@ -631,7 +694,7 @@ local function tickNavigating(rc, spawn)
                 botmove.NavToCamp({ dist = 0, echoMsg = '\\ayReturning to camp' })
                 return
             else
-                abortPullAndReturnToCamp('Add aggro (XTarget), returning to camp.')
+                abortNavDuringPull(roam and 'Add aggro (XTarget), aborting hunt.' or 'Add aggro (XTarget), returning to camp.')
                 return
             end
         end
@@ -663,12 +726,12 @@ local function tickNavigating(rc, spawn)
         end
         if mq.TLO.Me.TargetOfTarget.ID() and mq.TLO.Target.ID() and mq.TLO.Target.Type() == 'NPC' and spawnDistSq and spawnDistSq <= rangeSq then
             if botpull.EngageCheck() then
-                abortPullAndReturnToCamp('navigating: EngageCheck (mob engaged by other)')
+                abortNavDuringPull('navigating: EngageCheck (mob engaged by other)')
                 return
             end
         end
         if spawnDistSq and rangeSq and spawnDistSq < rangeSq and spawn.LineOfSight() then
-            rc.pullState = 'aggroing'
+            rc.pullState = roam and 'roam_aggroing' or 'aggroing'
             rc.statusMessage = string.format('Aggroing %s (%s)', spawn.Name(), spawn.ID())
             rc.pullAggroingStartTime = mq.gettime()
             rc.pullPhase = 'aggro_wait_target'
@@ -717,6 +780,7 @@ end
 
 -- One tick of aggroing state (with sub-phases aggro_wait_target, aggro_wait_cast, aggro_wait_stop_moving).
 local function tickAggroing(rc, spawn)
+    local roam = rc.pullState == 'roam_aggroing'
     -- Spawn gone or dead: clear immediately so we do not stay stuck in "Aggroing ...".
     if not spawn or not spawn.ID() or spawn.Type() == 'Corpse' then
         clearPullState('aggroing: spawn gone or corpse')
@@ -724,7 +788,7 @@ local function tickAggroing(rc, spawn)
     end
     -- Mob engaged by someone else (e.g. MA): clear so puller is effectively assisting, not "aggroing".
     if botpull.EngageCheck() then
-        abortPullAndReturnToCamp('aggroing: EngageCheck (mob engaged by other)')
+        abortNavDuringPull('aggroing: EngageCheck (mob engaged by other)')
         return
     end
     if rc.pullPhase == 'aggro_wait_target' then
@@ -763,11 +827,15 @@ local function tickAggroing(rc, spawn)
     -- Aggroing timeout: no agro after 15s -> abort (XTarget authoritative: only timeout when pull target not on XTarget)
     local aggroingElapsed = mq.gettime() - (rc.pullAggroingStartTime or 0)
     if aggroingElapsed > 15000 and not isSpawnOnXTarget(rc.pullAPTargetID) then
-        abortPullAndReturnToCamp('No agro after 15s, returning to camp.')
+        abortNavDuringPull(roam and 'No agro after 15s, picking another target.' or 'No agro after 15s, returning to camp.')
         return
     end
-    -- XTarget authoritative: transition to returning when pull target is on XTarget and min wait (1.5s) has passed
+    -- XTarget authoritative: transition when pull target is on XTarget and min wait (1.5s) has passed
     if isSpawnOnXTarget(rc.pullAPTargetID) and aggroingElapsed >= 1500 then
+        if roam then
+            beginRoamFighting(rc, spawn)
+            return
+        end
         rawset(rc, 'pullAttemptedIds', {})
         rc.pullState = 'returning'
         rc.statusMessage = string.format('Returning to camp with %s (%s)', spawn.Name(), spawn.ID())
@@ -928,6 +996,17 @@ local function tickReturning(rc, spawn)
     end
 end
 
+-- One tick of roam_fighting state: fight in place, advance anchor on kill.
+local function tickRoamFighting(rc, spawn)
+    if not spawn or not spawn.ID() or spawn.Type() == 'Corpse' or spawn.Dead() then
+        botmove.SetCampHere()
+        clearPullState('roam_fighting: target dead')
+        return
+    end
+    rc.engageTargetId = rc.pullAPTargetID
+    if myconfig.settings.domelee then botmelee.AdvCombat() end
+end
+
 -- One tick of waiting_combat state.
 local function tickWaitingCombat(rc)
     local function isAPTarInCamp()
@@ -959,12 +1038,16 @@ function botpull.PullTick()
         return
     end
 
-    if rc.pullState == 'navigating' then
+    if rc.pullState == 'navigating' or rc.pullState == 'roam_navigating' then
         tickNavigating(rc, spawn)
         return
     end
-    if rc.pullState == 'aggroing' then
+    if rc.pullState == 'aggroing' or rc.pullState == 'roam_aggroing' then
         tickAggroing(rc, spawn)
+        return
+    end
+    if rc.pullState == 'roam_fighting' then
+        tickRoamFighting(rc, spawn)
         return
     end
     if rc.pullState == 'returning' then
@@ -989,7 +1072,18 @@ function botpull.getHookFn(name)
                 botpull.PullTick()
                 return
             end
-            if shouldStartPull(rc) then botpull.StartPull() end
+            if shouldStartPull(rc) then
+                if isRoamMode() then
+                    local apmoblist = spawnutils.buildPullMobList(rc)
+                    if apmoblist[1] then
+                        botpull.StartPull()
+                    else
+                        tickRoamIdleWait(rc)
+                    end
+                else
+                    botpull.StartPull()
+                end
+            end
         end
     end
     return nil
@@ -1000,7 +1094,11 @@ function botpull.AbortPullForFTE(reason)
     local rc = state.getRunconfig()
     if APTarget then APTarget = false end
     if state.getRunState() == state.STATES.pulling and rc.pullAPTargetID then
-        abortPullAndReturnToCamp(reason or 'FTE lock detected')
+        if isRoamMode() or myconfig.pull.hunter then
+            abortRoamHunt(reason or 'FTE lock detected')
+        else
+            abortPullAndReturnToCamp(reason or 'FTE lock detected')
+        end
     elseif rc.pullAPTargetID then
         rc.pullAPTargetID = nil
     end

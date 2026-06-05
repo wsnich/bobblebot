@@ -12,7 +12,6 @@ local spawnutils = {}
 
 -- FTE (First To Engage) tracking: combat block + in-camp recheck vs pull unpullable window.
 local COMBAT_FTE_RECHECK_MS = 2000
-local PULL_UNPULLABLE_MS = 300000
 local COMBAT_FTE_INITIAL_BLOCK_MS = 2000
 local COMBAT_FTE_STRIKE_BLOCK_EXTRA_MS = 5000
 local FTE_STRIKE_DEBOUNCE_MS = 2000
@@ -59,6 +58,26 @@ local function getCampAnchor(rc)
         return rc.makecamp.x, rc.makecamp.y, rc.makecamp.z
     end
     return mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+end
+
+--- Center for pull mob scans: makecamp when camp or mobile pull (roam/hunter) anchor is set.
+local function getPullAreaCenter(rc)
+    rc = rc or state.getRunconfig()
+    if rc.campstatus and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
+        return rc.makecamp.x, rc.makecamp.y, rc.makecamp.z
+    end
+    local pull = botconfig.config.pull
+    if rc.dopull and pull and (pull.roam or pull.hunter) and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
+        return rc.makecamp.x, rc.makecamp.y, rc.makecamp.z
+    end
+    return mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+end
+
+--- True when dopull uses roam or hunter mobile anchor (no camp return).
+function spawnutils.isMobilePullMode(rc)
+    rc = rc or state.getRunconfig()
+    local pull = botconfig.config.pull
+    return rc.dopull == true and pull and (pull.roam == true or pull.hunter == true)
 end
 
 function spawnutils.isEngageTracked(spawnId, rc)
@@ -124,7 +143,14 @@ local function combatBlockMsForStrikes(strikes)
     return COMBAT_FTE_INITIAL_BLOCK_MS + (strikes - 1) * COMBAT_FTE_STRIKE_BLOCK_EXTRA_MS
 end
 
---- Record FTE on an NPC spawn. opts.combat (default true), opts.pull (5 min unpullable).
+local function pullUnpullableMs(rc)
+    local pull = botconfig.config.pull
+    local sec = tonumber(pull and pull.fteLockoutSec) or 120
+    if sec < 1 then sec = 1 end
+    return sec * 1000
+end
+
+--- Record FTE on an NPC spawn. opts.combat (default true), opts.pull (pull.fteLockoutSec unpullable).
 function spawnutils.recordFTE(rc, spawnId, opts)
     if not spawnId or spawnId == 0 then return end
     rc = rc or state.getRunconfig()
@@ -136,6 +162,10 @@ function spawnutils.recordFTE(rc, spawnId, opts)
         entry = { id = spawnId, strikes = 0 }
         rc.FTEList[spawnId] = entry
     end
+    if opts.pull and spawnutils.isMobilePullMode(rc) then
+        entry.pullUnpullableUntil = now + pullUnpullableMs(rc)
+        return
+    end
     if opts.combat ~= false then
         if not entry.lastStrikeAt or (now - entry.lastStrikeAt) >= FTE_STRIKE_DEBOUNCE_MS then
             entry.strikes = (entry.strikes or 0) + 1
@@ -145,7 +175,7 @@ function spawnutils.recordFTE(rc, spawnId, opts)
         entry.nextCombatRecheckAt = now + COMBAT_FTE_RECHECK_MS
     end
     if opts.pull then
-        entry.pullUnpullableUntil = now + PULL_UNPULLABLE_MS
+        entry.pullUnpullableUntil = now + pullUnpullableMs(rc)
     end
 end
 
@@ -159,7 +189,7 @@ function spawnutils.markPullUnpullable(rc, spawnId)
         entry = { id = spawnId, strikes = 0 }
         rc.FTEList[spawnId] = entry
     end
-    entry.pullUnpullableUntil = now + PULL_UNPULLABLE_MS
+    entry.pullUnpullableUntil = now + pullUnpullableMs(rc)
 end
 
 function spawnutils.clearCombatFTE(rc, spawnId)
@@ -373,7 +403,11 @@ function spawnutils.buildPullMobList(rc)
     if not pull then return {} end
     local radiusSq = pull.radiusSq
     local zrange = pull.zrange or 200
-    local raw = getSpawnsInArea(rc, radiusSq, zrange)
+    local cx, cy, cz = getPullAreaCenter(rc)
+    local function predicate(spawn)
+        return spawnInArea(spawn, cx, cy, cz, radiusSq, zrange)
+    end
+    local raw = mq.getFilteredSpawns(predicate)
     local out = {}
     for _, spawn in ipairs(raw) do
         if filterSpawnForPull(spawn, rc) then
@@ -432,10 +466,22 @@ function spawnutils.mergeKillTargetIntoMobList(rc)
     table.insert(rc.MobList, mq.TLO.Spawn(KillTarget))
 end
 
+local ROAM_PULL_STATES = {
+    roam_navigating = true,
+    roam_aggroing = true,
+    roam_fighting = true,
+}
+
 local function shouldSkipFTERecheck(rc)
     if state.getRunState() == state.STATES.pulling then return true end
     if state.getRunState() == state.STATES.casting then return true end
     if rc.fteRecheckInProgress then return true end
+    if spawnutils.isMobilePullMode(rc) and rc.pullState then
+        if ROAM_PULL_STATES[rc.pullState] then return true end
+        if rc.pullState == 'navigating' or rc.pullState == 'aggroing' or rc.pullState == 'returning' then
+            return true
+        end
+    end
     return false
 end
 
@@ -445,7 +491,9 @@ function spawnutils.tickCombatFTERechecks(rc)
     if not rc.FTEList then return end
     local now = mq.gettime()
     for spawnId, entry in pairs(rc.FTEList) do
-        if entry.nextCombatRecheckAt and now >= entry.nextCombatRecheckAt then
+        if spawnutils.isMobilePullMode(rc) and entry.pullUnpullableUntil and now < entry.pullUnpullableUntil then
+            entry.nextCombatRecheckAt = nil
+        elseif entry.nextCombatRecheckAt and now >= entry.nextCombatRecheckAt then
             if not spawnutils.isSpawnInCampRadiusById(spawnId, rc) then
                 entry.nextCombatRecheckAt = nil
             elseif entry.combatBlockedUntil and now < entry.combatBlockedUntil then

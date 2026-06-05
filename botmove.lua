@@ -303,7 +303,7 @@ local function makeCampOn()
 end
 
 local function makeCampOff()
-    if not myconfig.pull.hunter then state.getRunconfig().makecamp = { x = nil, y = nil, z = nil } end
+    if not myconfig.pull.hunter and not myconfig.pull.roam then state.getRunconfig().makecamp = { x = nil, y = nil, z = nil } end
     state.getRunconfig().campstatus = false
     printf('\ayCZBot:\axmakecamp \aroff\ax')
 end

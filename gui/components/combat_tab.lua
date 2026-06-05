@@ -333,6 +333,15 @@ function M.draw()
     if leashCh then pull.leash = leashNew; recomputePullSquared(pull); runConfigLoaders() end
 
     ImGui.Spacing()
+    ImGui.Text('FTE lockout (sec)')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Seconds to skip a pull target after FTE lock or already-engaged (below 100% HP).') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+    local fteSec = pull.fteLockoutSec or 120
+    local fteSecNew, fteSecCh = inputs.boundedInt('pull_fteLockoutSec', fteSec, 1, 600, 10, '##pull_fteLockoutSec')
+    if fteSecCh then pull.fteLockoutSec = fteSecNew; runConfigLoaders() end
+
+    ImGui.Spacing()
     ImGui.Text('Use priority list')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Prefer mobs that match the Priority list over path distance when choosing a pull target.') end
     ImGui.SameLine()
@@ -344,8 +353,23 @@ function M.draw()
     if ImGui.IsItemHovered() then ImGui.SetTooltip('No makecamp; anchor set once. Puller can be far from camp without triggering return-to-camp.') end
     ImGui.SameLine()
     local hunt = pull.hunter == true
-    local value, pressed = ImGui.Checkbox('##pull_hunter', hunt)
-    if pressed then pull.hunter = value; runConfigLoaders() end
+    local huntVal, huntPressed = ImGui.Checkbox('##pull_hunter', hunt)
+    if huntPressed then
+        pull.hunter = huntVal
+        if huntVal then pull.roam = false end
+        runConfigLoaders()
+    end
+    ImGui.SameLine()
+    ImGui.Text('Roam hunt')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Mobile hunter: nav to mobs in pull.radius, fight in place, advance anchor on kill. No return-to-camp. Hunter mode is ignored when enabled.') end
+    ImGui.SameLine()
+    local roam = pull.roam == true
+    local roamVal, roamPressed = ImGui.Checkbox('##pull_roam', roam)
+    if roamPressed then
+        pull.roam = roamVal
+        if roamVal then pull.hunter = false end
+        runConfigLoaders()
+    end
 end
 
 return M

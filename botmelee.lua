@@ -318,6 +318,14 @@ function botmelee.AdvCombat()
     local assistpct = myconfig.melee.assistpct or 99
     local rc = state.getRunconfig()
 
+    if myconfig.pull and myconfig.pull.roam and rc.pullState == 'roam_fighting' and rc.pullAPTargetID then
+        rc.engageTargetId = rc.pullAPTargetID
+        local name = mq.TLO.Spawn(rc.pullAPTargetID).CleanName() or tostring(rc.pullAPTargetID)
+        rc.statusMessage = string.format('Fighting %s (%s)', name, rc.pullAPTargetID)
+        engageTarget()
+        return
+    end
+
     if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Master.Type() == 'PC' then
         clearTankCombatState()
     end
@@ -416,7 +424,10 @@ function botmelee.getHookFn(name)
                 botmove.TickReturnToFollowAfterEngage()
                 return
             end
-            if state.getRunState() == state.STATES.pulling then return end
+            if state.getRunState() == state.STATES.pulling then
+                local rc = state.getRunconfig()
+                if not (myconfig.pull and myconfig.pull.roam and rc.pullState == 'roam_fighting') then return end
+            end
             if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 local rc = state.getRunconfig()
