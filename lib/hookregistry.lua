@@ -1,4 +1,4 @@
--- Mainloop hook registry: modules require this and call registerMainloopHook.
+﻿-- Mainloop hook registry: modules require this and call registerMainloopHook.
 -- Lower priority runs first. runWhenPaused = true runs every iteration even when MasterPause is set.
 --
 -- Always-run hooks (runWhenPaused = true): Must run every tick; never block. Use for:
@@ -93,8 +93,7 @@ function hookregistry.runNormalHooks()
     local list = _sortedNormal or {}
     local state = require('lib.state')
     -- Gate on actual game state so only runWhenDead hooks run when dead/hover (avoids running combat hooks the tick we die).
-    local charDeadOrHover = (mq.TLO.Me.State() == 'DEAD') or (mq.TLO.Me.State() == 'HOVER' and mq.TLO.Me.Hovering())
-    if charDeadOrHover or state.getRunState() == state.STATES.dead then
+    if state.isDeadOrHover() or state.getRunState() == state.STATES.dead then
         for _, h in ipairs(list) do
             if h.runWhenDead then
                 h.fn(h.name)

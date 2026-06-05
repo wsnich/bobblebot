@@ -419,6 +419,7 @@ end
 function botmelee.getHookFn(name)
     if name == 'doMelee' then
         return function(hookName)
+            if state.isDeadOrHover() then return end
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             if state.getRunState() == state.STATES.engage_return_follow then
                 botmove.TickReturnToFollowAfterEngage()

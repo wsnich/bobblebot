@@ -54,12 +54,12 @@ Used by the **zoneCheck** hook (when `zonename != Zone.ShortName()`) and by MQ z
 
 1. Sets `statusMessage = 'Zone change, waiting...'`, delay 1s.
 2. **DelayOnZone()**:
-    - If runState is `dead`, clears run state.
+    - Calls **ResetCombatSession('zone')** (clear run state, engage target, MobList, stick/attack/target, debuff tracking).
     - Sets `zonename` to current zone short name.
     - Clears camp: `makecamp` and `campstatus = false`.
-    - Turns off `dopull` via `botpull.DisablePull('zone')`; clears `engageTargetId` and global `APTarget`.
+    - Turns off `dopull` via `botpull.DisablePull('zone')`.
     - Runs mobfilter for exclude and priority (zone).
-    - Cleans spellstates mob list; resets `MountCastFailed`.
+    - Resets `MountCastFailed`.
 3. Clears `statusMessage`.
 
 See [Run state machine](run-state-machine.md) and [hook AddSpawnCheck](hook-addspawncheck.md) (MobList is rebuilt each tick from current zone/camp).
@@ -70,11 +70,13 @@ See [Run state machine](run-state-machine.md) and [hook AddSpawnCheck](hook-adds
 
 Runs when the character is slain or "Returning to Bind Location" or "You died." (hover).
 
-- **charState** also calls `botpull.DisablePull('death')`, `follow.StopFollow('death')`, and `botmove.ClearCamp('death')` each tick while dead/hover.
+- Calls **ResetCombatSession('death')** immediately (engage target, MobList, stick/attack/target cleared).
 - Prints remaining hover time; runs `/consent group`, `/consent raid`, `/consent guild`.
 - Sets `HoverTimer = mq.gettime() + 30000` so CharState can throttle calling Event_Slain again.
 
-CharState sets `runState = 'dead'` when DEAD/HOVER and sets `HoverEchoTimer`; when `HoverTimer` has passed it calls `Event_Slain()`.
+On first enter dead/hover, **charState** also calls `ResetCombatSession('death')`, `botpull.DisablePull('death')`, `follow.StopFollow('death')`, and `botmove.ClearCamp('death')` once (via `wasDeadOrHover` transition). Pull stays off until manually re-enabled. On rez (same zone), **charState** calls `ResetCombatSession('rez')` so target/camp/engage state matches a zone-style reset.
+
+CharState sets `runState = 'dead'` when `Me.Dead()` or `Me.Hovering()` and sets `HoverEchoTimer`; when `HoverTimer` has passed it calls `Event_Slain()`.
 
 ---
 

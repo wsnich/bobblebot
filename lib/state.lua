@@ -88,6 +88,7 @@
 ---@field nukeFlavorsAllowed table|nil flavor -> true (allowed); nil = all allowed
 ---@field nukeFlavorsAutoDisabled table|nil flavor -> true (auto-disabled due to resist streak)
 ---@field travelMode boolean|nil when true, only follow active; other bot logic disabled unless /cz attack override
+---@field wasDeadOrHover boolean|nil true while character was dead/hovering on prior tick (rez transition detection)
 
 local M = {}
 
@@ -299,8 +300,16 @@ function M.resetRunconfig()
         nukeFlavorsAutoDisabled = nil,
         raidCtx = nil, -- optional: { raidsactive = boolean }; zone raid modules may set global raidsactive instead
         travelMode = false,
+        wasDeadOrHover = false,
     }
     return M._runconfig
+end
+
+---True when character is dead on the ground or hovering over corpse.
+---@return boolean
+function M.isDeadOrHover()
+    local mq = require('mq')
+    return mq.TLO.Me.Dead() or mq.TLO.Me.Hovering()
 end
 
 ---True when in travel mode (follow only; other bot logic disabled unless attack-overriding).

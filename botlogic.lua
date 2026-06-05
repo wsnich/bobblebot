@@ -169,20 +169,35 @@ local function charState_Always()
         spellutils.MountCheck() end
 end
 
---- Returns true if dead/hover; caller should return. Sets dead state and HoverTimer/HoverEchoTimer, may call Event_Slain.
+--- Returns true if dead/hover; caller should return. Handles enter/leave transitions and hover timer.
 local function charState_DeadOrHover()
-    if mq.TLO.Me.State() ~= 'DEAD' and (mq.TLO.Me.State() ~= 'HOVER' or not mq.TLO.Me.Hovering()) then return false end
-    botpull.DisablePull('death')
-    follow.StopFollow('death')
-    botmove.ClearCamp('death')
-    state.clearRunState()
-    state.getRunconfig().CurSpell = {}
-    state.getRunconfig().statusMessage = ''
-    state.setRunState(state.STATES.dead, nil)
-    if not state.getRunconfig().HoverEchoTimer or state.getRunconfig().HoverEchoTimer == 0 then
-        state.getRunconfig().HoverEchoTimer = mq.gettime() + 300000
+    local rc = state.getRunconfig()
+    local deadOrHover = state.isDeadOrHover()
+
+    if not deadOrHover then
+        if rc.wasDeadOrHover then
+            botevents.ResetCombatSession('rez')
+            rc.HoverTimer = 0
+            rc.HoverEchoTimer = 0
+            rc.wasDeadOrHover = false
+            mq.cmd('/squelch /multiline ; /attack off ; /mqtarget clear ; /stick off')
+        end
+        return false
     end
-    if state.getRunconfig().HoverTimer < mq.gettime() then
+
+    if not rc.wasDeadOrHover then
+        botevents.ResetCombatSession('death')
+        botpull.DisablePull('death')
+        follow.StopFollow('death')
+        botmove.ClearCamp('death')
+        rc.wasDeadOrHover = true
+    end
+
+    state.setRunState(state.STATES.dead, nil)
+    if not rc.HoverEchoTimer or rc.HoverEchoTimer == 0 then
+        rc.HoverEchoTimer = mq.gettime() + 300000
+    end
+    if rc.HoverTimer < mq.gettime() then
         botevents.Event_Slain()
     end
     return true
@@ -265,8 +280,8 @@ end
 local function CharState(...)
     local args = { ... }
     charState_StartupIfRequested(args)
-    charState_Always()
     if charState_DeadOrHover() then return end
+    charState_Always()
     charState_PostDead()
 end
 

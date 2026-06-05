@@ -9,27 +9,40 @@ local casting = require('lib.casting')
 local spellutils = require('lib.spellutils')
 local botpull = require('botpull')
 local spawnutils = require('lib.spawnutils')
+local combat = require('lib.combat')
 
 local botevents = {}
 
 local SIT_AFTER_HIT_MS = 3000
 
+--- Clear combat session state (engage, mob list, stick/attack). Used on death, rez, and zone change.
+---@param reason string|nil e.g. death, rez, zone
+function botevents.ResetCombatSession(reason)
+    state.clearRunState()
+    local rc = state.getRunconfig()
+    rc.CurSpell = {}
+    rc.statusMessage = ''
+    rc.engageTargetId = nil
+    rc.attackCommandEngage = nil
+    rc.MobList = {}
+    spellstates.CleanMobList()
+    if APTarget then APTarget = nil end
+    if rawget(_G, 'KillTarget') then _G.KillTarget = nil end
+    combat.ResetCombatState({ clearTarget = true, clearPet = true })
+end
+
 -- Internal: reset zone-specific variables. Used by OnZoneChange only.
 local function DelayOnZone()
-    state.clearRunState()
-    state.getRunconfig().CurSpell = {}
-    state.getRunconfig().statusMessage = ''
+    botevents.ResetCombatSession('zone')
+    local rc = state.getRunconfig()
     local zonename = mq.TLO.Zone.ShortName()
-    if zonename then state.getRunconfig().zonename = zonename end
-    if state.getRunconfig().campstatus == true then
-        state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
+    if zonename then rc.zonename = zonename end
+    if rc.campstatus == true then
+        rc.makecamp = { x = nil, y = nil, z = nil }
     end
-    state.getRunconfig().campstatus = false
-    if state.getRunconfig().engageTargetId then state.getRunconfig().engageTargetId = nil end
-    if APTarget then APTarget = nil end
+    rc.campstatus = false
     botpull.DisablePull('zone')
     botconfig.refreshZoneStateFromCommon()
-    spellstates.CleanMobList()
     MountCastFailed = false
 end
 
@@ -43,6 +56,7 @@ function botevents.OnZoneChange()
 end
 
 function botevents.Event_Slain()
+    botevents.ResetCombatSession('death')
     local respawntimeleft = (state.getRunconfig().HoverEchoTimer - mq.gettime()) / 1000
     printf('\ayCZBot:\axI died and am hovering, %s seconds until I release', respawntimeleft)
     mq.cmd('/multiline ; /consent group ; /consent raid ; /consent guild')
