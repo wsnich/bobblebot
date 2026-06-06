@@ -9,6 +9,9 @@ local combat = require('lib.combat')
 local utils = {}
 
 local PROTECTED_NPC_PREFIXES = { 'soulbinder', 'translocator' }
+local PROTECTED_NPC_NAMES = {
+    ['agent of change'] = true,
+}
 
 local nocombatzones = require('lib.nocombatzones')
 
@@ -21,18 +24,19 @@ function utils.isNonCombatZone(zone)
     return nocombatzones.isActiveNoCombatZone(zone)
 end
 
---- True when spawn CleanName starts with soulbinder or translocator (case-insensitive).
+--- True when spawn CleanName is a protected NPC (exact name or soulbinder/translocator prefix, case-insensitive).
 ---@param name string|nil
 function utils.isProtectedNpcName(name)
     if not name or name == '' then return false end
     local lower = string.lower(name)
+    if PROTECTED_NPC_NAMES[lower] then return true end
     for _, prefix in ipairs(PROTECTED_NPC_PREFIXES) do
         if string.sub(lower, 1, #prefix) == prefix then return true end
     end
     return false
 end
 
---- True when spawn is a protected NPC (soulbinder/translocator).
+--- True when spawn is a protected NPC (never attack or debuff).
 function utils.isProtectedSpawn(spawn)
     if not spawn then return false end
     return utils.isProtectedNpcName(spawn.CleanName())
