@@ -60,6 +60,7 @@ Used by the **zoneCheck** hook (when `zonename != Zone.ShortName()`) and by MQ z
     - Turns off `dopull` via `botpull.DisablePull('zone')`.
     - Runs mobfilter for exclude and priority (zone).
     - Resets `MountCastFailed`.
+    - If follow or travel mode is active: **follow.ResumeAfterZone()** — clears stale `followid`, keeps `followname`/`travelMode`, resets `stucktimer`, stops follow movement state, disables pull for follow, refreshes travel bard twist when applicable, and calls **FollowCall** when mesh and leader spawn are available.
 3. Clears `statusMessage`.
 
 See [Run state machine](run-state-machine.md) and [hook AddSpawnCheck](hook-addspawncheck.md) (MobList is rebuilt each tick from current zone/camp).

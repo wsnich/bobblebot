@@ -44,6 +44,7 @@ local function DelayOnZone()
     botpull.DisablePull('zone')
     botconfig.refreshZoneStateFromCommon()
     MountCastFailed = false
+    follow.ResumeAfterZone()
 end
 
 -- Single entry point for zone change: used by zoneCheck hook and MQ zone events.

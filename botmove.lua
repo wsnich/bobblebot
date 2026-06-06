@@ -32,36 +32,49 @@ function botmove.isBeyondFollowDistance()
     return dSq >= followdistanceSq
 end
 
+local function followSpawnMatchesName(spawnId, followname)
+    if not spawnId or spawnId == 0 then return false end
+    if not followname or followname == '' then return true end
+    local sp = mq.TLO.Spawn('id ' .. spawnId)
+    if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
+    local stype = sp.Type() or ''
+    if stype == 'Corpse' or stype == 'CORPSE' then return false end
+    local clean = sp.CleanName()
+    if not clean or clean == '' then return false end
+    return string.lower(clean) == string.lower(followname)
+end
+
+local function resolveFollowIdByName(followname)
+    if not followname or followname == '' then return nil end
+    local id = mq.TLO.Spawn('=' .. followname).ID()
+    if id and id > 0 then return id end
+    return nil
+end
+
 local function refreshFollowId()
     local rc = state.getRunconfig()
-    if not rc.followid or rc.followid == 0 then
-        if rc.followname and rc.followname ~= '' then
-            local id = mq.TLO.Spawn('=' .. rc.followname).ID()
-            if id then rc.followid = id end
-        end
-        if not rc.followid or rc.followid == 0 then return end
-    end
-    local followid = rc.followid
-    if not followid or followid == 0 then return end
-    -- After zone, spawn by old id is invalid; re-resolve from followname. Clear stale id if leader not in zone yet.
-    if not mq.TLO.Spawn('id ' .. followid).ID() or mq.TLO.Spawn('id ' .. followid).Type() == 'Corpse' then
-        local id = rc.followname and rc.followname ~= '' and mq.TLO.Spawn('=' .. rc.followname).ID()
-        if id then
-            rc.followid = id
-        else
-            local now = mq.gettime()
-            local oldName = rc.followname
+    if rc.followname and rc.followname ~= '' then
+        local needsResolve = not rc.followid or rc.followid == 0
+            or not followSpawnMatchesName(rc.followid, rc.followname)
+        if needsResolve then
+            local id = resolveFollowIdByName(rc.followname)
+            if id then
+                rc.followid = id
+                return
+            end
             rc.followid = 0
-            rc.followname = ''
+            local now = mq.gettime()
             if now >= lastFollowResolveFailTime + 15000 then
                 lastFollowResolveFailTime = now
-                if oldName and oldName ~= '' then
-                    printf('\ayCZBot:\axFollow: unable to resolve leader "%s" in zone; clearing follow.', oldName)
-                else
-                    printf('\ayCZBot:\axFollow: unable to resolve current follow target; clearing follow.')
-                end
+                printf('\ayCZBot:\axFollow: waiting for leader "%s" in zone.', rc.followname)
             end
         end
+        return
+    end
+    if not rc.followid or rc.followid == 0 then return end
+    local followid = rc.followid
+    if not mq.TLO.Spawn('id ' .. followid).ID() or mq.TLO.Spawn('id ' .. followid).Type() == 'Corpse' then
+        rc.followid = 0
     end
 end
 

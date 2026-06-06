@@ -54,6 +54,33 @@ function follow.StartFollow(name)
     printf('\ayCZBot:\ax\auFollowing\ax ON %s', spawn.CleanName())
 end
 
+--- Re-arm follow/travel after zone: invalidate stale spawn id, keep followname/travelMode, kick nav when ready.
+function follow.ResumeAfterZone()
+    local rc = state.getRunconfig()
+    local active = (rc.followname and rc.followname ~= '') or rc.travelMode == true
+    if not active then return end
+
+    botmove.ClearFollowMovementState()
+    rc.followid = 0
+    rc.stucktimer = mq.gettime() + 60000
+    botpull.DisablePull('follow')
+
+    if rc.travelMode then
+        local ok, bardtwist = pcall(require, 'lib.bardtwist')
+        if ok and bardtwist and bardtwist.EnsureDefaultTwistRunning then
+            bardtwist.EnsureDefaultTwistRunning()
+        end
+    end
+
+    if mq.TLO.Navigation.MeshLoaded() and rc.followname and rc.followname ~= '' then
+        local spawn = mq.TLO.Spawn('=' .. rc.followname)
+        if spawn and spawn.ID() then
+            rc.followid = spawn.ID()
+            botmove.FollowCall()
+        end
+    end
+end
+
 local function event_FollowChat(line, speaker)
     if not charinfo.GetInfo(speaker) then return end
     follow.StartFollow(speaker)
