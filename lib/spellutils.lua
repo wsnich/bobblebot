@@ -11,7 +11,7 @@ local castutils = require('lib.castutils')
 local bothooks = require('lib.bothooks')
 local utils = require('lib.utils')
 local casting = require('lib.casting')
-local follow = require('lib.follow')
+local botmove = require('botmove')
 local spellutils = {}
 local _deps = {}
 local _instantDebuffCastPending = nil
@@ -935,7 +935,7 @@ function spellutils.isSpellHookActive(hookName)
     end
     if hookName == 'doDebuff' and utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return false end
     if (hookName == 'doDebuff' or hookName == 'doBuff') and utils.isNearPrimaryBindPoint() then return false end
-    if follow.isBeyondFollowDistance() then return false end
+    if botmove.isBeyondFollowDistance() then return false end
     local settingOn = myconfig.settings[cfg.setting] or state.isTravelAttackOverriding()
     if hookName == 'doBuff' and state.isTravelMode() then return false end
     if not settingOn then return false end

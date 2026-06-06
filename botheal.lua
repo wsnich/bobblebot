@@ -7,7 +7,7 @@ local utils = require('lib.utils')
 local charinfo = require('plugin.charinfo')
 local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
-local follow = require('lib.follow')
+local botmove = require('botmove')
 local targeting = require('lib.targeting')
 
 local botheal = {}
@@ -474,7 +474,7 @@ function botheal.getHookFn(name)
         return function(hookName)
             local myconfig = botconfig.config
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
-            if follow.isBeyondFollowDistance() then return end
+            if botmove.isBeyondFollowDistance() then return end
             if not (myconfig.settings.doheal or state.isTravelAttackOverriding()) or not (myconfig.heal.spells and #myconfig.heal.spells > 0) then return end
             if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Heal Check' end
             botheal.HealCheck(bothooks.getPriority(hookName))

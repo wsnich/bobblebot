@@ -4,28 +4,11 @@
 
 local mq = require('mq')
 local state = require('lib.state')
-local botconfig = require('lib.config')
 local botmove = require('botmove')
 local botpull = require('botpull')
 local charinfo = require("plugin.charinfo")
-local utils = require('lib.utils')
 
 local follow = {}
-
---- True when follow is active and 2D distance to leader >= settings.followdistance.
-function follow.isBeyondFollowDistance()
-    local rc = state.getRunconfig()
-    if not rc.followid or rc.followid == 0 then return false end
-    local followSpawn = mq.TLO.Spawn(rc.followid)
-    if not followSpawn or not followSpawn.ID() or followSpawn.ID() == 0 then return false end
-    local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
-    local fx, fy = followSpawn.X(), followSpawn.Y()
-    if not meX or not meY or not fx or not fy then return false end
-    local dSq = utils.getDistanceSquared2D(meX, meY, fx, fy)
-    local followdistanceSq = botconfig.config.settings.followdistanceSq
-    if not dSq or not followdistanceSq then return false end
-    return dSq >= followdistanceSq
-end
 
 --- Stop follow and travel mode; clear movement state. No-op if neither is active.
 ---@param reason string|nil e.g. death, command, gui

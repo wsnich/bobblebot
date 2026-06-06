@@ -71,7 +71,7 @@ local function charState_Always()
     local rc = state.getRunconfig()
     local mustStand = false
     local wantToSit = false
-    local beyondFollow = follow.isBeyondFollowDistance()
+    local beyondFollow = botmove.isBeyondFollowDistance()
     -- Stand if follow on and target beyond follow distance; abort casts/mem to keep moving
     if beyondFollow then
         mustStand = true

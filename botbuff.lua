@@ -7,7 +7,7 @@ local utils = require('lib.utils')
 local charinfo = require('plugin.charinfo')
 local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
-local follow = require('lib.follow')
+local botmove = require('botmove')
 
 local botbuff = {}
 local BuffClass = {}
@@ -347,7 +347,7 @@ function botbuff.getHookFn(name)
         return function(hookName)
             if utils.isNearPrimaryBindPoint() then return end
             if state.isTravelMode() then return end
-            if follow.isBeyondFollowDistance() then return end
+            if botmove.isBeyondFollowDistance() then return end
             local myconfig = botconfig.config
             if not myconfig.settings.dobuff or not (myconfig.buff.spells and #myconfig.buff.spells > 0) then return end
             if mq.TLO.Me.Class.ShortName() == 'CLR' and clericDeferBuffForGroupCorpse(myconfig.settings.acleash or 75) then return end

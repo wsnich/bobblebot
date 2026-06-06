@@ -17,6 +17,21 @@ local lastFollowResolveFailTime = 0
 -- Follow / stuck helpers
 -- ---------------------------------------------------------------------------
 
+--- True when follow is active and 2D distance to leader >= settings.followdistance.
+function botmove.isBeyondFollowDistance()
+    local rc = state.getRunconfig()
+    if not rc.followid or rc.followid == 0 then return false end
+    local followSpawn = mq.TLO.Spawn(rc.followid)
+    if not followSpawn or not followSpawn.ID() or followSpawn.ID() == 0 then return false end
+    local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
+    local fx, fy = followSpawn.X(), followSpawn.Y()
+    if not meX or not meY or not fx or not fy then return false end
+    local dSq = utils.getDistanceSquared2D(meX, meY, fx, fy)
+    local followdistanceSq = myconfig.settings.followdistanceSq
+    if not dSq or not followdistanceSq then return false end
+    return dSq >= followdistanceSq
+end
+
 local function refreshFollowId()
     local rc = state.getRunconfig()
     if not rc.followid or rc.followid == 0 then
