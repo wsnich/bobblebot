@@ -1,4 +1,4 @@
--- Buff tab: dedicated panel for buff config (one spell_entry per buff).
+﻿-- Buff tab: dedicated panel for buff config (one spell_entry per buff).
 
 local mq = require('mq')
 local ImGui = require('ImGui')
@@ -203,6 +203,16 @@ function M.draw()
                 table.remove(buff.spells, i); runConfigLoaders()
             end,
             deleteEntryLabel = 'Buff',
+            entryIndex = i,
+            entryCount = #spells,
+            onMoveUp = i > 1 and function()
+                spells[i], spells[i - 1] = spells[i - 1], spells[i]
+                runConfigLoaders()
+            end or nil,
+            onMoveDown = i < #spells and function()
+                spells[i], spells[i + 1] = spells[i + 1], spells[i]
+                runConfigLoaders()
+            end or nil,
         })
         ImGui.Separator()
     end

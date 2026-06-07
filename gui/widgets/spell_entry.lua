@@ -4,7 +4,8 @@
 --   opts: required id (string), primaryOptions (table); optional label, onChanged, displayCommonFields (default true),
 --         showRange (default false), collapsible (default false): when true, wrap entry in ImGui.CollapsingHeader; default
 --         collapsed on first use (ImGuiCond.FirstUseEver). customSection, targetphaseOptions, validtargetsOptions,
---         validtargetsOptionsPerPhase, showBandMinMax, showBandMinTarMaxtar. customSection(entry, idPrefix, onChanged).
+--         validtargetsOptionsPerPhase, showBandMinMax, showBandMinTarMaxtar, entryIndex, entryCount, onMoveUp, onMoveDown.
+--         customSection(entry, idPrefix, onChanged).
 --   targetphaseOptions / validtargetsOptions: each entry { key, label, tooltip }.
 --   validtargetsOptionsPerPhase: optional; when set, target options shown are those for this band's selected phases only (phase -> options array).
 -- Widths are hardcoded; caller does not control layout. All widget IDs use opts.id as prefix.
@@ -326,11 +327,42 @@ function M.draw(spell, opts)
             local trashW = select(1, ImGui.CalcTextSize(Icons.FA_TRASH))
             deleteButtonWidth = (trashW or 0) + 24
         end
-        local totalRightWidth = enabledButtonWidth + (opts.onDelete and (deleteButtonWidth + 4) or 0)
+        local entryCount = opts.entryCount or 0
+        local showMoveUp = entryCount > 1 and opts.onMoveUp
+        local showMoveDown = entryCount > 1 and opts.onMoveDown
+        local moveUpIconW = showMoveUp and select(1, ImGui.CalcTextSize(Icons.MD_UNFOLD_LESS)) or 0
+        local moveDownIconW = showMoveDown and select(1, ImGui.CalcTextSize(Icons.MD_UNFOLD_MORE)) or 0
+        local moveUpButtonWidth = showMoveUp and ((moveUpIconW or 0) + 24) or 0
+        local moveDownButtonWidth = showMoveDown and ((moveDownIconW or 0) + 24) or 0
+        local reorderButtonWidth = moveUpButtonWidth + moveDownButtonWidth
+        if reorderButtonWidth > 0 and (showMoveUp and showMoveDown) then
+            reorderButtonWidth = reorderButtonWidth + 4
+        end
+        local totalRightWidth = enabledButtonWidth
+            + (opts.onDelete and (deleteButtonWidth + 4) or 0)
+            + (reorderButtonWidth > 0 and (reorderButtonWidth + 4) or 0)
         local availEnabled = ImGui.GetContentRegionAvail()
         if availEnabled and availEnabled > totalRightWidth then
             ImGui.SameLine(ImGui.GetCursorPosX() + availEnabled - totalRightWidth)
         else
+            ImGui.SameLine()
+        end
+        if showMoveUp then
+            if ImGui.SmallButton(Icons.MD_UNFOLD_LESS .. '##' .. id .. '_move_up') then
+                opts.onMoveUp()
+            end
+            if ImGui.IsItemHovered() then
+                ImGui.SetTooltip('Move up')
+            end
+            ImGui.SameLine()
+        end
+        if showMoveDown then
+            if ImGui.SmallButton(Icons.MD_UNFOLD_MORE .. '##' .. id .. '_move_down') then
+                opts.onMoveDown()
+            end
+            if ImGui.IsItemHovered() then
+                ImGui.SetTooltip('Move down')
+            end
             ImGui.SameLine()
         end
         if opts.onDelete then

@@ -184,6 +184,16 @@ function M.draw()
                 table.remove(heal.spells, i); runConfigLoaders()
             end,
             deleteEntryLabel = 'Heal',
+            entryIndex = i,
+            entryCount = #spells,
+            onMoveUp = i > 1 and function()
+                spells[i], spells[i - 1] = spells[i - 1], spells[i]
+                runConfigLoaders()
+            end or nil,
+            onMoveDown = i < #spells and function()
+                spells[i], spells[i + 1] = spells[i + 1], spells[i]
+                runConfigLoaders()
+            end or nil,
         })
         ImGui.Separator()
     end

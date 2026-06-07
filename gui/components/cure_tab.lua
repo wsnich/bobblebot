@@ -1,4 +1,4 @@
--- Cure tab: dedicated panel for cure config (one spell_entry per cure).
+﻿-- Cure tab: dedicated panel for cure config (one spell_entry per cure).
 
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
@@ -126,6 +126,16 @@ function M.draw()
                 table.remove(cure.spells, i); runConfigLoaders()
             end,
             deleteEntryLabel = 'Cure',
+            entryIndex = i,
+            entryCount = #spells,
+            onMoveUp = i > 1 and function()
+                spells[i], spells[i - 1] = spells[i - 1], spells[i]
+                runConfigLoaders()
+            end or nil,
+            onMoveDown = i < #spells and function()
+                spells[i], spells[i + 1] = spells[i + 1], spells[i]
+                runConfigLoaders()
+            end or nil,
         })
         ImGui.Separator()
     end
