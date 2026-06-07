@@ -88,6 +88,7 @@
 ---@field nukeFlavorsAllowed table|nil flavor -> true (allowed); nil = all allowed
 ---@field nukeFlavorsAutoDisabled table|nil flavor -> true (auto-disabled due to resist streak)
 ---@field travelMode boolean|nil when true, only follow active; other bot logic disabled unless /cz attack override
+---@field followmeMode string|nil 'group' or 'raid' when this toon is leading a followme broadcast
 ---@field wasDeadOrHover boolean|nil true while character was dead/hovering on prior tick (rez transition detection)
 
 local M = {}
@@ -300,6 +301,7 @@ function M.resetRunconfig()
         nukeFlavorsAutoDisabled = nil,
         raidCtx = nil, -- optional: { raidsactive = boolean }; zone raid modules may set global raidsactive instead
         travelMode = false,
+        followmeMode = nil,
         wasDeadOrHover = false,
     }
     return M._runconfig

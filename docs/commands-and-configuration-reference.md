@@ -41,6 +41,7 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **follow**   | `<name>`, `me`, or omit  | Follow the named character (disables make camp). With `me` or no name, follow TankName. When the command is sent via MQRemote (e.g. `/rc +self group /cz follow`), sender is not available—use MQRemote `/rc` directly (no CZBot `/an*execute` commands). |
 | **travel**   | `<name>`, `me`, or omit  | Same as follow; enables travel mode (follow only; no melee, buff, debuff, heal, cure, sit, mount, pull). Bards twist the song with alias `travel`, or `selos` if none; if neither, twist nothing. Persists across zones; `/cz attack` temporarily enables melee/heal/cure/debuff until target dies, then travel resumes. `/cz stop` or stopping follow turns off travel. See [Travel mode](travel-mode.md). |
 | **stop**     | —                        | Disable make camp and follow (and travel mode).                                                                                                                                                                                                                             |
+| **followme** | `group`, `raid`, or `off` (default `group`) | Leader command: clear local camp/follow, then `/rc group\|raid /cz follow <this toon>`. Remembers scope; `off` sends `/rc group\|raid /cz stop`. Switching scope auto-stops the previous scope. |
 | **leash**    | —                        | Return to camp (if camp is set).                                                                                                                                                                                                                          |
 | **camprestdistance** | `<number>` | Set distance (units) considered "at camp" for leash and return. Writes to `settings.campRestDistance`.                                                                                                        |
 | **acleash**  | `<number>`              | Set camp leash distance (max distance from camp for mob list / targeting).                                                                                                                |
@@ -97,7 +98,7 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **debug**         | `on` / `off` or toggle                        | Enable/disable debug messages.                                                                                      |
 | **ui** / **show** | —                                             | Open the CZBot UI.                                                                                                  |
 | **quit**          | —                                             | Terminate the bot.                                                                                                  |
-| **chchain**       | **stop** — stop chain. **setup** `<list>` `[pause]` `[tanklist]` — configure cleric list, optional pause value, optional tank list. **start** `[name]` — start chain (name = this toon). **tank** `<name>` — set chain tank. **pause** `[val]` — set or report pause. | Complete Heal chain control.                                                                                        |
+| **chchain**       | **stop** — stop chain. **setup** `<list>` `[pause]` `[tanklist]` — configure cleric list, optional pause value, optional tank list. **start** `[name]` — start chain (name = this toon). **tank** `<name>` — set chain tank. **pause** `[val]` — set or report pause. | Complete Heal chain control. See [CHChain configuration](chchain-configuration.md).                               |
 | **draghack**      | `on` / `off` or toggle                        | Toggle use of sumcorpse instead of walk-to-corpse for dragging. See [Corpse dragging](corpse-dragging.md).          |
 | **linkitem**      | —                                             | Link item (event).                                                                                                  |
 | **linkaugs**      | `<slot>`                                      | Print augments in the given slot.                                                                                   |
@@ -185,7 +186,7 @@ return StoredConfig
 | **campRestDistance** | 15          | Distance (units) to consider "at camp" for leash and return.                                                            |
 | **spelldb**        | `'spells.db'` | Spell database file.                                                                                                    |
 
-Travel mode has no config option; it is enabled by the **/cz travel** command. See [Travel mode](travel-mode.md).
+Travel mode has no config option; it is enabled by the **/cz travel** command. See [Travel mode](travel-mode.md). CHChain is also runtime-only; see [CHChain configuration](chchain-configuration.md).
 
 ### Pull section
 

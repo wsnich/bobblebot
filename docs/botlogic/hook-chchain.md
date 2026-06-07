@@ -1,4 +1,4 @@
-# Hook: chchainTick
+﻿# Hook: chchainTick
 
 **Priority:** 500  
 **Provider:** lib.chchain
@@ -27,6 +27,7 @@ flowchart TB
 
 ## See also
 
+- [CHChain configuration](../chchain-configuration.md) — operator setup and commands
 - [README](README.md)
 - [Run state machine](run-state-machine.md)
 - [Events](events.md) — chchain registers its own events

@@ -38,6 +38,7 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | Document                                              | Description                                                                                               |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | [Healing configuration](healing-configuration.md)     | Heal spells, bands (who and at what HP), rez, interrupt, XT targets, commands.                            |
+| [CHChain configuration](chchain-configuration.md)     | Complete Heal chain rotation across clerics: setup, start, tank/pause control, and `/rs` coordination.   |
 | [Buffing configuration](buffing-configuration.md)     | Buff spells, bands (self, tank, validtargets, mypet, pet), spellicon, combat vs idle, **combatOnly** (non-bard short buffs). Pet summon auto-detected.                  |
 | [Debuffing configuration](debuffing-configuration.md) | Debuff spells, bands (matar, notmatar, named), Charm list (per-zone), recast, delay; links to nuking and mezzing. |
 | [Spell targeting and bands](spell-targeting-and-bands.md) | Targeting logic and band tags for all spell types (heal, buff, debuff, cure); evaluation order, tarcnt, matar/notmatar. |

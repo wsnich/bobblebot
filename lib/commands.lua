@@ -251,6 +251,41 @@ local function cmd_travel(args, str)
     end
 end
 
+local function cmd_followme(args)
+    local rc = state.getRunconfig()
+    local sub = args[2] and string.lower(args[2]) or 'group'
+
+    if sub == 'off' then
+        if not rc.followmeMode then
+            printf('\ayCZBot:\ax Followme not active')
+            return
+        end
+        mq.cmdf('/rc %s /cz stop', rc.followmeMode)
+        printf('\ayCZBot:\ax Followme OFF (%s)', rc.followmeMode)
+        rc.followmeMode = nil
+        return
+    end
+
+    if sub ~= 'group' and sub ~= 'raid' then
+        printf('\ayCZBot:\ax Usage: /cz followme [group|raid|off]')
+        return
+    end
+
+    follow.StopFollow('command')
+    if rc.campstatus then botmove.MakeCamp('off') end
+
+    if rc.followmeMode and rc.followmeMode ~= sub then
+        mq.cmdf('/rc %s /cz stop', rc.followmeMode)
+    end
+
+    local myname = mq.TLO.Me.Name()
+    if not myname or myname == '' then return end
+
+    mq.cmdf('/rc %s /cz follow %s', sub, myname)
+    rc.followmeMode = sub
+    printf('\ayCZBot:\ax Followme ON (%s -> %s)', sub, myname)
+end
+
 local function tableContains(list, name)
     if type(list) ~= 'table' then return false end
     for _, n in ipairs(list) do
@@ -947,6 +982,7 @@ local handlers = {
     show = cmd_ui,
     makecamp = cmd_makecamp,
     follow = cmd_follow,
+    followme = cmd_followme,
     travel = cmd_travel,
     stop = cmd_stop,
     exclude = cmd_exclude,

@@ -141,6 +141,7 @@ heal = {
 - **Toggle healing:** `/cz doheal on` or `/cz doheal off` (or `/cz doheal` to toggle).
 - **Cast by alias:** `/cz cast <alias> [target]` — cast a heal spell by its alias. Use `/cz cast <alias> on` or `off` to enable or disable that spell’s use (**enabled**).
 - **Add a spell slot:** `/cz addspell heal <position>` — insert a new heal entry at the given position (1 to count+1).
+- **CHChain:** `/cz chchain` is a separate multi-cleric Complete Heal rotation mode. See [CHChain configuration](chchain-configuration.md).
 
 ---
 
