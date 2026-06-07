@@ -127,7 +127,8 @@ local function fieldLabelForGemType(gemType)
     return 'Spell'
 end
 
-local _modalState = {}
+-- UI state keyed by spell entry table so expand/edit buffers follow entries across reorder.
+local _entryState = setmetatable({}, { __mode = 'k' })
 
 local TYPE_COMBO_WIDTH = 100
 local SPELL_SELECTABLE_WIDTH = 140
@@ -164,10 +165,10 @@ function M.draw(spell, opts)
     if displayCommonFields == nil then displayCommonFields = true end
     local showRange = opts.showRange or false
 
-    if not _modalState[id] then
-        _modalState[id] = { open = false, buffer = '', error = nil }
+    if not _entryState[spell] then
+        _entryState[spell] = { open = false, buffer = '', error = nil }
     end
-    local state = _modalState[id]
+    local state = _entryState[spell]
     if opts.onDelete and not state.deleteConfirm then
         state.deleteConfirm = { open = false, pendingClose = nil }
     end
@@ -202,8 +203,12 @@ function M.draw(spell, opts)
             spellNameForHeader = spell.spell:match('^%s*(.-)%s*$') or 'unset'
         end
         -- Use ### so ImGui IDs only the stable suffix; dynamic spell text would otherwise change the ID and re-apply FirstUseEver (collapse).
-        ImGui.SetNextItemOpen(false, ImGuiCond.FirstUseEver)
-        if not ImGui.CollapsingHeader(string.format('%s — %s###%s', labelText, spellNameForHeader, id .. '_collapse')) then
+        -- expanded is stored on the spell entry table (via _entryState) so reorder keeps the same entries open/closed.
+        if state.expanded == nil then state.expanded = false end
+        ImGui.SetNextItemOpen(state.expanded, ImGuiCond.Always)
+        local expanded = ImGui.CollapsingHeader(string.format('%s — %s###%s', labelText, spellNameForHeader, id .. '_collapse'))
+        state.expanded = expanded
+        if not expanded then
             return
         end
     end
@@ -330,8 +335,8 @@ function M.draw(spell, opts)
         local entryCount = opts.entryCount or 0
         local showMoveUp = entryCount > 1 and opts.onMoveUp
         local showMoveDown = entryCount > 1 and opts.onMoveDown
-        local moveUpIconW = showMoveUp and select(1, ImGui.CalcTextSize(Icons.MD_UNFOLD_LESS)) or 0
-        local moveDownIconW = showMoveDown and select(1, ImGui.CalcTextSize(Icons.MD_UNFOLD_MORE)) or 0
+        local moveUpIconW = showMoveUp and select(1, ImGui.CalcTextSize(Icons.FA_LEVEL_UP)) or 0
+        local moveDownIconW = showMoveDown and select(1, ImGui.CalcTextSize(Icons.FA_LEVEL_DOWN)) or 0
         local moveUpButtonWidth = showMoveUp and ((moveUpIconW or 0) + 24) or 0
         local moveDownButtonWidth = showMoveDown and ((moveDownIconW or 0) + 24) or 0
         local reorderButtonWidth = moveUpButtonWidth + moveDownButtonWidth
@@ -348,7 +353,7 @@ function M.draw(spell, opts)
             ImGui.SameLine()
         end
         if showMoveUp then
-            if ImGui.SmallButton(Icons.MD_UNFOLD_LESS .. '##' .. id .. '_move_up') then
+            if ImGui.SmallButton(Icons.FA_LEVEL_UP .. '##' .. id .. '_move_up') then
                 opts.onMoveUp()
             end
             if ImGui.IsItemHovered() then
@@ -357,7 +362,7 @@ function M.draw(spell, opts)
             ImGui.SameLine()
         end
         if showMoveDown then
-            if ImGui.SmallButton(Icons.MD_UNFOLD_MORE .. '##' .. id .. '_move_down') then
+            if ImGui.SmallButton(Icons.FA_LEVEL_DOWN .. '##' .. id .. '_move_down') then
                 opts.onMoveDown()
             end
             if ImGui.IsItemHovered() then
