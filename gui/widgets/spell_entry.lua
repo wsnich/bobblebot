@@ -335,8 +335,8 @@ function M.draw(spell, opts)
         local entryCount = opts.entryCount or 0
         local showMoveUp = entryCount > 1 and opts.onMoveUp
         local showMoveDown = entryCount > 1 and opts.onMoveDown
-        local moveUpIconW = showMoveUp and select(1, ImGui.CalcTextSize(Icons.FA_LEVEL_UP)) or 0
-        local moveDownIconW = showMoveDown and select(1, ImGui.CalcTextSize(Icons.FA_LEVEL_DOWN)) or 0
+        local moveUpIconW = showMoveUp and select(1, ImGui.CalcTextSize(Icons.FA_CARET_UP)) or 0
+        local moveDownIconW = showMoveDown and select(1, ImGui.CalcTextSize(Icons.FA_CARET_DOWN)) or 0
         local moveUpButtonWidth = showMoveUp and ((moveUpIconW or 0) + 24) or 0
         local moveDownButtonWidth = showMoveDown and ((moveDownIconW or 0) + 24) or 0
         local reorderButtonWidth = moveUpButtonWidth + moveDownButtonWidth
@@ -353,7 +353,7 @@ function M.draw(spell, opts)
             ImGui.SameLine()
         end
         if showMoveUp then
-            if ImGui.SmallButton(Icons.FA_LEVEL_UP .. '##' .. id .. '_move_up') then
+            if ImGui.SmallButton(Icons.FA_CARET_UP .. '##' .. id .. '_move_up') then
                 opts.onMoveUp()
             end
             if ImGui.IsItemHovered() then
@@ -362,7 +362,7 @@ function M.draw(spell, opts)
             ImGui.SameLine()
         end
         if showMoveDown then
-            if ImGui.SmallButton(Icons.FA_LEVEL_DOWN .. '##' .. id .. '_move_down') then
+            if ImGui.SmallButton(Icons.FA_CARET_DOWN .. '##' .. id .. '_move_down') then
                 opts.onMoveDown()
             end
             if ImGui.IsItemHovered() then
