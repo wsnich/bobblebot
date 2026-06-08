@@ -50,6 +50,7 @@
 ---@field leash number|nil
 ---@field leashSq number|nil precomputed leash^2 for distance-squared comparisons
 ---@field fteLockoutSec number|nil seconds to skip pull target after FTE lock or already-engaged (default 120)
+---@field backupCandidates number|nil max pull targets queued per outing before returning to camp (default 3, clamped 1-5)
 ---@field addAbortRadius number|nil radius (units) for add-abort check while navigating; NPCs within this with LoS trigger abort (default 50)
 ---@field usepriority boolean|nil
 ---@field hunter boolean|nil
@@ -116,7 +117,7 @@ local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure'
 
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance' },
-    pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
+    pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
@@ -776,6 +777,7 @@ function M.Load(path)
         manaclass = { 'CLR', 'DRU', 'SHM' },
         leash = 500,
         fteLockoutSec = 120,
+        backupCandidates = 3,
         addAbortRadius = 50,
         usepriority = false,
     })
@@ -795,6 +797,11 @@ function M.Load(path)
     end
     if M.config.pull.fteLockoutSec ~= nil then
         M.config.pull.fteLockoutSec = tonumber(M.config.pull.fteLockoutSec) or 120
+    end
+    if M.config.pull.backupCandidates ~= nil then
+        local n = tonumber(M.config.pull.backupCandidates) or 3
+        if n < 1 then n = 1 elseif n > 5 then n = 5 end
+        M.config.pull.backupCandidates = n
     end
     M.config.pull.radiusSq = (M.config.pull.radius or 0) * (M.config.pull.radius or 0)
     local r40 = (M.config.pull.radius or 0) + 40

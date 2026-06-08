@@ -59,6 +59,8 @@
 ---@field pullSpawnWaitSince number|nil mq.gettime() when a new spawn appeared in pull.radius (FTE wait)
 ---@field pullRadiusHadTarget boolean|nil true once a pull target was seen in radius this idle cycle
 ---@field pullAbortReturnDeadline number|nil mq.gettime() failsafe deadline for returning_after_abort
+---@field pullCandidateIds number[]|nil spawn IDs queued for current pull outing (backup targets)
+---@field pullCandidateIndex number|nil 1-based index into pullCandidateIds for active target
 ---@field pullRangedStoredItem string|nil item name swapped out of Ranged slot during pull (restored on return)
 ---@field stucktimer number|nil
 ---@field unstuckWiggleIndex number|nil current step (1–9) in unstuck wiggle sequence; nil when not wiggling or after sequence

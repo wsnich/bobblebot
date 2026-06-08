@@ -57,6 +57,7 @@ Scalar pull options can be set via setvar. **pull.spell** (table: gem, spell, ra
 | **pull.mana** | number | 60 | Min mana % for designated healer classes before new pull. |
 | **pull.leash** | number | 500 | While returning to camp with mob, nav paused if mob farther than this. |
 | **pull.fteLockoutSec** | number | 120 | Seconds to skip pull target after FTE lock or already-engaged (below 100% HP). |
+| **pull.backupCandidates** | number | 3 | Max pull targets queued per outing (1–5); tries next before camp return on unviable target. |
 | **pull.addAbortRadius** | number | 50 | While navigating to pull target, NPCs within this radius with LOS can trigger abort. |
 | **pull.usepriority** | boolean | `false` | If true, prefer mobs on the priority list when choosing pull target. |
 | **pull.hunter** | boolean | `false` | Hunter mode: no makecamp; anchor set once. See [Pull Configuration](pull-configuration.md). |

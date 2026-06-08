@@ -342,6 +342,15 @@ function M.draw()
     if fteSecCh then pull.fteLockoutSec = fteSecNew; runConfigLoaders() end
 
     ImGui.Spacing()
+    ImGui.Text('Backup candidates')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Max pull targets queued per outing (1–5). On FTE, engaged, below 100%% HP, or no-aggro timeout, tries the next target before returning to camp. Set to 1 for single-target behavior.') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+    local backupCandidates = pull.backupCandidates or 3
+    local backupNew, backupCh = inputs.boundedInt('pull_backupCandidates', backupCandidates, 1, 5, 1, '##pull_backupCandidates')
+    if backupCh then pull.backupCandidates = backupNew; runConfigLoaders() end
+
+    ImGui.Spacing()
     ImGui.Text('Use priority list')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Prefer mobs that match the Priority list over path distance when choosing a pull target.') end
     ImGui.SameLine()

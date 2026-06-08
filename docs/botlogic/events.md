@@ -90,13 +90,13 @@ Target is Encounter Locked (FTE) to someone else.
 - Records `FTEList[spawnId]` via `spawnutils.recordFTE`: short **combat** block (2s + escalation), **in-camp recheck** every 2s, and **pull unpullable** for `pull.fteLockoutSec` (default 120s) when `dopull` is on.
 - Clears `engageTargetId` when it matches the FTE spawn.
 - Runs: `/mqtarget myself`, `/attack off`, `/stopcast`, `/nav stop`, `/stick off`.
-- If `dopull` is true: `botpull.AbortPullForFTE` (return to camp when mid-pull).
+- If `dopull` is true: `botpull.AbortPullForFTE` → `abortPullSoftFailure` (tries next `pullCandidateIds` entry before camp return in standard camp mode).
 
 **Camp list** (`AddSpawnCheck` / `buildCampMobList`) excludes spawns while `combatBlockedUntil` is active; `tickCombatFTERechecks` re-targets in-camp entries every 2s and clears the combat block when no new FTE message arrives.
 
 **Pull list** uses `pullUnpullableUntil` only (`pull.fteLockoutSec`, default 120s), not the combat block — so a false in-camp FTE does not block pull selection for the full combat window.
 
-**Roam / hunter pull:** When `pull.roam` or `pull.hunter` is active with `dopull`, FTE records only the pull-unpullable window (no `nextCombatRecheckAt`). The bot aborts the current hunt/pull without return nav and selects the next target; it does not run the 2s in-camp FTE recheck loop for those mobs.
+**Roam / hunter pull:** When `pull.roam` or `pull.hunter` is active with `dopull`, FTE records only the pull-unpullable window (no `nextCombatRecheckAt`). The bot tries backup candidates from the same outing queue when available; otherwise clears pull state without return nav. It does not run the 2s in-camp FTE recheck loop for those mobs.
 
 Manual reset: `/cz fte clear` (current NPC target) or `/cz fte clear all`.
 

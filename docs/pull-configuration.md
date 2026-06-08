@@ -39,6 +39,7 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 | **manaclass**               | `{ 'CLR', 'DRU', 'SHM' }` | List of uppercase class short names (CLR, DRU, SHM) checked for **mana** before allowing a pull. Uncheck all classes (empty list) to disable the mana gate regardless of **mana**. |
 | **leash**                   | 500               | While returning to camp with a mob, navigation is paused if the mob is farther than this distance (avoids over-chasing).                  |
 | **fteLockoutSec**           | 120               | Seconds to skip a pull target after FTE lock or already-engaged (below 100% HP).                                                          |
+| **backupCandidates**        | 3                 | Max pull targets queued per outing (1–5). When a target is unviable (FTE, engaged, below 100% HP, no aggro), the bot tries the next queued target before returning to camp. Set to **1** for legacy single-target behavior. |
 | **addAbortRadius**          | 50                | While navigating to a pull target, NPCs within this radius (units) with line-of-sight can trigger an abort (return to camp).             |
 | **usepriority**             | `false`           | If `true`, prefer mobs that match the runtime **Priority** list over path distance when choosing a pull target.                           |
 | **hunter**                  | `false`           | Hunter mode: no makecamp; anchor is set once. The puller can be far from camp. See [Pull mode comparison](#pull-mode-comparison). |
@@ -83,6 +84,7 @@ pull = {
     manaclass = { 'CLR', 'DRU', 'SHM' },
     leash = 500,
     fteLockoutSec = 120,
+    backupCandidates = 3,
     addAbortRadius = 50,
     usepriority = false,
     hunter = false,
@@ -181,7 +183,7 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 
 ## FTE / already engaged
 
-If the bot sees that the pull target is already engaged by someone else (another player or pet), it abandons the pull. In **camp** mode the puller returns to camp; in **roam** or **hunter** mode it stops and picks another target. The target is marked unpullable for **fteLockoutSec** (default 120 seconds; FTE list). For **roam** and **hunter**, the bot does **not** use the in-camp 2s FTE recheck loop—it moves on after marking the mob unpullable.
+If the bot sees that the pull target is already engaged by someone else (another player or pet), it abandons that target. At pull start the bot queues up to **backupCandidates** targets (default 3, closest by path). On FTE lock, EngageCheck, below-100% HP, or no-aggro timeout it tries the next queued target **without returning to camp** first. When the queue is exhausted, **camp** mode returns to camp; **roam** or **hunter** mode clears pull state and picks anew. Failed targets are marked unpullable for **fteLockoutSec** (default 120 seconds; FTE list). For **roam** and **hunter**, the bot does **not** use the in-camp 2s FTE recheck loop—it moves on after marking the mob unpullable.
 
 ---
 

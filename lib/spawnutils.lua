@@ -41,6 +41,8 @@ local function getSpawnsInArea(rc, radius2DSq, radiusZ)
         cx, cy, cz = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
     end
     local function predicate(spawn)
+        local spawnType = spawn and spawn.Type()
+        if not spawnType or spawnType == '' then return false end
         return spawnInArea(spawn, cx, cy, cz, radius2DSq, radiusZ)
     end
     return mq.getFilteredSpawns(predicate)
@@ -286,19 +288,32 @@ function spawnutils.filterSpawnExcludeAndPullFTE(spawn, rc)
 end
 
 local function filterSpawnTargetFilter(spawn, targetFilterNum)
+    local spawnType = spawn and spawn.Type()
+    if not spawnType or spawnType == '' then return false end
     if targetFilterNum == 2 then
-        return not string.find('pc,banner,campfire,mercenary,mount,aura,corpse', string.lower(spawn.Type()))
+        return not string.find('pc,banner,campfire,mercenary,mount,aura,corpse', string.lower(spawnType))
     end
     if targetFilterNum == 1 then
-        return (spawn.Type() == 'NPC' or (spawn.Type() == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.LineOfSight()
+        return (spawnType == 'NPC' or (spawnType == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.LineOfSight()
     end
     if targetFilterNum == 0 then
-        return (spawn.Type() == 'NPC' or (spawn.Type() == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.Aggressive() and spawn.LineOfSight()
+        return (spawnType == 'NPC' or (spawnType == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.Aggressive() and spawn.LineOfSight()
     end
     return false
 end
 
+--- True when spawn is a valid live combat target (not corpse, not dead).
+function spawnutils.isAliveEngageSpawn(spawn)
+    if not spawn or not spawn.ID() or spawn.ID() == 0 then return false end
+    local spawnType = spawn.Type()
+    if not spawnType or spawnType == '' then return false end
+    if spawnType == 'Corpse' then return false end
+    if spawn.Dead() then return false end
+    return true
+end
+
 local function filterSpawnForCamp(spawn, rc)
+    if not spawnutils.isAliveEngageSpawn(spawn) then return false end
     local myconfig = botconfig.config
     local acleashSq = myconfig.settings.acleashSq
     local zradius = myconfig.settings.zradius or 75
@@ -439,7 +454,7 @@ end
 function spawnutils.validateAcmTarget(rc)
     rc = rc or state.getRunconfig()
     if rc.engageTargetId then
-        if not mq.TLO.Spawn(rc.engageTargetId).ID() or mq.TLO.Spawn(rc.engageTargetId).Type() == 'Corpse' then
+        if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) then
             rc.engageTargetId = nil
             rc.attackCommandEngage = nil
             if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end

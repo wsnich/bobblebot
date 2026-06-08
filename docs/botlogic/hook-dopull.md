@@ -29,7 +29,7 @@ flowchart TB
     StartPull --> CanStart[canStartPull]
     CanStart --> CampAnchor[ensureCampAndAnchor]
     CampAnchor --> BuildList[buildPullMobList]
-    BuildList --> Select[selectPullTarget]
+    BuildList --> Select[selectPullTargets up to backupCandidates]
     Select --> Nav[set pullState navigating setRunState pulling]
     Tick --> End
     Nav --> End
@@ -37,7 +37,7 @@ flowchart TB
 
 - **Map radii:** Each doPull tick (when dopull is on) calls `syncPullMapFilter`; StartPull also calls it via ensureCampAndAnchor.
 - **Non-combat zones** are configured in **cz_common** `noCombatZones` (GUI Mob lists tab). **Bind stealth** blocks pulling near primary bind. See [Safety and stealth](../safety-and-stealth.md).
-- **StartPull:** Requires canStartPull (no MasterPause, HP > 45%, nav mesh, group checks); ensureCampAndAnchor (syncPullMapFilter, makecamp or mobile anchor); buildPullMobList (spawnutils); selectPullTarget (closest by path, or priority list if usepriority). Then /attack off, /stick off, /mqtarget clear, /nav to spawn; set pullAPTargetID, pullTagTimer, setRunState('pulling', { priority = doPull }). Camp: `pullState = navigating`, pullReturnTimer set. Roam (`pull.roam`): `pullState = roam_navigating`, no return timer.
+- **StartPull:** Requires canStartPull (no MasterPause, HP > 45%, nav mesh, group checks); ensureCampAndAnchor (syncPullMapFilter, makecamp or mobile anchor); buildPullMobList (spawnutils); `selectPullTargets` (up to **pull.backupCandidates**, default 3 — closest by path, or priority list if usepriority). Stores `pullCandidateIds` / `pullCandidateIndex` for the outing. Then /attack off, /stick off, /mqtarget clear, /nav to first spawn; set pullAPTargetID, pullTagTimer, setRunState('pulling', { priority = doPull }). Camp: `pullState = navigating`, pullReturnTimer set. Roam (`pull.roam`): `pullState = roam_navigating`, no return timer. On soft target failure (FTE, EngageCheck, below 100% HP, no-aggro timeout), `advanceToNextPullCandidate` tries the next queued ID before camp return.
 - **PullTick:** Camp: navigating → aggroing → returning → waiting_combat. Roam: roam_navigating → roam_aggroing → roam_fighting (fight in place, advance anchor on kill). When roam idle and no targets in pull.radius, nav stopped and bot waits. See [Movement and misc state](movement-and-misc.md#pull-state-machine-dopull) for camp pull details.
 
 ## See also

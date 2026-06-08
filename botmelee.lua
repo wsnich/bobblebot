@@ -116,16 +116,20 @@ local function selectTankTarget(mainTankName)
     local rc = state.getRunconfig()
     local losList = {}
     for _, v in ipairs(rc.MobList) do
-        if v.LineOfSight() then table.insert(losList, v) end
+        if spawnutils.isAliveEngageSpawn(v) and v.LineOfSight() then table.insert(losList, v) end
     end
     if #losList == 0 then return nil, false end
     local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
+    local engageId = rc.engageTargetId
+    if engageId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
+        engageId = nil
+    end
     table.sort(losList, function(a, b)
         local aId, bId = a.ID(), b.ID()
         if aId == pullerTarID and bId ~= pullerTarID then return true end
         if aId ~= pullerTarID and bId == pullerTarID then return false end
-        if aId == rc.engageTargetId and bId ~= rc.engageTargetId then return true end
-        if aId ~= rc.engageTargetId and bId == rc.engageTargetId then return false end
+        if engageId and aId == engageId and bId ~= engageId then return true end
+        if engageId and aId ~= engageId and bId == engageId then return false end
         local da = utils.getDistanceSquared2D(meX, meY, a.X(), a.Y())
         local db = utils.getDistanceSquared2D(meX, meY, b.X(), b.Y())
         return (da or 0) < (db or 0)
@@ -133,12 +137,12 @@ local function selectTankTarget(mainTankName)
     for _, spawn in ipairs(losList) do
         if targeting.TargetAndWaitBuffsPopulated(spawn.ID(), 1000) then
             if not mq.TLO.Target.Mezzed() then
-                return spawn.ID(), (spawn.ID() == rc.engageTargetId)
+                return spawn.ID(), (spawn.ID() == engageId)
             end
         end
     end
     local first = losList[1]
-    return first and first.ID() or nil, (first and first.ID() == rc.engageTargetId)
+    return first and first.ID() or nil, (first and first.ID() == engageId)
 end
 
 -- Offtank: if MT target == MA target pick add (Nth other mob); else tank MA's target. Returns chosen id or nil.
@@ -201,7 +205,7 @@ local function selectMATarget()
     -- 1) Prefer named (closest LOS named).
     local namedSpawn = nil
     for _, v in ipairs(rc.MobList) do
-        if v.LineOfSight() and v.Named() then
+        if spawnutils.isAliveEngageSpawn(v) and v.LineOfSight() and v.Named() then
             if not namedSpawn then
                 namedSpawn = v
             else
@@ -216,11 +220,14 @@ local function selectMATarget()
     -- 2) Otherwise pick the closest LOS mob (prefer the existing engage target to avoid thrash).
     local losList = {}
     for _, v in ipairs(rc.MobList) do
-        if v.LineOfSight() then losList[#losList + 1] = v end
+        if spawnutils.isAliveEngageSpawn(v) and v.LineOfSight() then losList[#losList + 1] = v end
     end
     if #losList == 0 then return nil end
 
     local engageId = rc.engageTargetId
+    if engageId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
+        engageId = nil
+    end
     table.sort(losList, function(a, b)
         local aId, bId = a.ID(), b.ID()
         if engageId and aId == engageId and bId ~= engageId then return true end
@@ -246,6 +253,14 @@ end
 local function engageTarget()
     local engageTargetId = state.getRunconfig().engageTargetId
     if not engageTargetId then return end
+
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageTargetId)) then
+        local rc = state.getRunconfig()
+        rc.engageTargetId = nil
+        rc.attackCommandEngage = nil
+        disengageCombat()
+        return
+    end
 
     if utils.isProtectedSpawn(mq.TLO.Spawn(engageTargetId)) then
         local rc = state.getRunconfig()
@@ -327,7 +342,8 @@ function botmelee.AdvCombat()
     local rc = state.getRunconfig()
 
     if myconfig.pull and myconfig.pull.roam and rc.pullState == 'roam_fighting' and rc.pullAPTargetID then
-        if utils.isProtectedSpawn(mq.TLO.Spawn(rc.pullAPTargetID)) then
+        local pullSpawn = mq.TLO.Spawn(rc.pullAPTargetID)
+        if not spawnutils.isAliveEngageSpawn(pullSpawn) or utils.isProtectedSpawn(pullSpawn) then
             rc.engageTargetId = nil
             disengageCombat()
             return
@@ -356,9 +372,9 @@ function botmelee.AdvCombat()
             -- Sticky MT: keep tanking its own target.
             id, engageTargetRefound = selectTankTarget(mainTankName)
             -- When MT is in combat, selectTankTarget returns nil; preserve engageTargetId so we don't call disengageCombat and clear target.
-            if id == nil and mq.TLO.Me.Combat() and rc.engageTargetId and rc.MobList then
+            if id == nil and mq.TLO.Me.Combat() and rc.engageTargetId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) and rc.MobList then
                 for _, v in ipairs(rc.MobList) do
-                    if v.ID() == rc.engageTargetId then
+                    if v.ID() == rc.engageTargetId and spawnutils.isAliveEngageSpawn(v) then
                         id = rc.engageTargetId
                         break
                     end
