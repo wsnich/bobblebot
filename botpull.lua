@@ -434,7 +434,7 @@ local function ensureCampAndAnchor(rc)
             botmove.SetCampHere()
         end
         if rc.campstatus then botmove.MakeCamp('off') end
-    elseif not myconfig.pull.hunter and not rc.campstatus then
+    elseif not myconfig.pull.hunter and not myconfig.pull.roam and not rc.campstatus then
         botmove.MakeCamp('on')
     elseif myconfig.pull.hunter and (not rc.makecamp.x or not rc.makecamp.y) then
         print('\ayCZBot:\ax setting HunterMode anchor')
@@ -445,6 +445,10 @@ local function ensureCampAndAnchor(rc)
         print('Disabling makecamp because dopull is on with HunterMode enabled') -- not debug, real error message
         botmove.MakeCamp('off')
     end
+end
+
+function botpull.ensurePullCampState(rc)
+    ensureCampAndAnchor(rc or state.getRunconfig())
 end
 
 -- Rank spawns by path length; if usepriority, filter to PriorityList first; skip pullAttemptedIds.
@@ -1174,7 +1178,7 @@ function botpull.getHookFn(name)
             if utils.isNearPrimaryBindPoint() then return end
             local rc = state.getRunconfig()
             if not rc.dopull then return end
-            botpull.syncPullMapFilter(false)
+            botpull.ensurePullCampState(rc)
             if state.isTravelMode() then return end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             if state.getRunState() == state.STATES.raid_mechanic then return end

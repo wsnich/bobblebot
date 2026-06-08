@@ -376,7 +376,11 @@ function M.draw()
     local roamVal, roamPressed = ImGui.Checkbox('##pull_roam', roam)
     if roamPressed then
         pull.roam = roamVal
-        if roamVal then pull.hunter = false end
+        if roamVal then
+            pull.hunter = false
+            local rc = state.getRunconfig()
+            if rc.campstatus then botmove.MakeCamp('off') end
+        end
         runConfigLoaders()
     end
 end

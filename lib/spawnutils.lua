@@ -471,28 +471,6 @@ function spawnutils.buildAndSetCampMobList(rc)
     rc.MobList = list
 end
 
-local function mergeSpawnIdIntoMobList(rc, spawnId)
-    if not spawnId or spawnId <= 0 then return end
-    local spawn = mq.TLO.Spawn(spawnId)
-    if not spawnutils.isAliveEngageSpawn(spawn) then return end
-    if utils.isProtectedSpawn(spawn) then return end
-    for _, v in ipairs(rc.MobList or {}) do
-        if v.ID() == spawnId then return end
-    end
-    if not rc.MobList then rc.MobList = {} end
-    table.insert(rc.MobList, spawn)
-end
-
---- Merge active pull / engage targets into MobList so mob count and melee see in-fight mobs.
-function spawnutils.mergeActiveCombatIntoMobList(rc)
-    rc = rc or state.getRunconfig()
-    mergeSpawnIdIntoMobList(rc, rc.pullAPTargetID)
-    mergeSpawnIdIntoMobList(rc, rc.pulledmob)
-    if rc.engageTargetId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) then
-        mergeSpawnIdIntoMobList(rc, rc.engageTargetId)
-    end
-end
-
 --- If global KillTarget is set and valid, add that spawn to rc.MobList when not already present.
 function spawnutils.mergeKillTargetIntoMobList(rc)
     rc = rc or state.getRunconfig()
@@ -577,7 +555,6 @@ function spawnutils.AddSpawnCheck()
     if not spawnutils.validateAcmTarget(rc) then return end
     spawnutils.tickCombatFTERechecks(rc)
     spawnutils.buildAndSetCampMobList(rc)
-    spawnutils.mergeActiveCombatIntoMobList(rc)
     spawnutils.mergeKillTargetIntoMobList(rc)
     spellstates.PruneDebuffStateNotInMobList(rc.MobList)
     if mq.TLO.Me.Class.ShortName() == 'BRD' and #(rc.MobList or {}) == 0 then

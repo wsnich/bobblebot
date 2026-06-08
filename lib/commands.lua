@@ -87,6 +87,7 @@ local function cmd_toggle(args)
     if botconfig.config.settings.doraid then botraid.LoadRaidConfig() end
     if isDopull and rc.dopull == true then
         botpull.syncPullMapFilter(true)
+        botpull.ensurePullCampState(rc)
     end
     printf('\ayCZBot:\axTurning %s to %s', args[1],
         isDopull and tostring(rc.dopull) or tostring(botconfig.config.settings[args[1]]))

@@ -533,6 +533,7 @@ function M.draw()
                         rc.dopull = not value
                         if rc.dopull == true then
                             botpull.syncPullMapFilter(true)
+                            botpull.ensurePullCampState(rc)
                         end
                     elseif entry.key == 'dosongs' then
                         local rc = state.getRunconfig()
