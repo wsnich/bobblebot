@@ -262,7 +262,10 @@ local function charState_PostDead()
             end
         end
     end
-    if not rc.attackCommandEngage and not (rc.MobList and rc.MobList[1] and rc.engageTargetId) then
+    local roamFighting = myconfig.pull and myconfig.pull.roam
+        and rc.pullState == 'roam_fighting' and rc.pullAPTargetID
+    if not rc.attackCommandEngage and not roamFighting
+        and not (rc.MobList and rc.MobList[1] and rc.engageTargetId) then
         rc.engageTargetId = nil
     end
     if mq.TLO.Plugin('MQ2GMCheck').IsLoaded() and (---@diagnostic disable-next-line: undefined-field

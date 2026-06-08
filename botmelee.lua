@@ -254,6 +254,14 @@ local function selectEngageTargetFromLosList(losList, engageId)
     return bestId
 end
 
+-- MobList entry is eligible for MA/MT engage selection (matches TargetFilter camp rules).
+local function isEngageableMobListSpawn(spawn)
+    if not spawnutils.isAliveEngageSpawn(spawn) then return false end
+    local tfNum = tonumber(myconfig.settings.TargetFilter) or 0
+    if tfNum == 2 then return true end
+    return spawn.LineOfSight()
+end
+
 -- MT only: pick from MobList (closest LOS). Prefer Puller's target when present. Skip mezzed; if all mezzed, return shortest remaining mez.
 -- Returns mtPick spawn, engageTargetRefound.
 local function selectTankTarget(mainTankName)
@@ -266,7 +274,7 @@ local function selectTankTarget(mainTankName)
     local rc = state.getRunconfig()
     local losList = {}
     for _, v in ipairs(rc.MobList) do
-        if spawnutils.isAliveEngageSpawn(v) and v.LineOfSight() then table.insert(losList, v) end
+        if isEngageableMobListSpawn(v) then table.insert(losList, v) end
     end
     if #losList == 0 then return nil, false end
     local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
@@ -345,10 +353,10 @@ local function selectMATarget()
 
     local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
 
-    -- 1) Prefer named (closest LOS named).
+    -- 1) Prefer named (closest engageable named).
     local namedSpawn = nil
     for _, v in ipairs(rc.MobList) do
-        if spawnutils.isAliveEngageSpawn(v) and v.LineOfSight() and v.Named() then
+        if isEngageableMobListSpawn(v) and v.Named() then
             if not namedSpawn then
                 namedSpawn = v
             else
@@ -360,10 +368,10 @@ local function selectMATarget()
     end
     if namedSpawn then return namedSpawn.ID() end
 
-    -- 2) Otherwise pick the closest LOS mob (prefer the existing engage target to avoid thrash).
+    -- 2) Otherwise pick the closest engageable mob (prefer the existing engage target to avoid thrash).
     local losList = {}
     for _, v in ipairs(rc.MobList) do
-        if spawnutils.isAliveEngageSpawn(v) and v.LineOfSight() then losList[#losList + 1] = v end
+        if isEngageableMobListSpawn(v) then losList[#losList + 1] = v end
     end
     if #losList == 0 then return nil end
 
@@ -607,7 +615,10 @@ function botmelee.getHookFn(name)
             end
             if state.getRunState() == state.STATES.pulling then
                 local rc = state.getRunconfig()
-                if not (myconfig.pull and myconfig.pull.roam and rc.pullState == 'roam_fighting') then return end
+                local roam = myconfig.pull and myconfig.pull.roam
+                local tagging = rc.pullState == 'roam_aggroing' or rc.pullState == 'aggroing'
+                local roamCanMelee = roam and not tagging and rc.MobList and rc.MobList[1]
+                if not (rc.pullState == 'roam_fighting' or roamCanMelee) then return end
             end
             if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end

@@ -401,7 +401,9 @@ local function shouldStartPull(rc)
     local engageId = rc.engageTargetId
 
     local wantToPull = false
-    if mobCount == 0 and not engageId then
+    if mobCount > 0 and not engageId then
+        wantToPull = false
+    elseif mobCount == 0 and not engageId then
         wantToPull = true
     elseif mobCount < (myconfig.pull.chainpullcnt or 0) then
         wantToPull = true
