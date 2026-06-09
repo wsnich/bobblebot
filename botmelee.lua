@@ -262,6 +262,21 @@ local function isEngageableMobListSpawn(spawn)
     return spawn.LineOfSight()
 end
 
+--- True when any engageable MobList spawn is within acleash of the player (roam in-face engage).
+local function roamMobInMeleeRange(rc)
+    if not rc.MobList or not rc.MobList[1] then return false end
+    local meX, meY, meZ = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+    local acleashSq = myconfig.settings.acleashSq
+    if not acleashSq then return false end
+    for _, v in ipairs(rc.MobList) do
+        if isEngageableMobListSpawn(v) then
+            local dSq = utils.getDistanceSquared3D(meX, meY, meZ, v.X(), v.Y(), v.Z())
+            if dSq and dSq <= acleashSq then return true end
+        end
+    end
+    return false
+end
+
 -- MT only: pick from MobList (closest LOS). Prefer Puller's target when present. Skip mezzed; if all mezzed, return shortest remaining mez.
 -- Returns mtPick spawn, engageTargetRefound.
 local function selectTankTarget(mainTankName)
@@ -631,7 +646,9 @@ function botmelee.getHookFn(name)
                 local rc = state.getRunconfig()
                 local roam = myconfig.pull and myconfig.pull.roam
                 local tagging = rc.pullState == 'roam_aggroing' or rc.pullState == 'aggroing'
-                local roamCanMelee = roam and not tagging and rc.MobList and rc.MobList[1]
+                local inRangeMob = roamMobInMeleeRange(rc)
+                local roamCanMelee = roam and rc.MobList and rc.MobList[1]
+                    and (not tagging or (rc.pullState == 'roam_aggroing' and inRangeMob))
                 if not (rc.pullState == 'roam_fighting' or roamCanMelee) then return end
             end
             if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then

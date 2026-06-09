@@ -10,6 +10,7 @@ local utils = require('lib.utils')
 local spellutils = require('lib.spellutils')
 local casting = require('lib.casting')
 local charinfo = require('plugin.charinfo')
+local tankrole = require('lib.tankrole')
 local myconfig = botconfig.config
 
 local botpull = {}
@@ -704,6 +705,7 @@ end
 
 local function beginRoamFighting(rc, spawn)
     rawset(rc, 'pullAttemptedIds', {})
+    botmove.SetCampHere()
     rc.pullState = 'roam_fighting'
     rc.statusMessage = string.format('Fighting %s (%s)', spawn.Name(), spawn.ID())
     rc.pullPhase = nil
@@ -936,6 +938,16 @@ local function tickAggroing(rc, spawn)
     if aggroingElapsed > 15000 and not isSpawnOnXTarget(rc.pullAPTargetID) then
         abortPullSoftFailure(roam and 'No agro after 15s, picking another target.' or 'No agro after 15s, returning to camp.')
         return
+    end
+    -- Roam: pull target already in range with LoS — fight immediately (XTarget path remains for ranged pulls)
+    if roam and not rc.pullPhase then
+        local spawnDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), spawn.X(), spawn.Y())
+        local range = getEffectiveAbilityRange() or 0
+        local rangeSq = range * range
+        if spawnDistSq and rangeSq and spawnDistSq <= rangeSq and pullHasLoS(spawn) then
+            beginRoamFighting(rc, spawn)
+            return
+        end
     end
     -- XTarget authoritative: transition when pull target is on XTarget and min wait (1.5s) has passed
     if isSpawnOnXTarget(rc.pullAPTargetID) and aggroingElapsed >= 1500 then
@@ -1195,6 +1207,10 @@ function botpull.getHookFn(name)
                     end
                 else
                     botpull.StartPull()
+                end
+            elseif isRoamMode() and state.getMobCount() > 0 and not rc.engageTargetId and myconfig.settings.domelee then
+                if tankrole.AmIMainTank() or tankrole.AmIMainAssist() then
+                    botmelee.AdvCombat()
                 end
             end
         end

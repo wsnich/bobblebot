@@ -361,7 +361,24 @@ function M.draw()
                 campDist = utils.calcDist3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), rc.makecamp.x, rc.makecamp.y,
                     rc.makecamp.z)
             end
-            local distStr = (campDist and string.format('%.1f', campDist)) or '—'
+            local nearestMobDist = nil
+            if rc.MobList and rc.MobList[1] then
+                local meX, meY, meZ = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+                local bestSq = nil
+                for _, v in ipairs(rc.MobList) do
+                    local dSq = utils.getDistanceSquared3D(meX, meY, meZ, v.X(), v.Y(), v.Z())
+                    if dSq and (not bestSq or dSq < bestSq) then bestSq = dSq end
+                end
+                if bestSq then nearestMobDist = math.sqrt(bestSq) end
+            end
+            local distStr
+            if mobileAnchorActive then
+                local anchorStr = (campDist and string.format('%.1f', campDist)) or '—'
+                local mobStr = (nearestMobDist and string.format('%.1f', nearestMobDist)) or '—'
+                distStr = string.format('A:%s M:%s', anchorStr, mobStr)
+            else
+                distStr = (campDist and string.format('%.1f', campDist)) or '—'
+            end
             local distAvail = select(1, ImGui.GetContentRegionAvail())
             local distW = select(1, ImGui.CalcTextSize(distStr))
             if distAvail > 0 then
@@ -370,7 +387,7 @@ function M.draw()
             ImGui.TextColored(LIGHT_GREY, '%s', distStr)
             if ImGui.IsItemHovered() then
                 if mobileAnchorActive then
-                    ImGui.SetTooltip('Distance from hunt anchor (units)')
+                    ImGui.SetTooltip('A = distance from hunt anchor; M = nearest mob in camp list (units)')
                 else
                     ImGui.SetTooltip('Distance from camp (units)')
                 end
