@@ -161,6 +161,8 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 
 **Roam hunt group setup:** Hunter character = MT + `dopull` + `domelee` + `pull.roam`. Group members = `/cz follow` + `domelee` + normal **acleash** (assist bubble follows each character).
 
+**Roam buff timing:** When **dobuff** is on, one buff check cycle runs after the mob bubble clears and before the bot picks the next nav target. Buff checks are skipped while status shows **Roaming to...** (active roam nav).
+
 **FTE (hunter):** Encounter-locked pull targets are marked unpullable for **fteLockoutSec** (default 120 seconds) and the bot moves to the next target. The in-camp 2s FTE recheck loop does **not** run during hunter pull states. Roam uses normal camp FTE recheck when idle (no pull state machine).
 
 ---

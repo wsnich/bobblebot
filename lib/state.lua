@@ -52,6 +52,7 @@
 ---@field runStatePayload table|nil
 ---@field pullState string|nil
 ---@field roamNavTargetId number|nil spawn ID for simplified roam nav when camp bubble is empty
+---@field roamBuffCheckPending boolean|nil when true, roam nav defers until doBuff completes one idle cycle after camp clears
 ---@field pullAPTargetID number|nil
 ---@field pullTagTimer number|nil
 ---@field pullReturnTimer number|nil
@@ -276,6 +277,7 @@ function M.resetRunconfig()
         runStatePayload = nil,
         pullState = nil,
         roamNavTargetId = nil,
+        roamBuffCheckPending = nil,
         pullAPTargetID = nil,
         pullTagTimer = nil,
         pullReturnTimer = nil,

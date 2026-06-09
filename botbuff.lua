@@ -349,17 +349,27 @@ function botbuff.getHookFn(name)
             if state.isTravelMode() then return end
             if botmove.isBeyondFollowDistance() then return end
             local myconfig = botconfig.config
+            local rc = state.getRunconfig()
             if not myconfig.settings.dobuff or not (myconfig.buff.spells and #myconfig.buff.spells > 0) then return end
+            local pull = myconfig.pull
+            if pull and pull.roam and rc.dopull and rc.roamNavTargetId then return end
             if mq.TLO.Me.Class.ShortName() == 'CLR' and clericDeferBuffForGroupCorpse(myconfig.settings.acleash or 75) then return end
             if state.getRunState() == state.STATES.idle then
-                local rc = state.getRunconfig()
                 local msg = rc.statusMessage or ''
-                if not msg:find('Roaming to', 1, true) and not msg:find('No pull targets', 1, true)
-                    and not msg:find('Waiting for pull', 1, true) and not msg:find('Pulling ', 1, true) then
+                local roamBuffWindow = pull and pull.roam and rc.dopull and rc.roamBuffCheckPending
+                if roamBuffWindow or (not msg:find('Roaming to', 1, true) and not msg:find('No pull targets', 1, true)
+                    and not msg:find('Waiting for pull', 1, true) and not msg:find('Pulling ', 1, true)) then
                     rc.statusMessage = 'Buff Check'
                 end
             end
             botbuff.BuffCheck(bothooks.getPriority(hookName))
+            if pull and pull.roam and rc.dopull and rc.roamBuffCheckPending then
+                local rs = state.getRunState()
+                if rs ~= state.STATES.casting and rs ~= state.STATES.resume_doBuff
+                    and (mq.TLO.Me.CastTimeLeft() or 0) == 0 then
+                    rc.roamBuffCheckPending = false
+                end
+            end
         end
     end
     return nil

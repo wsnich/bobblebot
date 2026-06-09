@@ -28,6 +28,7 @@ botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'retu
 
 local ROAM_NO_TARGET_STATUS_MS = 5000
 local _roamNoTargetStatusLast = 0
+local _roamPrevMobCount = nil
 
 local function isRoamMode()
     return myconfig.pull and myconfig.pull.roam == true
@@ -222,6 +223,8 @@ function botpull.DisablePull(reason)
     lastAppliedSpellRadius = nil
     lastAppliedCastRadius = nil
     rc.roamNavTargetId = nil
+    rc.roamBuffCheckPending = nil
+    _roamPrevMobCount = nil
     if APTarget and APTarget.ID() then APTarget = nil end
     if activePull then
         clearPullState(reason)
@@ -535,8 +538,24 @@ local function selectPullTarget(apmoblist, rc)
     return targets[1]
 end
 
+local function roamNavDeferredForBuff(rc)
+    if not myconfig.settings.dobuff or not rc.roamBuffCheckPending then return false end
+    if state.getRunState() == state.STATES.casting then return true end
+    if state.getRunState() == state.STATES.resume_doBuff then return true end
+    if rc.CurSpell and rc.CurSpell.sub == 'buff'
+        and (mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0) then
+        return true
+    end
+    return true
+end
+
 local function tickRoamNav(rc)
     local mobCount = state.getMobCount()
+    if (_roamPrevMobCount or 0) > 0 and mobCount == 0 and myconfig.settings.dobuff then
+        rc.roamBuffCheckPending = true
+    end
+    _roamPrevMobCount = mobCount
+
     local engageId = rc.engageTargetId
     if engageId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
         engageId = nil
@@ -551,6 +570,13 @@ local function tickRoamNav(rc)
         return
     end
     if not canStartPull(rc) then return end
+
+    if roamNavDeferredForBuff(rc) then
+        if state.getRunState() == state.STATES.idle and not rc.pullHealerManaWait then
+            rc.statusMessage = 'Buff Check'
+        end
+        return
+    end
 
     local targetId = rc.roamNavTargetId
     if targetId and not isRoamNavTargetPullable(rc, targetId) then
@@ -573,6 +599,7 @@ local function tickRoamNav(rc)
         end
         targetId = spawn.ID()
         rc.roamNavTargetId = targetId
+        rc.roamBuffCheckPending = false
     end
 
     local spawn = mq.TLO.Spawn(targetId)
