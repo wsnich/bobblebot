@@ -363,7 +363,7 @@ function M.draw()
                 end
                 if ImGui.IsItemHovered() then
                     ImGui.SetTooltip(
-                        'When off, mobs outside camp radius stay valid targets for MT/DPS. Session only.')
+                        'When off, chase current target and assist MA outside Radius; new picks still use Radius. Session only.')
                 end
             end
             ImGui.TextColored(WHITE, '%s', '# Mobs: ')

@@ -16,8 +16,6 @@ local COMBAT_FTE_INITIAL_BLOCK_MS = 2000
 local COMBAT_FTE_STRIKE_BLOCK_EXTRA_MS = 5000
 local FTE_STRIKE_DEBOUNCE_MS = 2000
 local FTE_RECHECK_TARGET_DELAY_MS = 300
-local CAMP_ACLEASH_DISABLED_RADIUS = 10000
-local CAMP_ACLEASH_DISABLED_RADIUS_SQ = CAMP_ACLEASH_DISABLED_RADIUS * CAMP_ACLEASH_DISABLED_RADIUS
 
 -- ---------------------------------------------------------------------------
 -- Local helpers (DRY)
@@ -134,7 +132,7 @@ function spawnutils.FTECheck(spawnId, rc)
     return spawnutils.isEngageTracked(spawnId, rc) or spawnutils.isCombatFTEBlocked(spawnId, rc)
 end
 
---- True when camp-centered acleash radius should limit mob list / in-camp checks.
+--- True when chase/assist bypasses are disabled (MobList always uses settings.acleash).
 function spawnutils.isCampAcleashEnforced(rc)
     rc = rc or state.getRunconfig()
     if rc.campstatus ~= true then return true end
@@ -148,9 +146,6 @@ function spawnutils.isSpawnInCampRadius(spawn, rc)
     local myconfig = botconfig.config
     local zradius = myconfig.settings.zradius or 75
     local cx, cy, cz = getCampAnchor(rc)
-    if not spawnutils.isCampAcleashEnforced(rc) then
-        return spawnInArea(spawn, cx, cy, cz, CAMP_ACLEASH_DISABLED_RADIUS_SQ, zradius)
-    end
     local acleashSq = myconfig.settings.acleashSq
     return spawnInArea(spawn, cx, cy, cz, acleashSq, zradius)
 end
@@ -358,12 +353,8 @@ local function filterSpawnForCamp(spawn, rc)
     else
         cx, cy, cz = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
     end
-    if spawnutils.isCampAcleashEnforced(rc) then
-        local acleashSq = myconfig.settings.acleashSq
-        if not spawnInArea(spawn, cx, cy, cz, acleashSq, zradius) then return false end
-    else
-        if not spawnInArea(spawn, cx, cy, cz, CAMP_ACLEASH_DISABLED_RADIUS_SQ, zradius) then return false end
-    end
+    local acleashSq = myconfig.settings.acleashSq
+    if not spawnInArea(spawn, cx, cy, cz, acleashSq, zradius) then return false end
     if not spawnutils.filterSpawnProtected(spawn) then return false end
     if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc) then return false end
     local sid = spawn.ID()
@@ -444,9 +435,7 @@ end
 function spawnutils.buildCampMobList(rc)
     rc = rc or state.getRunconfig()
     local myconfig = botconfig.config
-    local acleashSq = spawnutils.isCampAcleashEnforced(rc)
-        and myconfig.settings.acleashSq
-        or CAMP_ACLEASH_DISABLED_RADIUS_SQ
+    local acleashSq = myconfig.settings.acleashSq
     local zradius = myconfig.settings.zradius or 75
     local raw = getSpawnsInArea(rc, acleashSq, zradius)
     local out = {}

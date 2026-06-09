@@ -375,10 +375,15 @@ end
 -- Returns chosen id or nil.
 local function selectMATarget()
     local rc = state.getRunconfig()
-    if not rc.MobList or not rc.MobList[1] then return nil end
-
     local engageId = rc.engageTargetId
     if engageId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
+        if not spawnutils.isCampAcleashEnforced(rc) then
+            local inMobList = false
+            for _, v in ipairs(rc.MobList or {}) do
+                if v.ID() == engageId then inMobList = true break end
+            end
+            if not inMobList then return engageId end
+        end
         local currentSpawn = mq.TLO.Spawn(engageId)
         if not currentSpawn.Named() then
             local namedId = findClosestEngageableNamed(rc.MobList)
@@ -386,6 +391,8 @@ local function selectMATarget()
         end
         return engageId
     end
+
+    if not rc.MobList or not rc.MobList[1] then return nil end
 
     -- Initial pick: named first, then closest engageable (mez/distance rules).
     local namedId = findClosestEngageableNamed(rc.MobList)
@@ -518,11 +525,11 @@ function botmelee.AdvCombat()
         elseif myconfig.melee.mtSticky and not myconfig.melee.offtank then
             -- Sticky MT: keep tanking its own target.
             id, engageTargetRefound = selectTankTarget(mainTankName)
-            -- When MT is in combat, selectTankTarget returns nil; preserve engageTargetId so we don't call disengageCombat and clear target.
-            if id == nil and mq.TLO.Me.Combat() and rc.engageTargetId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) then
+            -- selectTankTarget returns nil in combat; preserve engageTargetId so we don't disengage.
+            if id == nil and rc.engageTargetId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) then
                 if not spawnutils.isCampAcleashEnforced(rc) then
                     id = rc.engageTargetId
-                elseif rc.MobList then
+                elseif mq.TLO.Me.Combat() and rc.MobList then
                     for _, v in ipairs(rc.MobList) do
                         if v.ID() == rc.engageTargetId and spawnutils.isAliveEngageSpawn(v) then
                             id = rc.engageTargetId
