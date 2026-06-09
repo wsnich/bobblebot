@@ -256,8 +256,9 @@ function M.draw()
             ImGui.SetCursorScreenPos(campX, rowStartScreenY - CAMP_CELL_Y_OFFSET)
             availX = select(1, ImGui.GetContentRegionAvail())
             local pullCfg = botconfig.config.pull
-            local roamOnly = pullCfg and pullCfg.roam == true
-            local hunterMode = pullCfg and pullCfg.hunter == true and not roamOnly
+            local pullActive = rc.dopull == true
+            local roamOnly = pullCfg and pullCfg.roam == true and pullActive
+            local hunterMode = pullCfg and pullCfg.hunter == true and not roamOnly and pullActive
             local mobilePullMode = roamOnly or hunterMode
             local campCoordsSet = rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z)
             local fixedCamp = rc.campstatus == true
