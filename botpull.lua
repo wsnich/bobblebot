@@ -566,9 +566,6 @@ function botpull.StartPull()
     rc.pullXTargetIdsAtStart = getCurrentXTargetIdSet()
     state.setRunState(state.STATES.pulling, { priority = bothooks.getPriority('doPull') })
     rc.statusMessage = string.format('Pulling %s (%s)', spawn.Name(), spawn.ID())
-    if mq.TLO.Me.Class.ShortName() == 'BRD' then
-        bardtwist.EnsureTwistForMode('pull')
-    end
 end
 
 local function isPullWarp()

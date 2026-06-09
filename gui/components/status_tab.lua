@@ -339,6 +339,19 @@ function M.draw()
             end
             if ImGui.IsItemHovered() then ImGui.SetTooltip(
                 'Distance (units) from camp to count as \'at camp\' for leash and return.') end
+            if fixedCamp then
+                ImGui.TextColored(WHITE, '%s', 'Acleash: ')
+                ImGui.SameLine(0, 2)
+                local acleashOn = rc.doCampAcleash ~= false
+                local acleashChecked, acleashToggled = ImGui.Checkbox('##camp_acleash', acleashOn)
+                if acleashToggled then
+                    rc.doCampAcleash = acleashChecked
+                end
+                if ImGui.IsItemHovered() then
+                    ImGui.SetTooltip(
+                        'When off, mobs outside camp radius stay valid targets for MT/DPS. Session only.')
+                end
+            end
             ImGui.TextColored(WHITE, '%s', '# Mobs: ')
             ImGui.SameLine(0, 2)
             ImGui.TextColored(LIGHT_GREY, '%s', tostring(state.getMobCount(rc)))

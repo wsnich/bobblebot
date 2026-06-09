@@ -117,6 +117,25 @@ local function cmd_togglesongs(args)
     printf('\ayCZBot:\ax Songs %s', rc.dosongs ~= false and 'on' or 'off')
 end
 
+local function cmd_togglecampacleash(args)
+    local rc = state.getRunconfig()
+    if rc.campstatus ~= true or not rc.makecamp or not rc.makecamp.x or not rc.makecamp.y then
+        printf('\ayCZBot:\ax togglecampacleash requires makecamp on.')
+        return
+    end
+    local function acleashOn()
+        return rc.doCampAcleash ~= false
+    end
+    if args[2] == 'on' then
+        rc.doCampAcleash = true
+    elseif args[2] == 'off' then
+        rc.doCampAcleash = false
+    else
+        rc.doCampAcleash = not acleashOn()
+    end
+    printf('\ayCZBot:\ax Camp acleash %s', rc.doCampAcleash ~= false and 'on' or 'off')
+end
+
 local function cmd_addjunk(args, str)
     local zone = mq.TLO.Zone.ShortName()
     if not zone or zone == '' then
@@ -1020,6 +1039,7 @@ local handlers = {
     raid = cmd_raid,
     togglenuke = cmd_togglenuke,
     togglesongs = cmd_togglesongs,
+    togglecampacleash = cmd_togglecampacleash,
     addjunk = cmd_addjunk,
     foragezone = cmd_foragezone,
     quit = cmd_quit,

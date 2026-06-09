@@ -335,6 +335,10 @@ local function resolveMeleeAssistTarget(assistName, assistpct)
     local maInfo = charinfo.GetInfo(assistName)
     local maTarId = maInfo and maInfo.Target and maInfo.Target.ID or nil
     if maInfo and maInfo.ID then
+        if not spawnutils.isCampAcleashEnforced(rc) and maTarId and maTarId > 0
+            and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) then
+            return maTarId
+        end
         for _, v in ipairs(rc.MobList) do
             if v.ID() == maTarId and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) then
                 return maTarId
@@ -516,11 +520,15 @@ function botmelee.AdvCombat()
             -- Sticky MT: keep tanking its own target.
             id, engageTargetRefound = selectTankTarget(mainTankName)
             -- When MT is in combat, selectTankTarget returns nil; preserve engageTargetId so we don't call disengageCombat and clear target.
-            if id == nil and mq.TLO.Me.Combat() and rc.engageTargetId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) and rc.MobList then
-                for _, v in ipairs(rc.MobList) do
-                    if v.ID() == rc.engageTargetId and spawnutils.isAliveEngageSpawn(v) then
-                        id = rc.engageTargetId
-                        break
+            if id == nil and mq.TLO.Me.Combat() and rc.engageTargetId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) then
+                if not spawnutils.isCampAcleashEnforced(rc) then
+                    id = rc.engageTargetId
+                elseif rc.MobList then
+                    for _, v in ipairs(rc.MobList) do
+                        if v.ID() == rc.engageTargetId and spawnutils.isAliveEngageSpawn(v) then
+                            id = rc.engageTargetId
+                            break
+                        end
                     end
                 end
             end
@@ -584,8 +592,14 @@ function botmelee.GetPCTarget(pcName)
         return id ~= nil and id ~= 0
     end)
     if state.getRunState() ~= state.STATES.casting then state.getRunconfig().statusMessage = '' end
-    for _, v in ipairs(state.getRunconfig().MobList) do
-        if mq.TLO.Target.ID() == v.ID() then return mq.TLO.Target.ID() end
+    local rc = state.getRunconfig()
+    local targetId = mq.TLO.Target.ID()
+    if not spawnutils.isCampAcleashEnforced(rc) and targetId and targetId > 0
+        and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(targetId)) then
+        return targetId
+    end
+    for _, v in ipairs(rc.MobList) do
+        if targetId == v.ID() then return targetId end
     end
     return nil
 end
@@ -629,9 +643,12 @@ function botmelee.getHookFn(name)
                 return
             end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
-            if not state.getRunconfig().MobList[1] then
+            local rc = state.getRunconfig()
+            local chaseEngage = not spawnutils.isCampAcleashEnforced(rc)
+                and rc.engageTargetId
+                and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId))
+            if not rc.MobList[1] and not chaseEngage then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
-                local rc = state.getRunconfig()
                 rc.engageTargetId = nil
                 rc.attackCommandEngage = nil
                 if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end

@@ -188,7 +188,9 @@ function botevents.Event_MobProb(line, arg1, arg2)
         return true
     end
     if rc.engageTargetId then
-        if mq.TLO.Navigation.PathLength('id ' .. rc.engageTargetId)() <= botconfig.config.settings.acleash then
+        local pathLen = mq.TLO.Navigation.PathLength('id ' .. rc.engageTargetId)()
+        local withinAcleash = pathLen and pathLen <= botconfig.config.settings.acleash
+        if withinAcleash or not spawnutils.isCampAcleashEnforced(rc) then
             mq.cmdf('/nav id %s dist=0 log=off', rc.engageTargetId)
         end
     end

@@ -17,6 +17,7 @@
 ---@field engagetracker table
 ---@field campstatus boolean
 ---@field makecamp {x:number|nil, y:number|nil, z:number|nil}
+---@field doCampAcleash boolean|nil when false and makecamp on, skip camp-centered acleash mob filtering; session-only, default on
 ---@field charmid number|nil
 ---@field domelee boolean|nil
 ---@field dopull boolean|nil
@@ -240,6 +241,7 @@ function M.resetRunconfig()
         engagetracker = {},
         campstatus = false,
         makecamp = { x = nil, y = nil, z = nil },
+        doCampAcleash = true,
         charmid = nil,
         domelee = nil,
         dopull = false,

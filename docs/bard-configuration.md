@@ -4,8 +4,8 @@ This document explains the nuances and considerations when configuring a **bard 
 
 ## Overview
 
-- **Default twist (MQ2Twist):** Self buffs with numeric gems are sustained via a continuous twist derived from your buff config. The bot runs **noncombat** (idle), **combat**, or **pull** twist depending on state; when it needs to cast something else (mez, cure, single spell), it stops twist, casts, then resumes.
-- **Buff targeting:** For bards, only the **self** phase is used for buffs; the buff hook does **not** schedule single casts for self — the twist handles all self buffs. Use spell-level **inCombat** and **inIdle** to control which twist list each buff is in; use **pull** in bands for the pull twist (see below). Spell-level **combatOnly** applies only to non-bard auto buffs; bards should use **inCombat** / **inIdle** instead.
+- **Default twist (MQ2Twist):** Self buffs with numeric gems are sustained via a continuous twist derived from your buff config. The bot runs **noncombat** (idle) or **combat** twist depending on state; when it needs to cast something else (mez, cure, single spell), it stops twist, casts, then resumes.
+- **Buff targeting:** For bards, only the **self** phase is used for buffs; the buff hook does **not** schedule single casts for self — the twist handles all self buffs. Use spell-level **inCombat** and **inIdle** to control which twist list each buff is in. Spell-level **combatOnly** applies only to non-bard auto buffs; bards should use **inCombat** / **inIdle** instead.
 - **Interrupts:** The bot does not interrupt bard casts (buff, debuff, cure). No configuration required.
 - **Movement and casting:** Bards can move, use nav, and stick while "casting"; the bot does not force a stop before casting.
 - **Melee:** Before casting, if **domelee** is on and the bard is not in combat, the bot re-engages melee. Set **settings.domelee** if the bard should melee when not casting.
@@ -20,9 +20,8 @@ When **MQ2Twist** is loaded and you are a bard, the bot maintains a default twis
 
 | Mode       | When used                             | Contents                                                                                                   |
 | ---------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **idle**   | No mobs in camp                       | All buffs with **inIdle** checked (config order). Skipped near primary bind (bind stealth). |
+| **idle**   | No mobs in camp (including pull travel) | All buffs with **inIdle** checked (config order). Skipped near primary bind (bind stealth). |
 | **combat** | Mobs in camp, assisting (not pulling) | Buffs with **inCombat** checked (config order) then all debuff entries with **matar** and numeric gem (config order). |
-| **pull**   | Pull state (navigating / returning)   | Buffs with **self** and **pull** (e.g. Selo's) in bands.                                                   |
 | **travel** | Travel mode active (`/cz travel`)     | Single song: buff with alias `travel`, else `selos`; if neither, no twist. Config order.                   |
 
 - The bot only issues `/twist` when the desired list differs from the current list or twist is stopped, so it does not restart the sequence every tick.
@@ -38,11 +37,10 @@ For full targeting and band details, see [Spell targeting and bands](spell-targe
 
 ## Buff targeting and bands
 
-For **BRD**, only **self** is evaluated for buffs; tank, groupbuff, groupmember, pc, mypet, and pet are **never** tried. The buff hook does **not** schedule a cast for self — the default twist (above) sustains all self buffs. Use spell-level **inCombat** and **inIdle** to control which twist list each buff is in; the two lists are **independent** (a song can be idle-only, combat-only, or both). Put **self** and optionally **pull** in your buff bands:
+For **BRD**, only **self** is evaluated for buffs; tank, groupbuff, groupmember, pc, mypet, and pet are **never** tried. The buff hook does **not** schedule a cast for self — the default twist (above) sustains all self buffs. Use spell-level **inCombat** and **inIdle** to control which twist list each buff is in; the two lists are **independent** (a song can be idle-only, combat-only, or both). Put **self** in your buff bands:
 
 - **inIdle** (spell-level) — When `true` (default), this buff is in the **idle** twist list. When `false`, it is not twisted when no mobs are in camp. GUI shows "In idle" only for Bards.
 - **inCombat** (spell-level) — When `true`, this buff is in the **combat** twist list. When `false` (default), it is not twisted when mobs are in camp.
-- **pull** — Buff is in the **pull** twist (e.g. Selo's). Only self buffs with a numeric gem; include **self** and **pull** in the same band.
 
 ### Example buff block (minimal)
 
@@ -51,14 +49,14 @@ Order of entries = order in the twist. Use **inCombat** and **inIdle** (spell-le
 ```lua
 buff = {
   spells = {
-    { gem = 1, spell = 'Selo\'s Sonata',     inCombat = false, inIdle = true,  bands = { { targetphase = { 'self', 'pull' } } } },
+    { gem = 1, spell = 'Selo\'s Sonata',     inCombat = false, inIdle = true,  bands = { { targetphase = { 'self' } } } },
     { gem = 2, spell = 'Kelin\'s Lucid Lament', inCombat = true,  inIdle = true,  bands = { { targetphase = { 'self' } } } },
     { gem = 3, spell = 'Psalm of Veeshan',   inCombat = false, inIdle = true,  bands = { { targetphase = { 'self' } } } },
   }
 }
 ```
 
-- Gem 1: in **pull** twist (self + pull in bands) and in **idle** twist (inIdle true). Not in combat (inCombat false).
+- Gem 1: in **idle** twist (inIdle true). Not in combat (inCombat false). Plays during pull travel when no mobs are in camp.
 - Gem 2: in **combat** and **idle** twist (inCombat and inIdle both true).
 - Gem 3: **idle** only (inIdle true, inCombat false); e.g. out-of-combat regen.
 
@@ -112,16 +110,16 @@ Before casting a spell, if **settings.domelee** is on, there are mobs in camp, t
 
 ## Twist stop and resume
 
-Before any single cast (cure, debuff, or item/alt buff), the bot stops twist. When the cast completes (or is interrupted), the bot resumes the twist for the current mode (idle, combat, or pull). No configuration required.
+Before any single cast (cure, debuff, or item/alt buff), the bot stops twist. When the cast completes (or is interrupted), the bot resumes the twist for the current mode (idle or combat). No configuration required.
 
 ---
 
-## Pull: pull twist and engage song
+## Pull: idle twist and engage song
 
 When the bard is the puller:
 
-- **When pull starts:** The bot sets the **pull** twist (buffs with **pull** in bands, e.g. Selo's).
-- **When in range to aggro:** If **pull.spell** has a numeric **gem** (1–12), the bot runs `/twist once <gem>`. MQ2Twist sings that song once then reverts to the previous twist (pull twist) for the return run. The bard **stays stationary** at pull range (no moving toward the mob) until the song gets aggro or timeout; then the bot returns to camp.
+- **During pull travel** (navigating out, returning to camp): The bot keeps the **idle** twist running (buffs with **inIdle** checked). No separate pull twist list.
+- **When in range to aggro:** If **pull.spell** has a numeric **gem** (1–12), the bot runs `/twist once <gem>`. MQ2Twist sings that song once then reverts to the **idle** twist for the return run. The bard **stays stationary** at pull range (no moving toward the mob) until the song gets aggro or timeout; then the bot returns to camp.
 - **When pull state clears:** The bot switches to the **combat** twist.
 
 Configure in **pull.spell** (same block as the pull method): set **gem** to the spell gem (1–12) and **spell** to the agro song name. The bot uses this directly for twist-on-pull; there are no separate engage_gem/engage_spell options.
@@ -166,9 +164,9 @@ The "already on target" and resist handling for debuffs treat bards specially (e
 
 | Area              | What to do                                                                                                                                                                                                                                         |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Buffs**         | Use **self**, **cbt**, **idle**, and **pull** in bands as needed. Tank, groupbuff, groupmember, pc, mypet, pet have no effect for bards. Self buffs are sustained by the default twist.                                                            |
-| **Default twist** | Noncombat = all self buffs (not near bind); combat = cbt buffs + matar debuffs; pull = buffs with **pull**. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI. Bind stealth stops idle twist near primary bind. |
-| **Pull**          | Add **pull** to buff bands for pull twist (e.g. Selo's). Use **pull.spell** with a numeric **gem** (and **spell** name) for the agro song.                                                                                                         |
+| **Buffs**         | Use **self** in bands. Tank, groupbuff, groupmember, pc, mypet, pet have no effect for bards. Self buffs are sustained by the default twist. Use **inIdle** / **inCombat** (GUI) to control twist lists.                                                            |
+| **Default twist** | Idle = inIdle buffs (not near bind; includes pull travel); combat = inCombat buffs + matar debuffs. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI. Bind stealth stops idle twist near primary bind. |
+| **Pull**          | Idle twist continues during pull travel. Use **pull.spell** with a numeric **gem** (and **spell** name) for the agro song.                                                                                                         |
 | **Debuffs**       | **matar** → in combat twist. **notmatar** (mez, add-only) → twist-once flow; optional **bard.mez_remez_sec** (default 6) to re-apply before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |
 | **Cures**         | No special config; twist stops then resumes after cast.                                                                                                                                                                                            |
 | **Interrupts**    | Automatic; the bot does not interrupt bard casts.                                                                                                                                                                                                  |
