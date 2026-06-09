@@ -292,7 +292,8 @@ local function cmd_followme(args)
     end
 
     follow.StopFollow('command')
-    if rc.campstatus then botmove.MakeCamp('off') end
+    local campSet = rc.campstatus or (rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z))
+    if campSet then botmove.ClearCamp() end
 
     if rc.followmeMode and rc.followmeMode ~= sub then
         mq.cmdf('/rc %s /cz stop', rc.followmeMode)

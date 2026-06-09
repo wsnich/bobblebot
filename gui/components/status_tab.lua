@@ -307,7 +307,7 @@ function M.draw()
             end
             ImGui.PopStyleColor(2)
             local locationStr = 'unset'
-            if campCoordsSet then
+            if campCoordsSet and (fixedCamp or mobileAnchorActive) then
                 locationStr = string.format('%.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0,
                     rc.makecamp.z or 0)
             end
@@ -393,7 +393,7 @@ function M.draw()
             elseif roamOnly then
                 distStr = (nearestMobDist and string.format('M:%.1f', nearestMobDist)) or 'M:—'
             else
-                distStr = (campDist and string.format('%.1f', campDist)) or '—'
+                distStr = (fixedCamp and campDist and string.format('%.1f', campDist)) or '—'
             end
             local distAvail = select(1, ImGui.GetContentRegionAvail())
             local distW = select(1, ImGui.CalcTextSize(distStr))
