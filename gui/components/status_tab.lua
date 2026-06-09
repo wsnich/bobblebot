@@ -256,11 +256,13 @@ function M.draw()
             ImGui.SetCursorScreenPos(campX, rowStartScreenY - CAMP_CELL_Y_OFFSET)
             availX = select(1, ImGui.GetContentRegionAvail())
             local pullCfg = botconfig.config.pull
-            local mobilePullMode = pullCfg and (pullCfg.roam == true or pullCfg.hunter == true)
+            local roamOnly = pullCfg and pullCfg.roam == true
+            local hunterMode = pullCfg and pullCfg.hunter == true and not roamOnly
+            local mobilePullMode = roamOnly or hunterMode
             local campCoordsSet = rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z)
             local fixedCamp = rc.campstatus == true
-            local mobileAnchorActive = mobilePullMode and campCoordsSet and not fixedCamp
-            local campLabel = mobilePullMode and 'Anchor' or 'Camp'
+            local mobileAnchorActive = hunterMode and campCoordsSet and not fixedCamp
+            local campLabel = hunterMode and 'Anchor' or 'Camp'
             textW, textH = ImGui.CalcTextSize(campLabel)
             startX = ImGui.GetCursorPosX()
             ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
@@ -294,7 +296,9 @@ function M.draw()
                     ImGui.SetTooltip('Makecamp is on. Click to turn off.')
                 elseif mobileAnchorActive then
                     ImGui.SetTooltip('Mobile hunt anchor (not makecamp). Click to clear anchor.')
-                elseif mobilePullMode then
+                elseif roamOnly then
+                    ImGui.SetTooltip('Roam hunt: mob bubble and nav targets are centered on your position.')
+                elseif hunterMode then
                     ImGui.SetTooltip('No anchor yet. Set automatically when pulling starts.')
                 else
                     ImGui.SetTooltip('Set camp here')
@@ -307,9 +311,18 @@ function M.draw()
                     rc.makecamp.z or 0)
             end
             ImGui.Spacing()
-            ImGui.TextColored(WHITE, '%s', mobilePullMode and 'Anchor: ' or 'Location: ')
-            ImGui.SameLine(0, 2)
-            ImGui.TextColored(LIGHT_GREY, '%s', locationStr)
+            if roamOnly then
+                ImGui.TextColored(WHITE, '%s', 'Roam: ')
+                ImGui.SameLine(0, 2)
+                ImGui.TextColored(LIGHT_GREY, '%s', 'player position')
+                if ImGui.IsItemHovered() then
+                    ImGui.SetTooltip('Nav targets use pull.radius around you; melee uses Radius below.')
+                end
+            else
+                ImGui.TextColored(WHITE, '%s', hunterMode and 'Anchor: ' or 'Location: ')
+                ImGui.SameLine(0, 2)
+                ImGui.TextColored(LIGHT_GREY, '%s', locationStr)
+            end
             ImGui.TextColored(WHITE, '%s', 'Radius: ')
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
@@ -376,6 +389,8 @@ function M.draw()
                 local anchorStr = (campDist and string.format('%.1f', campDist)) or '—'
                 local mobStr = (nearestMobDist and string.format('%.1f', nearestMobDist)) or '—'
                 distStr = string.format('A:%s M:%s', anchorStr, mobStr)
+            elseif roamOnly then
+                distStr = (nearestMobDist and string.format('M:%.1f', nearestMobDist)) or 'M:—'
             else
                 distStr = (campDist and string.format('%.1f', campDist)) or '—'
             end
@@ -388,6 +403,8 @@ function M.draw()
             if ImGui.IsItemHovered() then
                 if mobileAnchorActive then
                     ImGui.SetTooltip('A = distance from hunt anchor; M = nearest mob in camp list (units)')
+                elseif roamOnly then
+                    ImGui.SetTooltip('M = nearest mob in your mob bubble (units)')
                 else
                     ImGui.SetTooltip('Distance from camp (units)')
                 end

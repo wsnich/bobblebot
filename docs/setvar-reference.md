@@ -61,7 +61,7 @@ Scalar pull options can be set via setvar. **pull.spell** (table: gem, spell, ra
 | **pull.addAbortRadius** | number | 50 | While navigating to pull target, NPCs within this radius with LOS can trigger abort. |
 | **pull.usepriority** | boolean | `false` | If true, prefer mobs on the priority list when choosing pull target. |
 | **pull.hunter** | boolean | `false` | Hunter mode: no makecamp; anchor set once. See [Pull Configuration](pull-configuration.md). |
-| **pull.roam** | boolean | `false` | Roam hunt: nav to mobs in pull.radius, fight in place, advance anchor on kill. See [Pull Configuration](pull-configuration.md). |
+| **pull.roam** | boolean | `false` | Roam hunt: nav when mob bubble empty; doMelee engages in acleash. Player-centered. See [Pull Configuration](pull-configuration.md). |
 
 ---
 

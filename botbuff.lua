@@ -351,7 +351,14 @@ function botbuff.getHookFn(name)
             local myconfig = botconfig.config
             if not myconfig.settings.dobuff or not (myconfig.buff.spells and #myconfig.buff.spells > 0) then return end
             if mq.TLO.Me.Class.ShortName() == 'CLR' and clericDeferBuffForGroupCorpse(myconfig.settings.acleash or 75) then return end
-            if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Buff Check' end
+            if state.getRunState() == state.STATES.idle then
+                local rc = state.getRunconfig()
+                local msg = rc.statusMessage or ''
+                if not msg:find('Roaming to', 1, true) and not msg:find('No pull targets', 1, true)
+                    and not msg:find('Waiting for pull', 1, true) and not msg:find('Pulling ', 1, true) then
+                    rc.statusMessage = 'Buff Check'
+                end
+            end
             botbuff.BuffCheck(bothooks.getPriority(hookName))
         end
     end

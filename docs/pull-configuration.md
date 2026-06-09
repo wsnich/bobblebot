@@ -43,7 +43,7 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 | **addAbortRadius**          | 50                | While navigating to a pull target, NPCs within this radius (units) with line-of-sight can trigger an abort (return to camp).             |
 | **usepriority**             | `false`           | If `true`, prefer mobs that match the runtime **Priority** list over path distance when choosing a pull target.                           |
 | **hunter**                  | `false`           | Hunter mode: no makecamp; anchor is set once. The puller can be far from camp. See [Pull mode comparison](#pull-mode-comparison). |
-| **roam**                    | `false`           | Roam hunt: nav to mobs in **pull.radius**, fight in place, advance anchor on kill. **hunter** ignored when true. See [Pull mode comparison](#pull-mode-comparison). |
+| **roam**                    | `false`           | Roam hunt: when mob bubble is empty, nav to nearest pullable mob within **pull.radius** of you; **doMelee** engages in **acleash**. **hunter** ignored when true. See [Pull mode comparison](#pull-mode-comparison). |
 
 **Note:** **pullarc** (directional pulling) is not in the config file; it is set at runtime with **`/cz xarc <degrees>`**. See [Runtime control](#runtime-control-commands).
 
@@ -157,17 +157,17 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 |------|--------|----------|
 | **Camp** | `hunter` false, `roam` false | MakeCamp on; puller returns to fixed camp after tagging. |
 | **Hunter** | `hunter` true, `roam` false | No makecamp; anchor set once. Puller can run far from anchor to tag; mob is brought back to camp. |
-| **Roam hunt** | `roam` true | No makecamp; mobile anchor advances after each kill. Nav to mob → fight in place → next target in **pull.radius**. Stands still when no valid targets (no random wandering). All other pull filters (con, zrange, mana, exclude, FTE, etc.) apply unchanged. |
+| **Roam hunt** | `roam` true | Player-centered, like running with **domelee** and no camp. Mob bubble (**Radius** / **acleash**) and **# Mobs** are around you. When the bubble is empty, the bot **/nav**s to the nearest pullable mob within **pull.radius** of your position. Along the way or on arrival, **doMelee** engages anything in **Radius** — no pull spell phase, no anchor, no return-to-camp. Pull filters (con, zrange, mana, exclude, FTE, PathExists, etc.) apply to nav target selection only. |
 
-**Roam hunt group setup:** Hunter character = MT + `dopull` + `domelee` + `pull.roam`. Group members = `/cz follow` + `domelee` + normal **acleash** (assist bubble follows each character; hunter uses **pull.radius** for target selection, not acleash).
+**Roam hunt group setup:** Hunter character = MT + `dopull` + `domelee` + `pull.roam`. Group members = `/cz follow` + `domelee` + normal **acleash** (assist bubble follows each character).
 
-**FTE (roam / hunter):** Encounter-locked pull targets are marked unpullable for **fteLockoutSec** (default 120 seconds) and the bot moves to the next target. The in-camp 2s FTE recheck loop does **not** run for mobile pull modes.
+**FTE (hunter):** Encounter-locked pull targets are marked unpullable for **fteLockoutSec** (default 120 seconds) and the bot moves to the next target. The in-camp 2s FTE recheck loop does **not** run during hunter pull states. Roam uses normal camp FTE recheck when idle (no pull state machine).
 
 ---
 
 ## Runtime control (commands)
 
-- **Toggle pulling:** `/cz dopull on` or `/cz dopull off`. You can also toggle without arguments (e.g. `/cz dopull`). Turning **on** syncs the map green ring (**SpellRadius**) to **pull.radius** immediately; turning **off** clears target, stops nav/stick/attack, and stops map radius updates from czbot; if **hunter** or **roam** is true, turning off also clears the makecamp anchor.
+- **Toggle pulling:** `/cz dopull on` or `/cz dopull off`. You can also toggle without arguments (e.g. `/cz dopull`). Turning **on** syncs the map green ring (**SpellRadius**) to **pull.radius** immediately; turning **off** clears target, stops nav/stick/attack, and stops map radius updates from czbot; if **hunter** is true, turning off also clears the makecamp anchor.
 - **Auto-disable:** Pull (`dopull`) is turned off automatically when you **die**, **zone**, or start **follow** (`/cz follow`, chat follow, or `/cz travel`).
 - **Directional pulling:** `/cz xarc <degrees>` — Restrict pulls to an arc in front of the bot (e.g. `90` for a 90° cone). Use with no argument to turn directional pulling off.
 - **Exclude / priority / no combat zones:** **ExcludeList** and **PriorityList** are **runtime** (runconfig), not in the pull config file. Use **`/cz exclude <name>`** to add a mob to the exclude list (pull target selection will skip it) and **`/cz exclude remove [name]`** to remove one; use **`/cz priority <name>`** to add and **`/cz priority remove [name]`** to remove. When **pull.usepriority** is `true`, the bot prefers priority mobs over path distance. You can target a mob and use `/cz exclude` or `/cz priority` (or their remove forms) without a name to use the target’s name. The GUI **Mob lists** tab also lets you view and edit exclude, priority, and charm lists for the **current zone**, and the global **no combat zones** list (**Add current zone**, **Enabled** checkbox, **Remove**). Per-zone lists are saved to **cz_common.lua** under **zones**[*zone*] (excludelist, prioritylist, charmlist, nuke flavors, immune). **noCombatZones** is a top-level array in **cz_common.lua**. See [Safety and stealth](safety-and-stealth.md).
@@ -183,7 +183,7 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 
 ## FTE / already engaged
 
-If the bot sees that the pull target is already engaged by someone else (another player or pet), it abandons that target. At pull start the bot queues up to **backupCandidates** targets (default 3, closest by path). On FTE lock, EngageCheck, below-100% HP, or no-aggro timeout it tries the next queued target **without returning to camp** first. When the queue is exhausted, **camp** mode returns to camp; **roam** or **hunter** mode clears pull state and picks anew. Failed targets are marked unpullable for **fteLockoutSec** (default 120 seconds; FTE list). For **roam** and **hunter**, the bot does **not** use the in-camp 2s FTE recheck loop—it moves on after marking the mob unpullable.
+If the bot sees that the pull target is already engaged by someone else (another player or pet), it abandons that target. At pull start the bot queues up to **backupCandidates** targets (default 3, closest by path). On FTE lock, EngageCheck, below-100% HP, or no-aggro timeout it tries the next queued target **without returning to camp** first. When the queue is exhausted, **camp** mode returns to camp; **hunter** mode clears pull state and picks anew; **roam** repicks on the next `tickRoamNav` tick (mob marked unpullable). Failed targets are marked unpullable for **fteLockoutSec** (default 120 seconds; FTE list). **Hunter** pull states skip the in-camp 2s FTE recheck loop.
 
 ---
 

@@ -372,7 +372,7 @@ function M.draw()
     end
     ImGui.SameLine()
     ImGui.Text('Roam hunt')
-    if ImGui.IsItemHovered() then ImGui.SetTooltip('Mobile hunter: nav to mobs in pull.radius, fight in place, advance anchor on kill. No return-to-camp. Hunter mode is ignored when enabled.') end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Roam hunt: when your mob bubble is empty, nav to the nearest pullable mob within pull.radius of you. doMelee engages anything in Radius along the way. Player-centered; no anchor. Hunter mode is ignored when enabled.') end
     ImGui.SameLine()
     local roam = pull.roam == true
     local roamVal, roamPressed = ImGui.Checkbox('##pull_roam', roam)

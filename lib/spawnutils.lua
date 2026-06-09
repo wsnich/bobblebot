@@ -64,14 +64,17 @@ local function getCampAnchor(rc)
     return mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
 end
 
---- Center for pull mob scans: makecamp when camp or mobile pull (roam/hunter) anchor is set.
+--- Center for pull mob scans: makecamp when camp or hunter anchor; roam uses player position.
 local function getPullAreaCenter(rc)
     rc = rc or state.getRunconfig()
     if rc.campstatus and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
         return rc.makecamp.x, rc.makecamp.y, rc.makecamp.z
     end
     local pull = botconfig.config.pull
-    if rc.dopull and pull and (pull.roam or pull.hunter) and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
+    if pull and pull.roam then
+        return mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+    end
+    if rc.dopull and pull and pull.hunter and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
         return rc.makecamp.x, rc.makecamp.y, rc.makecamp.z
     end
     return mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
@@ -397,9 +400,7 @@ local function filterSpawnForPull(spawn, rc)
     end
     local radiusSq = pull.radiusSq
     local zrange = pull.zrange or 200
-    local cx = (rc.makecamp and rc.makecamp.x) or mq.TLO.Me.X()
-    local cy = (rc.makecamp and rc.makecamp.y) or mq.TLO.Me.Y()
-    local cz = (rc.makecamp and rc.makecamp.z) or mq.TLO.Me.Z()
+    local cx, cy, cz = getPullAreaCenter(rc)
     if not spawnInArea(spawn, cx, cy, cz, radiusSq, zrange) then return false end
     if not spawnutils.filterSpawnProtected(spawn) then return false end
     if not spawnInPullArc(spawn, rc) then return false end
@@ -506,18 +507,12 @@ function spawnutils.mergeKillTargetIntoMobList(rc)
     table.insert(rc.MobList, mq.TLO.Spawn(KillTarget))
 end
 
-local ROAM_PULL_STATES = {
-    roam_navigating = true,
-    roam_aggroing = true,
-    roam_fighting = true,
-}
-
 local function shouldSkipFTERecheck(rc)
     if state.getRunState() == state.STATES.pulling then return true end
     if state.getRunState() == state.STATES.casting then return true end
     if rc.fteRecheckInProgress then return true end
-    if spawnutils.isMobilePullMode(rc) and rc.pullState then
-        if ROAM_PULL_STATES[rc.pullState] then return true end
+    local pull = botconfig.config.pull
+    if pull and pull.hunter and rc.pullState then
         if rc.pullState == 'navigating' or rc.pullState == 'aggroing' or rc.pullState == 'returning' then
             return true
         end

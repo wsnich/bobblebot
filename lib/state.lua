@@ -51,6 +51,7 @@
 ---@field runStatePhase string|nil
 ---@field runStatePayload table|nil
 ---@field pullState string|nil
+---@field roamNavTargetId number|nil spawn ID for simplified roam nav when camp bubble is empty
 ---@field pullAPTargetID number|nil
 ---@field pullTagTimer number|nil
 ---@field pullReturnTimer number|nil
@@ -274,6 +275,7 @@ function M.resetRunconfig()
         runStatePhase = nil,
         runStatePayload = nil,
         pullState = nil,
+        roamNavTargetId = nil,
         pullAPTargetID = nil,
         pullTagTimer = nil,
         pullReturnTimer = nil,

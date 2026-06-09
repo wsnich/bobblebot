@@ -262,21 +262,6 @@ local function isEngageableMobListSpawn(spawn)
     return spawn.LineOfSight()
 end
 
---- True when any engageable MobList spawn is within acleash of the player (roam in-face engage).
-local function roamMobInMeleeRange(rc)
-    if not rc.MobList or not rc.MobList[1] then return false end
-    local meX, meY, meZ = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
-    local acleashSq = myconfig.settings.acleashSq
-    if not acleashSq then return false end
-    for _, v in ipairs(rc.MobList) do
-        if isEngageableMobListSpawn(v) then
-            local dSq = utils.getDistanceSquared3D(meX, meY, meZ, v.X(), v.Y(), v.Z())
-            if dSq and dSq <= acleashSq then return true end
-        end
-    end
-    return false
-end
-
 -- MT only: pick from MobList (closest LOS). Prefer Puller's target when present. Skip mezzed; if all mezzed, return shortest remaining mez.
 -- Returns mtPick spawn, engageTargetRefound.
 local function selectTankTarget(mainTankName)
@@ -514,20 +499,6 @@ function botmelee.AdvCombat()
     local assistpct = myconfig.melee.assistpct or 99
     local rc = state.getRunconfig()
 
-    if myconfig.pull and myconfig.pull.roam and rc.pullState == 'roam_fighting' and rc.pullAPTargetID then
-        local pullSpawn = mq.TLO.Spawn(rc.pullAPTargetID)
-        if not spawnutils.isAliveEngageSpawn(pullSpawn) or utils.isProtectedSpawn(pullSpawn) then
-            rc.engageTargetId = nil
-            disengageCombat()
-            return
-        end
-        rc.engageTargetId = rc.pullAPTargetID
-        local name = mq.TLO.Spawn(rc.pullAPTargetID).CleanName() or tostring(rc.pullAPTargetID)
-        rc.statusMessage = string.format('Fighting %s (%s)', name, rc.pullAPTargetID)
-        engageTarget()
-        return
-    end
-
     if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Master.Type() == 'PC' then
         clearTankCombatState()
     end
@@ -652,15 +623,7 @@ function botmelee.getHookFn(name)
                 botmove.TickReturnToFollowAfterEngage()
                 return
             end
-            if state.getRunState() == state.STATES.pulling then
-                local rc = state.getRunconfig()
-                local roam = myconfig.pull and myconfig.pull.roam
-                local tagging = rc.pullState == 'roam_aggroing' or rc.pullState == 'aggroing'
-                local inRangeMob = roamMobInMeleeRange(rc)
-                local roamCanMelee = roam and rc.MobList and rc.MobList[1]
-                    and (not tagging or (rc.pullState == 'roam_aggroing' and inRangeMob))
-                if not (rc.pullState == 'roam_fighting' or roamCanMelee) then return end
-            end
+            if state.getRunState() == state.STATES.pulling then return end
             if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 local rc = state.getRunconfig()

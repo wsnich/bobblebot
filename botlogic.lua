@@ -262,9 +262,7 @@ local function charState_PostDead()
             end
         end
     end
-    local roamFighting = myconfig.pull and myconfig.pull.roam
-        and rc.pullState == 'roam_fighting' and rc.pullAPTargetID
-    if not rc.attackCommandEngage and not roamFighting
+    if not rc.attackCommandEngage
         and not (rc.MobList and rc.MobList[1] and rc.engageTargetId) then
         rc.engageTargetId = nil
     end
