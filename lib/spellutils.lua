@@ -979,6 +979,53 @@ function spellutils.NormalizeDebuffTargetPhaseList(tokens)
     return out
 end
 
+local _mezDbgNextTime = 0
+local MEZ_DBG_INTERVAL_MS = 2000
+
+--- Throttled mez/debuff resume diagnostic (see botdebuff multi-mez debugging).
+function spellutils.DbgMezTrace(fmt, ...)
+    local now = mq.gettime()
+    if now < _mezDbgNextTime then return end
+    _mezDbgNextTime = now + MEZ_DBG_INTERVAL_MS
+    printf('\ayCZBot:\ax [Mez] ' .. fmt, ...)
+end
+
+--- True when spawn has the named detrimental (uses Spawn TLO, not current Target).
+local function spawnHasDebuffSpell(spellName, spawnId)
+    if not spawnId or spawnId <= 0 or not spellName or spellName == '' then return false end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
+    local buff = sp.Buff(spellName)
+    if buff and buff() and buff.ID() and buff.ID() > 0 then
+        return true
+    end
+    return false
+end
+
+local function resolveSpellcheckResumePayload(p)
+    if not p then return nil end
+    if p.spellcheckResume and p.spellcheckResume.hook then
+        return p.spellcheckResume
+    end
+    if state.isResumeState(state.getRunState()) and p.hook then
+        return p
+    end
+    return nil
+end
+
+local function shouldSetHookResumeAfterCast(sr)
+    return sr and sr.hook and sr.hook ~= 'doDebuff' and state.RESUME_BY_HOOK[sr.hook] ~= nil
+end
+
+--- Debuff casts use CurSpell.target; Target TLO is often cleared mid-cast — do not abort completion polling.
+local function castTargetDriftBlocksReentry(rc)
+    if not rc.CurSpell or not rc.CurSpell.target then return false end
+    if rc.CurSpell.target == mq.TLO.Me.ID() then return false end
+    if mq.TLO.Target.ID() == rc.CurSpell.target then return false end
+    if rc.CurSpell.sub == 'debuff' then return false end
+    return true
+end
+
 -- Post-cast logic when CastTimeLeft() has reached 0 (called from handleSpellCheckReentry / phase-first re-entry).
 function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     local rc = state.getRunconfig()
@@ -999,7 +1046,15 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
         end
         local durationSec = spellutils.GetSpellDurationSec(entry)
         if durationSec > 0 then
-            if mq.TLO.Target.Buff(spell).ID() or mq.TLO.Me.Class.ShortName() == 'BRD' and not rc.MissedNote then
+            local buffPresent = spawnHasDebuffSpell(spell, EvalID)
+            if not buffPresent and mq.TLO.Me.Class.ShortName() == 'BRD' and not rc.MissedNote then
+                buffPresent = true
+            end
+            if not buffPresent and EvalID and spellutils.IsMezSpell(entry)
+                and not spellutils.SpellStacksSpawn(entry, EvalID) then
+                buffPresent = true
+            end
+            if buffPresent then
                 local myduration = durationSec * 1000 + mq.gettime()
                 if not rc.CurSpell.resisted then
                     spellstates.DebuffListUpdate(EvalID, spellid, myduration)
@@ -1138,14 +1193,12 @@ function spellutils.clearCastingStateOrResume()
     rc.CurSpell = {}
     rc.statusMessage = ''
     casting.clear()
-    local p = state.getRunStatePayload()
-    if p and p.spellcheckResume and p.spellcheckResume.hook then
-        local resumeNum = state.RESUME_BY_HOOK[p.spellcheckResume.hook]
-        if resumeNum then
-            state.setRunState(resumeNum, p.spellcheckResume)
-        else
-            state.clearRunState()
-        end
+    local sr = resolveSpellcheckResumePayload(state.getRunStatePayload())
+    if hadSub == 'debuff' then
+        spellutils.DbgMezTrace('clearCastingStateOrResume -> idle (debuff does not resume)')
+    end
+    if shouldSetHookResumeAfterCast(sr) then
+        state.setRunState(state.RESUME_BY_HOOK[sr.hook], sr)
     else
         state.clearRunState()
     end
@@ -1222,8 +1275,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
 
     -- MQ2Cast completion: poll Cast.Status and Cast.Result; do not use CastTimeLeft.
     if rc.CurSpell and rc.CurSpell.phase == 'casting' and (rc.CurSpell.viaMQ2Cast or rc.CurSpell.viaCastingLib) then
-        -- Self cast: MT keeps mob targeted; do not require Target.ID() == CurSpell.target.
-        if rc.CurSpell.target and rc.CurSpell.target ~= mq.TLO.Me.ID() and mq.TLO.Target.ID() ~= rc.CurSpell.target then
+        if castTargetDriftBlocksReentry(rc) then
             spellutils.clearCastingStateOrResume()
             return false
         end
@@ -1268,8 +1320,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
     end
 
     if rc.CurSpell and rc.CurSpell.sub and rc.CurSpell.phase == 'casting' and not rc.CurSpell.viaMQ2Cast and not rc.CurSpell.viaCastingLib then
-        -- Self cast: MT keeps mob targeted; do not require Target.ID() == CurSpell.target.
-        if rc.CurSpell.target and rc.CurSpell.target ~= mq.TLO.Me.ID() and mq.TLO.Target.ID() ~= rc.CurSpell.target then
+        if castTargetDriftBlocksReentry(rc) then
             spellutils.clearCastingStateOrResume()
             return false
         end
@@ -1402,7 +1453,15 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
         return false
     end
 
-    local cursor = spellutils.getResumeCursor(hookName)
+    if options.noResume and state.getRunState() == state.RESUME_BY_HOOK[hookName] then
+        state.clearRunState()
+    end
+
+    local cursor = options.noResume and nil or spellutils.getResumeCursor(hookName)
+    if sub == 'debuff' and cursor then
+        spellutils.DbgMezTrace('unexpected resume cursor phase=%s targetIndex=%s spellIndex=%s',
+            tostring(cursor.phase), tostring(cursor.targetIndex), tostring(cursor.spellIndex))
+    end
     local startPhaseIdx = 1
     local startTargetIdx = 1
     local startSpellIdx = 1
@@ -1461,13 +1520,15 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                                     mq.cmd('/stopcast')
                                     spellutils.clearCastingStateOrResume()
                                 end
-                                local spellcheckResume = {
-                                    hook = hookName,
-                                    phase = phase,
-                                    targetIndex = targetIdx,
-                                    spellIndex =
-                                        spellIndex
-                                }
+                                local spellcheckResume = nil
+                                if not options.noResume then
+                                    spellcheckResume = {
+                                        hook = hookName,
+                                        phase = phase,
+                                        targetIndex = targetIdx,
+                                        spellIndex = spellIndex,
+                                    }
+                                end
                                 if options.customCastFn and options.customCastFn(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
                                     return false
                                 end

@@ -133,11 +133,19 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
     local gem = entry.gem
     local myrangeSq = ctx.myrangeSq
     local spawnId = spawn and spawn.ID and spawn.ID() or nil
+    local isMez = spellutils.IsMezSpell(entry)
+    local function mezSkip(reason)
+        if isMez and phase == 'notmatar' and spawnId then
+            local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawnId))
+            spellutils.DbgMezTrace('skip %s (id %s) - %s', name, spawnId, reason)
+        end
+        return false
+    end
 
     -- Mez exception: mez/add-only debuffs should never land on MT's target.
     -- MA target is excluded earlier by phase targeting, but MT target is excluded here.
-    if phase == 'notmatar' and spellutils.IsMezSpell(entry) and ctx.mtTargetId and spawnId == ctx.mtTargetId then
-        return false
+    if phase == 'notmatar' and isMez and ctx.mtTargetId and spawnId == ctx.mtTargetId then
+        return mezSkip('MT target')
     end
 
     if entry.gem == 'ability' then
@@ -147,10 +155,10 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
     end
     local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), spawn.X(), spawn.Y())
     if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then
-        return false
+        return mezSkip('too close for targeted AE')
     end
     if myrangeSq and distSq and distSq > myrangeSq then
-        return false
+        return mezSkip('out of range')
     end
     local spawnLevel = spawn.Level and spawn.Level()
     if phase == 'matar' and spawnId then
@@ -160,14 +168,14 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
             spawnLevel = ctx.mtTargetLvl
         end
     end
-    if ctx.spellid and spawnLevel and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < spawnLevel and spellutils.IsMezSpell(entry) then
+    if ctx.spellid and spawnLevel and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < spawnLevel and isMez then
         local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawn.ID()))
         printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - target level %s exceeds spell max level %s', name, spawn.ID(), spawnLevel, ctx.spellmaxlvl)
         return false
     end
     local tarstacks = spellutils.SpellStacksSpawn(entry, spawn.ID())
     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks then
-        if phase == 'notmatar' and spellutils.IsMezSpell(entry) then
+        if phase == 'notmatar' and isMez then
             local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawn.ID()))
             printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', name, spawn.ID())
             return false
@@ -177,10 +185,14 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
         end
     end
     if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, 6000) then
-        return false
+        return mezSkip('debuff still active')
     end
     if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, spawn.ID(), ctx.aeRange) < ctx.mintar then
-        return false
+        return mezSkip('not enough mobs in AE range')
+    end
+    if isMez and phase == 'notmatar' and spawnId then
+        local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawnId))
+        spellutils.DbgMezTrace('needs cast on %s (id %s)', name, spawnId)
     end
     return true
 end
@@ -644,6 +656,7 @@ function botdebuff.DebuffCheck(runPriority)
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
+        noResume = true,
         immuneCheck = true,
         beforeCast = DebuffOnBeforeCast,
         customCastFn = DebuffCheckBardNotmatarCast,
