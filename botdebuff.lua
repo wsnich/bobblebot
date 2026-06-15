@@ -184,8 +184,15 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
             return false
         end
     end
-    if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, 6000) then
-        return mezSkip('debuff still active')
+    if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and ctx.spellid
+        and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, 6000) then
+        if isMez and phase == 'notmatar' and tarstacks and spawnId then
+            -- Stale internal tracking: MQ says mez can land but we think it is still active.
+            spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
+            spellutils.DbgMezTrace('cleared stale debuff tracking on id %s', spawnId)
+        else
+            return mezSkip('debuff still active')
+        end
     end
     if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, spawn.ID(), ctx.aeRange) < ctx.mintar then
         return mezSkip('not enough mobs in AE range')
@@ -233,6 +240,9 @@ local function DebuffEvalNotmatar(index, ctx)
                 if DebuffSpawnNeedsSpell(entry, ctx, v, 'notmatar') then
                     return v.ID(), 'notmatar'
                 end
+            elseif spellutils.IsMezSpell(entry) then
+                local name = (v.CleanName and v.CleanName()) or ('id ' .. tostring(vid))
+                spellutils.DbgMezTrace('skip %s (id %s) - hp band', name, vid)
             end
         end
     end
@@ -321,11 +331,32 @@ local function debuffGetTargetsForPhase(phase, context)
         return out
     end
     if phase == 'notmatar' then
-        for _, v in ipairs(mobList) do
-            local vid = v.ID and v.ID() or v
-            if vid and (not maTargetId or vid ~= maTargetId) then
-                out[#out + 1] = { id = vid, targethit = 'notmatar' }
+        -- Only return spawns that still need a notmatar debuff (walks mobList like DebuffEvalNotmatar).
+        -- A static "all non-MA mobs" list re-scans already-mezzed adds every tick and can appear stuck
+        -- on the first entry while never casting on the next eligible add.
+        local seen = {}
+        local spellCount = context.debuffCount or botconfig.getSpellCount('debuff')
+        for si = 1, spellCount do
+            local db = DebuffBands[si]
+            if db and db.notmatar then
+                local ctx = DebuffEvalBuildContext(si)
+                if ctx then
+                    local id, hit = DebuffEvalNotmatar(si, ctx)
+                    if id and not seen[id] then
+                        seen[id] = true
+                        out[#out + 1] = { id = id, targethit = hit or 'notmatar' }
+                    end
+                end
             end
+        end
+        if #out > 0 then
+            local parts = {}
+            for i, t in ipairs(out) do
+                local sp = mq.TLO.Spawn(t.id)
+                local name = (sp and sp.CleanName and sp.CleanName()) or tostring(t.id)
+                parts[i] = string.format('%s(%s)', name, t.id)
+            end
+            printf('\ayCZBot:\ax [Mez] notmatar targets this tick: %s', table.concat(parts, ', '))
         end
         return out
     end

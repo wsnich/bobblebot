@@ -1057,7 +1057,7 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
             if buffPresent then
                 local myduration = durationSec * 1000 + mq.gettime()
                 if not rc.CurSpell.resisted then
-                    spellstates.DebuffListUpdate(EvalID, spellid, myduration)
+                    spellstates.DebuffListUpdate(EvalID, entry.spell, myduration)
                     spellstates.ResetRecastCounter(EvalID, index)
                 end
             end
