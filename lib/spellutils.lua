@@ -982,12 +982,17 @@ end
 local _mezDbgNextTime = 0
 local MEZ_DBG_INTERVAL_MS = 2000
 
+--- Mez diagnostic with session ms timestamp (unthrottled).
+function spellutils.MezLog(fmt, ...)
+    printf('\ayCZBot:\ax [Mez t=%s] ' .. fmt, tostring(mq.gettime()), ...)
+end
+
 --- Throttled mez/debuff resume diagnostic (see botdebuff multi-mez debugging).
 function spellutils.DbgMezTrace(fmt, ...)
     local now = mq.gettime()
     if now < _mezDbgNextTime then return end
     _mezDbgNextTime = now + MEZ_DBG_INTERVAL_MS
-    printf('\ayCZBot:\ax [Mez] ' .. fmt, ...)
+    spellutils.MezLog(fmt, ...)
 end
 
 --- True when spawn has the named detrimental (uses Spawn TLO, not current Target).
@@ -1195,7 +1200,7 @@ function spellutils.clearCastingStateOrResume()
     casting.clear()
     local sr = resolveSpellcheckResumePayload(state.getRunStatePayload())
     if hadSub == 'debuff' then
-        spellutils.DbgMezTrace('clearCastingStateOrResume -> idle (debuff does not resume)')
+        spellutils.MezLog('clearCastingStateOrResume -> idle (debuff does not resume)')
     end
     if shouldSetHookResumeAfterCast(sr) then
         state.setRunState(state.RESUME_BY_HOOK[sr.hook], sr)
@@ -1431,10 +1436,21 @@ function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, target
         if not spellNotInBook and entryValid then
             local EvalID, hit = targetNeedsSpellFn(spellIndex, targetId, targethit, context, phase)
             if EvalID and hit then
-                if (not options.beforeCast or options.beforeCast(spellIndex, EvalID, hit))
-                    and (not options.immuneCheck or spellutils.ImmuneCheck(sub, spellIndex, EvalID))
-                    and spellutils.PreCondCheck(sub, spellIndex, EvalID) then
-                    return spellIndex, EvalID, hit
+                local entry = botconfig.getSpellEntry(sub, spellIndex)
+                local mezDbg = options.mezDebug and sub == 'debuff' and phase == 'notmatar'
+                    and entry and spellutils.IsMezSpell(entry)
+                if not options.beforeCast or options.beforeCast(spellIndex, EvalID, hit) then
+                    if not options.immuneCheck or spellutils.ImmuneCheck(sub, spellIndex, EvalID) then
+                        if spellutils.PreCondCheck(sub, spellIndex, EvalID) then
+                            return spellIndex, EvalID, hit
+                        elseif mezDbg then
+                            spellutils.MezLog('reject idx=%s id=%s: precondition failed', spellIndex, EvalID)
+                        end
+                    elseif mezDbg then
+                        spellutils.MezLog('reject idx=%s id=%s: immune', spellIndex, EvalID)
+                    end
+                elseif mezDbg then
+                    spellutils.MezLog('reject idx=%s id=%s: beforeCast', spellIndex, EvalID)
                 end
             end
         end
@@ -1509,6 +1525,10 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                             local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
                                 fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn,
                                 phase)
+                            if not spellIndex and options.mezDebug and sub == 'debuff' and phase == 'notmatar' then
+                                spellutils.MezLog('no spell passed gates for id=%s (indices tried: %s)', target.id,
+                                    table.concat(fromSpellIndices, ','))
+                            end
                             if spellIndex and EvalID and targethit then
                                 local entry = botconfig.getSpellEntry(sub, spellIndex)
                                 if entry and spellutils.IsGroupOnlySpell(entry) and targethit ~= 'self' and not spellutils.IsSpawnInMyGroup(EvalID) then
@@ -1912,6 +1932,11 @@ end
 
 function spellutils.RequireTargetThenDontStackDebuff(entry, EvalID)
     if not (entry and entry.dontStack and #entry.dontStack > 0) then return false end
+    -- Match DebuffSpawnNeedsSpell: StacksSpawn is authoritative; Target[Mezzed] alone can
+    -- false-positive and abort every retry while the eval path still says "needs cast".
+    if spellutils.SpellStacksSpawn(entry, EvalID) then
+        return false
+    end
     if mq.TLO.Target.ID() ~= EvalID then
         mq.cmdf('/tar id %s', EvalID)
         mq.delay(500, function() return mq.TLO.Target.BuffsPopulated() == true end)
@@ -1920,10 +1945,12 @@ function spellutils.RequireTargetThenDontStackDebuff(entry, EvalID)
         local tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
         if tag then
             spellutils.RecordDontStackDebuffFromTarget(EvalID, entry.spell, tag)
-            return true
+            if spellutils.IsMezSpell(entry) then
+                spellutils.MezLog('dontStack skip id=%s (already %s)', tostring(EvalID), tag)
+            end
         end
     end
-    return false
+    return true
 end
 
 --- Empty cursor into inventory when needed so casting can proceed (hands-full blocks cast commands).
@@ -1954,8 +1981,8 @@ local function dbgCastPhase(phase, sub, index, runPriority)
     local now = mq.gettime()
     if now < _castPhaseDbgNextTime then return end
     _castPhaseDbgNextTime = now + CAST_PHASE_DBG_INTERVAL_MS
-    printf('\ayCZBot:\ax [cast] %s sub=%s idx=%s runPriority=%s', tostring(phase), tostring(sub), tostring(index),
-        tostring(runPriority))
+    printf('\ayCZBot:\ax [cast t=%s] %s sub=%s idx=%s runPriority=%s', tostring(now), tostring(phase),
+        tostring(sub), tostring(index), tostring(runPriority))
 end
 
 --- Only for cast types MQ2Cast does not support. Called from CastSpell when gem is script/disc/ability.
@@ -1976,13 +2003,19 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     local meId = mq.TLO.Me.ID()
     local entry = botconfig.getSpellEntry(sub, index)
     if not entry then return false end
+    local mezCastDbg = sub == 'debuff' and targethit == 'notmatar' and spellutils.IsMezSpell(entry)
+    local function mezBlocked(reason)
+        if mezCastDbg then
+            spellutils.MezLog('CastSpell blocked idx=%s id=%s: %s', index, tostring(EvalID), reason)
+        end
+    end
     local resuming = (rc.CurSpell and rc.CurSpell.phase and rc.CurSpell.spell == index and rc.CurSpell.sub == sub)
     if not resuming then
-        if not state.canStartBusyState(state.STATES.casting) then return false end
-        if not spellutils.SpellCheck(sub, index) then return false end
-        if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then return false end
-        if not spellutils.CheckGemReadiness(sub, index, entry) then return false end
-        if spellutils.ShouldDeferMQ2CastForGemCooldown(entry) then return false end
+        if not state.canStartBusyState(state.STATES.casting) then mezBlocked('busy state'); return false end
+        if not spellutils.SpellCheck(sub, index) then mezBlocked('SpellCheck'); return false end
+        if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then mezBlocked('CastTimeLeft'); return false end
+        if not spellutils.CheckGemReadiness(sub, index, entry) then mezBlocked('gem not ready'); return false end
+        if spellutils.ShouldDeferMQ2CastForGemCooldown(entry) then mezBlocked('gem cooldown'); return false end
         rc.CurSpell = {
             sub = sub,
             spell = index,
@@ -2050,6 +2083,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         return true
     end
     if sub == 'debuff' and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
+        mezBlocked('dontStack on target')
         spellutils.clearCastingStateOrResume()
         return false
     end
@@ -2074,9 +2108,13 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         rc.CurSpell.spellid = castSpellId
         spellutils.AutoinvIfCursorBlockingCast()
         if not casting.start(castRequest) then
+            mezBlocked('casting.start failed')
             rc.CurSpell = {}
             rc.statusMessage = ''
             return false
+        end
+        if mezCastDbg then
+            spellutils.MezLog('CastSpell started idx=%s id=%s gem=%s', index, tostring(EvalID), tostring(gem))
         end
         rc.CurSpell.phase = 'casting'
         dbgCastPhase('casting', sub, index, runPriority)

@@ -199,7 +199,7 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
     end
     if isMez and phase == 'notmatar' and spawnId then
         local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawnId))
-        spellutils.DbgMezTrace('needs cast on %s (id %s)', name, spawnId)
+        spellutils.MezLog('needs cast on %s (id %s)', name, spawnId)
     end
     return true
 end
@@ -356,7 +356,8 @@ local function debuffGetTargetsForPhase(phase, context)
                 local name = (sp and sp.CleanName and sp.CleanName()) or tostring(t.id)
                 parts[i] = string.format('%s(%s)', name, t.id)
             end
-            printf('\ayCZBot:\ax [Mez] notmatar targets this tick: %s', table.concat(parts, ', '))
+            printf('\ayCZBot:\ax [Mez t=%s] notmatar targets this tick: %s', tostring(mq.gettime()),
+                table.concat(parts, ', '))
         end
         return out
     end
@@ -688,6 +689,7 @@ function botdebuff.DebuffCheck(runPriority)
         skipInterruptForBRD = true,
         runPriority = runPriority,
         noResume = true,
+        mezDebug = true,
         immuneCheck = true,
         beforeCast = DebuffOnBeforeCast,
         customCastFn = DebuffCheckBardNotmatarCast,
