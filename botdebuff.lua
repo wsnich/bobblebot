@@ -198,8 +198,9 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
             return false
         end
     end
+    local debuffRefreshThresholdMs = spellutils.GetDebuffRefreshThresholdMs()
     if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and ctx.spellid
-        and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, 6000) then
+        and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, debuffRefreshThresholdMs) then
         if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId) then
             spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
             spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)

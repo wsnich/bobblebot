@@ -77,6 +77,12 @@ local function getMezActiveThresholdMs()
     return MEZ_ACTIVE_MIN_MS
 end
 
+--- Debuff refresh threshold (all debuffs): re-cast when remaining <= threshold.
+--- Enchanters: 18s, Bards: 6s.
+function spellutils.GetDebuffRefreshThresholdMs()
+    return getMezActiveThresholdMs()
+end
+
 --- Remaining ms of the longest Enthrall (mez) buff on spawn; 0 if none or expired.
 function spellutils.SpawnEnthrallRemainingMs(spawnId)
     if not spawnId or spawnId <= 0 then return 0 end
@@ -1877,18 +1883,18 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
             spellutils.clearCastingStateOrResume()
         end
     elseif sub == 'debuff' then
-        local shouldInterrupt = (buffPresent and mq.TLO.Spell(spellid).CategoryID() ~= 20) or not stacks
-        if shouldInterrupt then
-            if not stacks then
-                printf('\ayCZBot:\axInterrupt %s on MobID %s Name %s, debuff does not stack', spellname, target,
-                    targetname)
-            else
-                printf('\ayCZBot:\axInterrupt %s on MobID %s, debuff already present', spellname, target)
+        -- For refresh casters: only interrupt if the existing debuff has MORE time left than we want.
+        -- This prevents getting interrupted mid-refresh when remaining is already below the recast threshold.
+        if buffPresent then
+            local thresholdMs = spellutils.GetDebuffRefreshThresholdMs()
+            if (buffdur or 0) > thresholdMs then
+                printf('\ayCZBot:\axInterrupt %s on MobID %s, debuff remaining %sms > %sms', spellname, target,
+                    tostring(buffdur or 0), tostring(thresholdMs))
+                local expire = (mq.TLO.Target.Buff(spellname).Duration() or 0) + mq.gettime()
+                spellstates.DebuffListUpdate(target, spellid, expire)
+                spellutils.interruptActiveCast(rc)
+                spellutils.clearCastingStateOrResume()
             end
-            local expire = (mq.TLO.Target.Buff(spellname).Duration() or 0) + mq.gettime()
-            spellstates.DebuffListUpdate(target, spellid, expire)
-            spellutils.interruptActiveCast(rc)
-            spellutils.clearCastingStateOrResume()
         end
     end
 end
