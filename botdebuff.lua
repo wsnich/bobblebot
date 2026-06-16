@@ -200,7 +200,12 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
     end
     if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and ctx.spellid
         and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, 6000) then
-        return mezSkip('debuff still active')
+        if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId) then
+            spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
+            spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)
+        else
+            return mezSkip('debuff still active')
+        end
     end
     if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, spawn.ID(), ctx.aeRange) < ctx.mintar then
         return mezSkip('not enough mobs in AE range')

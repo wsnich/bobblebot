@@ -64,6 +64,45 @@ function spellutils.TargetHasDebuffCategory(categories)
     return nil
 end
 
+-- Refresh (remez) when Enthrall has less than this remaining.
+-- Semantics: SpawnMezActive() returns true only when remaining > threshold.
+--
+-- For ENC/BRD we want quick refresh to avoid long mez downtimes.
+local MEZ_ACTIVE_MIN_MS = 18000 -- default: remez when Enthrall remaining <= 18s
+local MEZ_ACTIVE_MIN_MS_BRD = 6000 -- BRD: remez when Enthrall remaining <= 6s
+
+local function getMezActiveThresholdMs()
+    local cls = mq.TLO.Me.Class.ShortName and mq.TLO.Me.Class.ShortName() or nil
+    if cls == 'BRD' then return MEZ_ACTIVE_MIN_MS_BRD end
+    return MEZ_ACTIVE_MIN_MS
+end
+
+--- Remaining ms of the longest Enthrall (mez) buff on spawn; 0 if none or expired.
+function spellutils.SpawnEnthrallRemainingMs(spawnId)
+    if not spawnId or spawnId <= 0 then return 0 end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() ~= spawnId then return 0 end
+    local maxSlots = (sp.MaxBuffSlots and sp.MaxBuffSlots()) or 40
+    local best = 0
+    for i = 1, maxSlots do
+        local b = sp.Buff(i)
+        if b and b() then
+            local okSub, sub = pcall(function() return b.Subcategory and b.Subcategory() end)
+            if okSub and sub == 'Enthrall' then
+                local okDur, dur = pcall(function() return b.Duration and b.Duration() or 0 end)
+                local d = (okDur and dur) or 0
+                if d > best then best = d end
+            end
+        end
+    end
+    return best
+end
+
+--- True when spawn has an Enthrall buff with more than minRemMs left (default 3s).
+function spellutils.SpawnMezActive(spawnId, minRemMs)
+    return spellutils.SpawnEnthrallRemainingMs(spawnId) > (minRemMs or getMezActiveThresholdMs())
+end
+
 --- Same as TargetHasDebuffCategory but uses Spawn TLO (no retarget required).
 function spellutils.SpawnHasDebuffCategory(spawnId, categories)
     if not spawnId or spawnId <= 0 or not categories or #categories == 0 then return nil end
@@ -71,22 +110,22 @@ function spellutils.SpawnHasDebuffCategory(spawnId, categories)
     if not sp or not sp.ID() or sp.ID() ~= spawnId then return nil end
     for _, tag in ipairs(categories) do
         if botconfig.DEBUFF_DONTSTACK_ALLOWED[tag] then
-            local cat = sp[tag]
-            if cat and cat.ID then
-                local id = cat.ID()
-                if id and id > 0 then return tag end
-            end
-            local ok, has = pcall(function() return cat and cat() end)
-            if ok and has then return tag end
             if tag == 'Mezzed' then
-                local maxSlots = (sp.MaxBuffSlots and sp.MaxBuffSlots()) or 40
-                for i = 1, maxSlots do
-                    local b = sp.Buff(i)
-                    if b and b() then
-                        local okSub, sub = pcall(function() return b.Subcategory and b.Subcategory() end)
-                        if okSub and sub == 'Enthrall' then return tag end
+                if spellutils.SpawnMezActive(spawnId) then return tag end
+            else
+                local cat = sp[tag]
+                if cat and cat.ID then
+                    local id = cat.ID()
+                    if id and id > 0 then
+                        local remSec = 0
+                        if cat.MyDuration then
+                            remSec = tonumber(cat.MyDuration.TotalSeconds()) or 0
+                        end
+                        if remSec <= 0 or remSec * 1000 > MEZ_ACTIVE_MIN_MS then return tag end
                     end
                 end
+                local ok, has = pcall(function() return cat and cat() end)
+                if ok and has then return tag end
             end
         end
     end
@@ -96,6 +135,13 @@ end
 --- Record dontStack debuff timer from spawn category buff (or our spell duration as fallback).
 function spellutils.RecordDontStackDebuffFromSpawn(spawnId, ourSpell, categoryTag)
     if not spawnId or not ourSpell or not categoryTag then return end
+    if categoryTag == 'Mezzed' then
+        local remMs = spellutils.SpawnEnthrallRemainingMs(spawnId)
+        if remMs > getMezActiveThresholdMs() then
+            spellstates.DebuffListUpdate(spawnId, ourSpell, mq.gettime() + remMs)
+        end
+        return
+    end
     local sp = mq.TLO.Spawn(spawnId)
     if not sp or not sp.ID() or sp.ID() ~= spawnId then return end
     local durationSec = 0
@@ -1049,7 +1095,8 @@ function spellutils.SpawnHasDebuffSpell(spellName, spawnId)
     if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
     local buff = sp.Buff(spellName)
     if buff and buff() and buff.ID() and buff.ID() > 0 then
-        return true
+        local ok, dur = pcall(function() return buff.Duration and buff.Duration() or 0 end)
+        return (ok and dur or 0) > MEZ_ACTIVE_MIN_MS
     end
     return false
 end
@@ -1112,6 +1159,12 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
             end
             if buffPresent then
                 local myduration = durationSec * 1000 + mq.gettime()
+                if EvalID and spellutils.IsMezSpell(entry) then
+                    local remMs = spellutils.SpawnEnthrallRemainingMs(EvalID)
+                    if remMs > 0 then
+                        myduration = mq.gettime() + remMs
+                    end
+                end
                 if not rc.CurSpell.resisted then
                     spellstates.DebuffListUpdate(EvalID, entry.spell, myduration)
                     spellstates.ResetRecastCounter(EvalID, index)
@@ -1748,7 +1801,12 @@ function spellutils.InterruptCheckDontStack(entry, target, spellname)
     if mq.TLO.Me.CastTimeLeft() <= 0 then return end
     local tag = spellutils.SpawnHasDebuffCategory(target, entry.dontStack)
     if not tag and mq.TLO.Target.ID() == target and mq.TLO.Target.BuffsPopulated() then
-        tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
+        local tTag = spellutils.TargetHasDebuffCategory(entry.dontStack)
+        if tTag and tTag ~= 'Mezzed' then
+            tag = tTag
+        elseif tTag == 'Mezzed' and spellutils.SpawnMezActive(target) then
+            tag = tTag
+        end
     end
     if not tag then return end
     printf('\ayCZBot:\axInterrupt %s, target already %s', spellname, tag)
