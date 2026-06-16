@@ -64,19 +64,66 @@ function spellutils.TargetHasDebuffCategory(categories)
     return nil
 end
 
+--- Same as TargetHasDebuffCategory but uses Spawn TLO (no retarget required).
+function spellutils.SpawnHasDebuffCategory(spawnId, categories)
+    if not spawnId or spawnId <= 0 or not categories or #categories == 0 then return nil end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() ~= spawnId then return nil end
+    for _, tag in ipairs(categories) do
+        if botconfig.DEBUFF_DONTSTACK_ALLOWED[tag] then
+            local cat = sp[tag]
+            if cat and cat.ID then
+                local id = cat.ID()
+                if id and id > 0 then return tag end
+            end
+            local ok, has = pcall(function() return cat and cat() end)
+            if ok and has then return tag end
+            if tag == 'Mezzed' then
+                local maxSlots = (sp.MaxBuffSlots and sp.MaxBuffSlots()) or 40
+                for i = 1, maxSlots do
+                    local b = sp.Buff(i)
+                    if b and b() then
+                        local okSub, sub = pcall(function() return b.Subcategory and b.Subcategory() end)
+                        if okSub and sub == 'Enthrall' then return tag end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+--- Record dontStack debuff timer from spawn category buff (or our spell duration as fallback).
+function spellutils.RecordDontStackDebuffFromSpawn(spawnId, ourSpell, categoryTag)
+    if not spawnId or not ourSpell or not categoryTag then return end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() ~= spawnId then return end
+    local durationSec = 0
+    local spellRef = sp[categoryTag]
+    if spellRef and spellRef.MyDuration then
+        durationSec = tonumber(spellRef.MyDuration.TotalSeconds()) or 0
+    end
+    if durationSec <= 0 and mq.TLO.Spell(ourSpell)() and mq.TLO.Spell(ourSpell).MyDuration then
+        durationSec = tonumber(mq.TLO.Spell(ourSpell).MyDuration.TotalSeconds()) or 0
+    end
+    if durationSec <= 0 then return end
+    spellstates.DebuffListUpdate(spawnId, ourSpell, mq.gettime() + durationSec * 1000)
+end
+
 --- Record that our spell should be considered "on spawn" until the other spell's duration, so we don't re-attempt every tick. Call when target is current target. categoryTag = e.g. 'Snared'.
 function spellutils.RecordDontStackDebuffFromTarget(targetSpawnId, ourSpell, categoryTag)
     if not targetSpawnId or not ourSpell or not categoryTag then return end
-    local spellRef = mq.TLO.Target[categoryTag]
-    if not spellRef then return end
-    local durationSec = 0
-    if spellRef.MyDuration then
-        durationSec = tonumber(spellRef.MyDuration.TotalSeconds()) or
-            0 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
+    if mq.TLO.Target.ID() == targetSpawnId then
+        local spellRef = mq.TLO.Target[categoryTag]
+        if spellRef and spellRef.MyDuration then
+            local durationSec = tonumber(spellRef.MyDuration.TotalSeconds()) or 0
+            if durationSec > 0 then
+                spellstates.DebuffListUpdate(targetSpawnId, ourSpell, mq.gettime() + durationSec * 1000)
+                return
+            end
+        end
     end
-    if durationSec <= 0 then return end
-    local expire = mq.gettime() + durationSec * 1000
-    spellstates.DebuffListUpdate(targetSpawnId, ourSpell, expire)
+    spellutils.RecordDontStackDebuffFromSpawn(targetSpawnId, ourSpell, categoryTag)
 end
 
 function spellutils.Init(deps)
@@ -996,7 +1043,7 @@ function spellutils.DbgMezTrace(fmt, ...)
 end
 
 --- True when spawn has the named detrimental (uses Spawn TLO, not current Target).
-local function spawnHasDebuffSpell(spellName, spawnId)
+function spellutils.SpawnHasDebuffSpell(spellName, spawnId)
     if not spawnId or spawnId <= 0 or not spellName or spellName == '' then return false end
     local sp = mq.TLO.Spawn(spawnId)
     if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
@@ -1005,6 +1052,10 @@ local function spawnHasDebuffSpell(spellName, spawnId)
         return true
     end
     return false
+end
+
+local function spawnHasDebuffSpell(spellName, spawnId)
+    return spellutils.SpawnHasDebuffSpell(spellName, spawnId)
 end
 
 local function resolveSpellcheckResumePayload(p)
@@ -1694,11 +1745,14 @@ end
 
 function spellutils.InterruptCheckDontStack(entry, target, spellname)
     if not (entry.dontStack and #entry.dontStack > 0) then return end
-    if mq.TLO.Me.CastTimeLeft() <= 0 or mq.TLO.Target.ID() ~= target or not mq.TLO.Target.BuffsPopulated() then return end
-    local tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
+    if mq.TLO.Me.CastTimeLeft() <= 0 then return end
+    local tag = spellutils.SpawnHasDebuffCategory(target, entry.dontStack)
+    if not tag and mq.TLO.Target.ID() == target and mq.TLO.Target.BuffsPopulated() then
+        tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
+    end
     if not tag then return end
     printf('\ayCZBot:\axInterrupt %s, target already %s', spellname, tag)
-    spellutils.RecordDontStackDebuffFromTarget(target, entry.spell, tag)
+    spellutils.RecordDontStackDebuffFromSpawn(target, entry.spell, tag)
     spellutils.interruptActiveCast(state.getRunconfig())
     spellutils.clearCastingStateOrResume()
 end
@@ -1932,25 +1986,31 @@ end
 
 function spellutils.RequireTargetThenDontStackDebuff(entry, EvalID)
     if not (entry and entry.dontStack and #entry.dontStack > 0) then return false end
-    -- Match DebuffSpawnNeedsSpell: StacksSpawn is authoritative; Target[Mezzed] alone can
-    -- false-positive and abort every retry while the eval path still says "needs cast".
-    if spellutils.SpellStacksSpawn(entry, EvalID) then
-        return false
+    local tag = spellutils.SpawnHasDebuffCategory(EvalID, entry.dontStack)
+    if tag then
+        spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, tag)
+        if spellutils.IsMezSpell(entry) then
+            spellutils.MezLog('dontStack skip id=%s (spawn already %s)', tostring(EvalID), tag)
+        end
+        return true
     end
-    if mq.TLO.Target.ID() ~= EvalID then
-        mq.cmdf('/tar id %s', EvalID)
-        mq.delay(500, function() return mq.TLO.Target.BuffsPopulated() == true end)
-    end
-    if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.BuffsPopulated() then
-        local tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
-        if tag then
-            spellutils.RecordDontStackDebuffFromTarget(EvalID, entry.spell, tag)
-            if spellutils.IsMezSpell(entry) then
-                spellutils.MezLog('dontStack skip id=%s (already %s)', tostring(EvalID), tag)
+    if not spellutils.SpellStacksSpawn(entry, EvalID) then
+        if mq.TLO.Target.ID() ~= EvalID then
+            mq.cmdf('/tar id %s', EvalID)
+            mq.delay(500, function() return mq.TLO.Target.BuffsPopulated() == true end)
+        end
+        if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.BuffsPopulated() then
+            tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
+            if tag then
+                spellutils.RecordDontStackDebuffFromTarget(EvalID, entry.spell, tag)
+                if spellutils.IsMezSpell(entry) then
+                    spellutils.MezLog('dontStack skip id=%s (target already %s)', tostring(EvalID), tag)
+                end
             end
         end
+        return true
     end
-    return true
+    return false
 end
 
 --- Empty cursor into inventory when needed so casting can proceed (hands-full blocks cast commands).

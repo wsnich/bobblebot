@@ -173,6 +173,20 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
         printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - target level %s exceeds spell max level %s', name, spawn.ID(), spawnLevel, ctx.spellmaxlvl)
         return false
     end
+    if entry.dontStack and spawnId then
+        local dontTag = spellutils.SpawnHasDebuffCategory(spawnId, entry.dontStack)
+        if dontTag then
+            spellutils.RecordDontStackDebuffFromSpawn(spawnId, entry.spell, dontTag)
+            if isMez and phase == 'notmatar' then
+                return mezSkip('spawn already ' .. dontTag)
+            end
+            return false
+        end
+    end
+    if isMez and phase == 'notmatar' and entry.spell and spawnId
+        and spellutils.SpawnHasDebuffSpell(entry.spell, spawnId) then
+        return mezSkip('our mez on spawn')
+    end
     local tarstacks = spellutils.SpellStacksSpawn(entry, spawn.ID())
     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks then
         if phase == 'notmatar' and isMez then
@@ -186,13 +200,7 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
     end
     if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and ctx.spellid
         and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, 6000) then
-        if isMez and phase == 'notmatar' and tarstacks and spawnId then
-            -- Stale internal tracking: MQ says mez can land but we think it is still active.
-            spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
-            spellutils.DbgMezTrace('cleared stale debuff tracking on id %s', spawnId)
-        else
-            return mezSkip('debuff still active')
-        end
+        return mezSkip('debuff still active')
     end
     if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, spawn.ID(), ctx.aeRange) < ctx.mintar then
         return mezSkip('not enough mobs in AE range')
