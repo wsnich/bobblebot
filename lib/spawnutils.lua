@@ -149,6 +149,24 @@ function spawnutils.shouldChaseOutsideCamp(rc)
     return spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id))
 end
 
+--- True when an alive engageTargetId should not be cleared just because it left MobList.
+function spawnutils.shouldPreserveStickyEngage(rc)
+    rc = rc or state.getRunconfig()
+    if not rc.engageTargetId or rc.engageTargetId <= 0 then return false end
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) then return false end
+    if spawnutils.shouldChaseOutsideCamp(rc) then return true end
+    local tankrole = require('lib.tankrole')
+    local botconfig = require('lib.config')
+    if tankrole.AmIMainAssist() then return true end
+    if tankrole.AmIMainTank() and botconfig.config.melee.mtSticky and mq.TLO.Me.Combat() then
+        return true
+    end
+    for _, v in ipairs(rc.MobList or {}) do
+        if v.ID() == rc.engageTargetId then return true end
+    end
+    return false
+end
+
 function spawnutils.isSpawnInCampRadius(spawn, rc)
     if not spawn then return false end
     rc = rc or state.getRunconfig()
@@ -528,6 +546,19 @@ function spawnutils.mergeKillTargetIntoMobList(rc)
     table.insert(rc.MobList, mq.TLO.Spawn(KillTarget))
 end
 
+--- If engageTargetId is set and alive, add that spawn to rc.MobList when not already present.
+function spawnutils.mergeEngageTargetIntoMobList(rc)
+    rc = rc or state.getRunconfig()
+    local id = rc.engageTargetId
+    if not id or id <= 0 then return end
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id)) then return end
+    for _, v in ipairs(rc.MobList or {}) do
+        if v.ID() == id then return end
+    end
+    local sp = mq.TLO.Spawn(id)
+    if sp and sp.ID() then table.insert(rc.MobList, sp) end
+end
+
 local function shouldSkipFTERecheck(rc)
     if state.getRunState() == state.STATES.pulling then return true end
     if state.getRunState() == state.STATES.casting then return true end
@@ -594,6 +625,7 @@ function spawnutils.AddSpawnCheck()
     spawnutils.tickCombatFTERechecks(rc)
     spawnutils.buildAndSetCampMobList(rc)
     spawnutils.mergeKillTargetIntoMobList(rc)
+    spawnutils.mergeEngageTargetIntoMobList(rc)
     spellstates.PruneDebuffStateNotInMobList(rc.MobList)
     if mq.TLO.Me.Class.ShortName() == 'BRD' and #(rc.MobList or {}) == 0 then
         if utils.isNearPrimaryBindPoint() then

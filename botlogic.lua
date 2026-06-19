@@ -259,19 +259,8 @@ local function charState_PostDead()
             end
         end
     end
-    if not rc.attackCommandEngage and not spawnutils.shouldChaseOutsideCamp(rc) then
-        local keepEngage = false
-        if rc.engageTargetId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) then
-            for _, v in ipairs(rc.MobList or {}) do
-                if v.ID() == rc.engageTargetId then
-                    keepEngage = true
-                    break
-                end
-            end
-        end
-        if not keepEngage then
-            rc.engageTargetId = nil
-        end
+    if not rc.attackCommandEngage and not spawnutils.shouldPreserveStickyEngage(rc) then
+        rc.engageTargetId = nil
     end
     if mq.TLO.Plugin('MQ2GMCheck').IsLoaded() and (---@diagnostic disable-next-line: undefined-field
         mq.TLO.GMCheck() == 'TRUE') then

@@ -394,6 +394,19 @@ local function selectMATarget()
         return engageId
     end
 
+    if mq.TLO.Me.Combat() then
+        local curId = mq.TLO.Target.ID()
+        if curId and curId > 0 and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(curId)) then
+            local curSpawn = mq.TLO.Spawn(curId)
+            if curSpawn.Named() then
+                return curId
+            end
+            local namedId = findClosestEngageableNamed(rc.MobList)
+            if namedId then return namedId end
+            return curId
+        end
+    end
+
     if not rc.MobList or not rc.MobList[1] then return nil end
 
     -- Initial pick: named first, then closest engageable (mez/distance rules).
