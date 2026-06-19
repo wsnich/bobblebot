@@ -610,25 +610,40 @@ local function nonCurableDebuffNameFromBuff(b)
     return (okName and name) or 'debuff'
 end
 
-local ME_REZ_SICKNESS_NAMES = { 'Resurrection Sickness', 'Revival Sickness' }
+local ME_REZ_SICKNESS_SET = {
+    ['Resurrection Sickness'] = true,
+    ['Revival Sickness'] = true,
+}
 local ME_CATEGORY_DEBUFFS = { 'Snared', 'Rooted', 'Mezzed', 'Slowed', 'Feared', 'Silenced', 'Charmed', 'Crippled' }
+
+local function meRezSicknessFromSlots()
+    local maxBuff = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
+    for i = 1, maxBuff do
+        local b = mq.TLO.Me.Buff(i)
+        if buffSlotHasSpell(b) then
+            local okName, name = pcall(function() return b.Name and b.Name() or nil end)
+            if okName and name and ME_REZ_SICKNESS_SET[name] then return true, name end
+        end
+    end
+    local maxSong = (mq.TLO.Me.MaxSongSlots and mq.TLO.Me.MaxSongSlots()) or 20
+    for i = 1, maxSong do
+        local b = mq.TLO.Me.Song(i)
+        if buffSlotHasSpell(b) then
+            local okName, name = pcall(function() return b.Name and b.Name() or nil end)
+            if okName and name and ME_REZ_SICKNESS_SET[name] then return true, name end
+        end
+    end
+    return false
+end
 
 --- True when the player has a detrimental without counters (snare, rez sickness, etc.).
 --- Curable debuffs (poison/disease/curse/corruption with counters) return false.
 ---@return boolean hasDebuff
 ---@return string|nil debuffName
 function spellutils.MeHasNonCurableDebuff()
-    -- Rez sickness is a long buff with no counters; Me.Beneficial can be wrong — match by name first.
-    for _, sicknessName in ipairs(ME_REZ_SICKNESS_NAMES) do
-        local b = mq.TLO.Me.Buff(sicknessName)
-        if buffSlotHasSpell(b) then return true, sicknessName end
-        local ok, has = pcall(function() return mq.TLO.Me.Buff(sicknessName)() end)
-        if ok and has then return true, sicknessName end
-        b = mq.TLO.Me.FindBuff(sicknessName)
-        if buffSlotHasSpell(b) then return true, sicknessName end
-        ok, has = pcall(function() return mq.TLO.Me.FindBuff(sicknessName)() end)
-        if ok and has then return true, sicknessName end
-    end
+    -- Rez sickness is a long buff with no counters; Me.Beneficial can be wrong — match by name via slot index.
+    local hasRez, rezName = meRezSicknessFromSlots()
+    if hasRez then return true, rezName end
 
     for _, cat in ipairs(ME_CATEGORY_DEBUFFS) do
         local ok, b = pcall(function()
