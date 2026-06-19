@@ -153,3 +153,16 @@ flowchart LR
   - **Puller** = Group.Puller (group only; raid has no Puller)
 
 Raid has no Main Tank or Puller in the game UI, so those always come from the group.
+
+---
+
+## MA-anchored mob bubble
+
+When **`settings.maCampAnchor`** is on (default), DPS/support bots center their **mob list** (`# Mobs`) on the **Main Assist** when the MA is nearby, instead of only the camp pin.
+
+- **Anchor:** Uses charinfo `Zone.X/Y/Z` for bot MAs (Spawn TLO fallback for human MAs). MA must be within **`maAnchorLeash`** of this bot (defaults to **Radius** / `acleash`). If the MA is farther away (e.g. out pulling), the bubble falls back to the camp pin or player position.
+- **Combat inject:** When the MA's charinfo `State[]` includes **`ATTACK`** (auto-attack on; often alongside `STAND`, `GROUP`, etc.) and the MA has an NPC target, that target is added to MobList even if it failed normal area/LoS filters. MT is used as fallback when MA has no injectable target.
+- **Commands:** `/cz macampanchor on|off`, `/cz maanchorleash <n>`, `/cz mobfilter [id]` for diagnostics.
+- **GUI:** Status tab — **MA anchor** checkbox and **MA leash** next to Radius/ZRadius; `# Mobs` shows `[MA]`, `[Camp]`, or `[Self]` for the active scan center.
+
+Pull radius and camp-return leash are **not** affected — only the combat/debuff mob bubble follows the MA.

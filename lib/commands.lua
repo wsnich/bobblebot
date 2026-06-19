@@ -565,6 +565,34 @@ local function cmd_targetfilter(args)
     printf('\ayCZBot:\axSetting TargetFilter to %d', botconfig.config.settings.TargetFilter)
 end
 
+local function cmd_mobfilter(args)
+    local spawnutils = require('lib.spawnutils')
+    local id = args[2] and tonumber(args[2]) or nil
+    spawnutils.explainMobFilter(id)
+end
+
+local function cmd_macampanchor(args)
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        botconfig.config.settings.maCampAnchor = true
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        botconfig.config.settings.maCampAnchor = false
+    else
+        botconfig.config.settings.maCampAnchor = not (botconfig.config.settings.maCampAnchor ~= false)
+    end
+    printf('\ayCZBot:\ax MA camp anchor %s', botconfig.config.settings.maCampAnchor ~= false and 'on' or 'off')
+end
+
+local function cmd_maanchorleash(args)
+    local val = tonumber(args[2])
+    if not val or val < 1 then
+        printf('\ayCZBot:\ax Usage: /cz maanchorleash <number>')
+        return
+    end
+    botconfig.config.settings.maAnchorLeash = val
+    printf('\ayCZBot:\axSetting maAnchorLeash to %s', val)
+end
+
 local function cmd_offtank(args)
     if not args[2] then
         if botconfig.config.melee.offtank == true then
@@ -1025,6 +1053,9 @@ local handlers = {
     evadepct = cmd_evadepct,
     camprestdistance = cmd_camprestdistance,
     targetfilter = cmd_targetfilter,
+    mobfilter = cmd_mobfilter,
+    macampanchor = cmd_macampanchor,
+    maanchorleash = cmd_maanchorleash,
     offtank = cmd_offtank,
     cast = cmd_cast,
     setvar = cmd_setvar,

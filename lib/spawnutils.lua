@@ -7,6 +7,7 @@ local spellstates = require('lib.spellstates')
 local state = require('lib.state')
 local utils = require('lib.utils')
 local bardtwist = require('lib.bardtwist')
+local charinfoutils = require('lib.charinfoutils')
 
 local spawnutils = {}
 
@@ -33,13 +34,49 @@ local function spawnInArea(spawn, x, y, z, radius2DSq, radiusZ)
     return true
 end
 
-local function getSpawnsInArea(rc, radius2DSq, radiusZ)
-    local cx, cy, cz
-    if rc.campstatus and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
-        cx, cy, cz = rc.makecamp.x, rc.makecamp.y, rc.makecamp.z
-    else
-        cx, cy, cz = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+local function getMaAnchorLeash()
+    local settings = botconfig.config.settings
+    return tonumber(settings.maAnchorLeash) or tonumber(settings.acleash) or 75
+end
+
+local function isMaCampAnchorEnabled()
+    return botconfig.config.settings.maCampAnchor ~= false
+end
+
+local function getMaAnchorContext(rc)
+    if not isMaCampAnchorEnabled() then return nil end
+    local tankrole = require('lib.tankrole')
+    if tankrole.AmIMainAssist() then return nil end
+    local maName = tankrole.GetAssistTargetName()
+    if not maName or maName == '' then return nil end
+    local ctx = charinfoutils.getLeaderContext(maName)
+    if not ctx or not ctx.alive or not ctx.sameZone then return nil end
+    local leash = getMaAnchorLeash()
+    if not ctx.distance or ctx.distance > leash then return nil end
+    if not ctx.x or not ctx.y then return nil end
+    return ctx
+end
+
+--- MobList scan center: MA (charinfo) when nearby, else camp pin, else player.
+---@return number x, number y, number z, string source 'ma'|'camp'|'player'
+function spawnutils.getMobListAnchor(rc)
+    rc = rc or state.getRunconfig()
+    local maCtx = getMaAnchorContext(rc)
+    if maCtx then
+        return maCtx.x, maCtx.y, maCtx.z or mq.TLO.Me.Z(), 'ma'
     end
+    if rc.campstatus and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
+        return rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, 'camp'
+    end
+    return mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), 'player'
+end
+
+function spawnutils.getMaAnchorLeash()
+    return getMaAnchorLeash()
+end
+
+local function getSpawnsInArea(rc, radius2DSq, radiusZ)
+    local cx, cy, cz = spawnutils.getMobListAnchor(rc)
     local function predicate(spawn)
         local spawnType = spawn and spawn.Type()
         if not spawnType or spawnType == '' then return false end
@@ -172,7 +209,7 @@ function spawnutils.isSpawnInCampRadius(spawn, rc)
     rc = rc or state.getRunconfig()
     local myconfig = botconfig.config
     local zradius = myconfig.settings.zradius or 75
-    local cx, cy, cz = getCampAnchor(rc)
+    local cx, cy, cz = spawnutils.getMobListAnchor(rc)
     local acleashSq = myconfig.settings.acleashSq
     return spawnInArea(spawn, cx, cy, cz, acleashSq, zradius)
 end
@@ -374,12 +411,7 @@ local function filterSpawnForCamp(spawn, rc)
     if not spawnutils.isAliveEngageSpawn(spawn) then return false end
     local myconfig = botconfig.config
     local zradius = myconfig.settings.zradius or 75
-    local cx, cy, cz
-    if rc.campstatus and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
-        cx, cy, cz = rc.makecamp.x, rc.makecamp.y, rc.makecamp.z
-    else
-        cx, cy, cz = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
-    end
+    local cx, cy, cz = spawnutils.getMobListAnchor(rc)
     local acleashSq = myconfig.settings.acleashSq
     if not spawnInArea(spawn, cx, cy, cz, acleashSq, zradius) then return false end
     if not spawnutils.filterSpawnProtected(spawn) then return false end
@@ -559,6 +591,126 @@ function spawnutils.mergeEngageTargetIntoMobList(rc)
     if sp and sp.ID() then table.insert(rc.MobList, sp) end
 end
 
+local function mobListContainsId(mobList, spawnId)
+    for _, v in ipairs(mobList or {}) do
+        if v.ID() == spawnId then return true end
+    end
+    return false
+end
+
+local function leaderInjectEligible(rc, ctx, targetId)
+    if not ctx or not ctx.inAttack or not ctx.targetId then return false end
+    if ctx.targetId ~= targetId then return false end
+    local leash = getMaAnchorLeash()
+    if not ctx.sameZone or not ctx.distance or ctx.distance > leash then return false end
+    local sp = mq.TLO.Spawn(targetId)
+    if not spawnutils.isAliveEngageSpawn(sp) then return false end
+    if utils.isProtectedSpawn(sp) then return false end
+    if not spawnutils.filterSpawnExclude(sp, rc) then return false end
+    if spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(targetId, rc) then return false end
+    return true
+end
+
+local function tryInjectLeaderCombatTarget(rc, ctx)
+    if not leaderInjectEligible(rc, ctx, ctx and ctx.targetId) then return false end
+    local targetId = ctx.targetId
+    if mobListContainsId(rc.MobList, targetId) then return false end
+    table.insert(rc.MobList, mq.TLO.Spawn(targetId))
+    return true
+end
+
+--- Force-inject MA (then MT) NPC target when leader has ATTACK state and is within maAnchorLeash.
+function spawnutils.mergeLeaderCombatTarget(rc)
+    rc = rc or state.getRunconfig()
+    if not isMaCampAnchorEnabled() then return end
+    local tankrole = require('lib.tankrole')
+    local maName = tankrole.GetAssistTargetName()
+    local mtName = tankrole.GetMainTankName()
+    if maName and maName ~= '' then
+        local maCtx = charinfoutils.getLeaderContext(maName)
+        if tryInjectLeaderCombatTarget(rc, maCtx) then return end
+    end
+    if mtName and mtName ~= '' and mtName ~= maName then
+        local mtCtx = charinfoutils.getLeaderContext(mtName)
+        tryInjectLeaderCombatTarget(rc, mtCtx)
+    end
+end
+
+local function formatStateList(peer)
+    if not peer or not peer.State then return '(none)' end
+    local parts = {}
+    for _, v in ipairs(peer.State) do
+        parts[#parts + 1] = tostring(v)
+    end
+    if #parts == 0 then return '(none)' end
+    return table.concat(parts, ', ')
+end
+
+--- Print diagnostic lines for why a spawn is or is not in MobList.
+function spawnutils.explainMobFilter(spawnId)
+    spawnId = tonumber(spawnId) or mq.TLO.Target.ID()
+    if not spawnId or spawnId == 0 then
+        printf('\ayCZBot:\ax mobfilter: no target (pass spawn id or select a spawn)')
+        return
+    end
+    local rc = state.getRunconfig()
+    local myconfig = botconfig.config
+    local spawn = mq.TLO.Spawn(spawnId)
+    if not spawn or not spawn.ID() or spawn.ID() == 0 then
+        printf('\ayCZBot:\ax mobfilter: spawn id %s not found', tostring(spawnId))
+        return
+    end
+    local ax, ay, az, anchorSource = spawnutils.getMobListAnchor(rc)
+    local zradius = myconfig.settings.zradius or 75
+    local acleashSq = myconfig.settings.acleashSq
+    local inArea = spawnInArea(spawn, ax, ay, az, acleashSq, zradius)
+    local tfNum = myconfig.settings.TargetFilter or 0
+    local inList = mobListContainsId(rc.MobList, spawnId)
+
+    printf('\ayCZBot:\ax mobfilter for %s (id %s)', spawn.CleanName() or '?', tostring(spawnId))
+    printf('  MobList anchor: %s at %.1f, %.1f, %.1f', anchorSource, ax or 0, ay or 0, az or 0)
+    printf('  In MobList: %s', inList and 'yes' or 'no')
+    printf('  alive: %s', spawnutils.isAliveEngageSpawn(spawn) and 'yes' or 'no')
+    printf('  inArea (2D+Z from anchor): %s', inArea and 'yes' or 'no')
+    printf('  protected: %s', utils.isProtectedSpawn(spawn) and 'yes' or 'no')
+    printf('  exclude list: %s', spawnutils.filterSpawnExclude(spawn, rc) and 'pass' or 'FAIL')
+    printf('  engagetracker: %s', spawnutils.isEngageTracked(spawnId, rc) and 'FAIL' or 'pass')
+    printf('  FTE combat block: %s', spawnutils.isCombatFTEBlocked(spawnId, rc) and 'FAIL' or 'pass')
+    printf('  roam unpullable: %s',
+        (spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(spawnId, rc)) and 'FAIL' or 'pass')
+    printf('  TargetFilter (%d): %s', tfNum, filterSpawnTargetFilter(spawn, tfNum) and 'pass' or 'FAIL')
+    printf('  filterSpawnForCamp: %s', filterSpawnForCamp(spawn, rc) and 'pass' or 'FAIL')
+
+    local tankrole = require('lib.tankrole')
+    local maName = tankrole.GetAssistTargetName()
+    if maName and maName ~= '' then
+        local maCtx = charinfoutils.getLeaderContext(maName)
+        if maCtx then
+            printf('  MA %s (%s): dist=%s inAttack=%s targetId=%s',
+                maName, maCtx.source,
+                maCtx.distance and string.format('%.1f', maCtx.distance) or 'nil',
+                maCtx.inAttack and 'yes' or 'no',
+                maCtx.targetId and tostring(maCtx.targetId) or 'nil')
+            if maCtx.peer then
+                printf('    State: %s', formatStateList(maCtx.peer))
+                printf('    CombatState: %s', tostring(maCtx.peer.CombatState))
+            end
+            local injectOk = leaderInjectEligible(rc, maCtx, spawnId)
+            if injectOk and not inList then
+                printf('    inject: would add this spawn')
+            elseif injectOk then
+                printf('    inject: eligible (already in list)')
+            else
+                printf('    inject: no')
+            end
+        else
+            printf('  MA %s: no leader context', maName)
+        end
+    end
+    printf('  maCampAnchor: %s  maAnchorLeash: %s',
+        isMaCampAnchorEnabled() and 'on' or 'off', tostring(getMaAnchorLeash()))
+end
+
 local function shouldSkipFTERecheck(rc)
     if state.getRunState() == state.STATES.pulling then return true end
     if state.getRunState() == state.STATES.casting then return true end
@@ -624,6 +776,7 @@ function spawnutils.AddSpawnCheck()
     if not spawnutils.validateAcmTarget(rc) then return end
     spawnutils.tickCombatFTERechecks(rc)
     spawnutils.buildAndSetCampMobList(rc)
+    spawnutils.mergeLeaderCombatTarget(rc)
     spawnutils.mergeKillTargetIntoMobList(rc)
     spawnutils.mergeEngageTargetIntoMobList(rc)
     spellstates.PruneDebuffStateNotInMobList(rc.MobList)
