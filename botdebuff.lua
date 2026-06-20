@@ -16,6 +16,7 @@ local DebuffBands = {}
 local bardtwist = require('lib.bardtwist')
 local botmelee = require('botmelee')
 local targeting = require('lib.targeting')
+local castinterrupt = require('lib.castinterrupt')
 
 local function defaultDebuffEntry()
     return botconfig.getDefaultSpellEntry('debuff')
@@ -696,6 +697,7 @@ local function refreshBardCombatTwistIfNeeded()
 end
 
 function botdebuff.DebuffCheck(runPriority)
+    castinterrupt.tickPending()
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     ---@type RunConfig
     local rc = state.getRunconfig()

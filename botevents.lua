@@ -10,6 +10,7 @@ local spellutils = require('lib.spellutils')
 local botpull = require('botpull')
 local spawnutils = require('lib.spawnutils')
 local combat = require('lib.combat')
+local castinterrupt = require('lib.castinterrupt')
 
 local botevents = {}
 
@@ -181,6 +182,10 @@ function botevents.Event_HitYou()
     state.getRunconfig().sitTimer = mq.gettime() + SIT_AFTER_HIT_MS
 end
 
+function botevents.Event_MobBeginsCast(_line, mobName)
+    castinterrupt.tryInterruptMaCast(mobName)
+end
+
 function botevents.Event_MobProb(line, arg1, arg2)
     local rc = state.getRunconfig()
     if rc.mobprobtimer <= mq.gettime() then return true end
@@ -234,6 +239,8 @@ function botevents.BindEvents()
     mq.event('MobProb3', "#*#You can\'t hit them from here#*#", botevents.Event_MobProb)
     mq.event('HitYou1', "#*#YOU for #1# point of#*#", botevents.Event_HitYou)
     mq.event('HitYou2', "#*#YOU for #1# points of#*#", botevents.Event_HitYou)
+    mq.event('MobCastCompleteHeal', "#*##1# begins casting Complete Heal#*#", botevents.Event_MobBeginsCast)
+    mq.event('MobCastGate', "#*##1# begins casting Gate#*#", botevents.Event_MobBeginsCast)
 end
 
 return botevents

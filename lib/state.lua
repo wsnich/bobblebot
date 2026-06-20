@@ -76,6 +76,7 @@
 ---@field statusMessage string User-facing activity line for GUI
 ---@field pullHealerManaWait { name: string, pct: number, current?: number }|nil when set, puller is waiting on this healer's mana before next pull; status tab shows it
 ---@field pullDebuffWait { name: string }|nil when set, puller has a non-curable debuff and will not pull until it fades
+---@field maCastInterruptPending { targetId: number, mobName: string, requestedAt: number }|nil deferred MA-target mez/stun interrupt
 ---@field OutOfSpace boolean|nil true when inventory was full (cursor item); cleared when space available again
 ---@field forageExpectCursor boolean|nil after /doability Forage: expect item on cursor; CharState /autoinv only while set
 ---@field forageCursorUntil number|nil mq.gettime() deadline for stale clear when forage yields nothing
@@ -300,6 +301,7 @@ function M.resetRunconfig()
         statusMessage = '',
         pullHealerManaWait = nil,
         pullDebuffWait = nil,
+        maCastInterruptPending = nil,
         OutOfSpace = false,
         doChchain = false,
         chchainCurtank = 1,

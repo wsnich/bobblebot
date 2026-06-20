@@ -1480,6 +1480,8 @@ function spellutils.clearCastingStateOrResume()
     else
         state.clearRunState()
     end
+    local castinterrupt = require('lib.castinterrupt')
+    castinterrupt.tickPending()
 end
 
 --- True when MQ2Cast is memorizing (spell into gem). Cast.Status() contains 'M'; no cast bar yet (CastTimeLeft 0) to distinguish from HoT channeling.
