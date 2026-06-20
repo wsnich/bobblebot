@@ -23,6 +23,7 @@
 ---@field domelee boolean|nil
 ---@field dopull boolean|nil
 ---@field dosongs boolean|nil session-only bard twist; default on at start, not saved to config
+---@field bardNotmatarWait table|nil BRD notmatar twist-once wait (mez/add debuff flow)
 ---@field pulledmob number|nil
 ---@field pullreturntimer number|nil
 ---@field pulledmobLastDistSq number|nil cached distance-squared from puller to pulled mob when last saw it closer

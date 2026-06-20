@@ -73,11 +73,15 @@ end
 --
 -- For ENC/BRD we want quick refresh to avoid long mez downtimes.
 local MEZ_ACTIVE_MIN_MS = 18000 -- default: remez when Enthrall remaining <= 18s
-local MEZ_ACTIVE_MIN_MS_BRD = 6000 -- BRD: remez when Enthrall remaining <= 6s
 
 local function getMezActiveThresholdMs()
     local cls = mq.TLO.Me.Class.ShortName and mq.TLO.Me.Class.ShortName() or nil
-    if cls == 'BRD' then return MEZ_ACTIVE_MIN_MS_BRD end
+    if cls == 'BRD' then
+        local bard = botconfig.config.bard
+        local sec = bard and tonumber(bard.mez_remez_sec)
+        if not sec or sec <= 0 then sec = 6 end
+        return sec * 1000
+    end
     return MEZ_ACTIVE_MIN_MS
 end
 

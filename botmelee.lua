@@ -492,6 +492,8 @@ local function engageTarget()
         targeting.TargetAndWait(engageTargetId, 500)
     end
 
+    if mq.TLO.Target.ID() ~= engageTargetId then return end
+
     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop') end
     if mq.TLO.Me.Sitting() then mq.cmd('/stand on') end
     if not mq.TLO.Me.Combat() then mq.cmd('/squelch /attack on') end
@@ -641,6 +643,7 @@ function botmelee.getHookFn(name)
             end
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             local rc = state.getRunconfig()
+            if rc.bardNotmatarWait then return end
             if botmove.isBeyondFollowDistance() and not spawnutils.shouldChaseOutsideCamp(rc) then
                 rc.engageTargetId = nil
                 rc.attackCommandEngage = nil

@@ -435,24 +435,98 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     return true
 end
 
-local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, _runPriority, _spellcheckResume)
+--- Re-target the MA's NPC target (not the MA player) and sync engageTargetId.
+local function retargetMaTargetAfterBardMez()
+    local rc = state.getRunconfig()
+    local _, _, maTargetId = spellutils.GetAssistInfo(true)
+    if maTargetId and maTargetId ~= 0 then
+        targeting.TargetAndWait(maTargetId, 500)
+        rc.engageTargetId = maTargetId
+        return maTargetId
+    end
+    return nil
+end
+
+local function updateBardNotmatarDebuffState(entry, evalId)
+    if not entry or not evalId then return end
+    local durationSec = spellutils.GetSpellDurationSec(entry)
+    if durationSec > 0 then
+        local myduration = durationSec * 1000 + mq.gettime()
+        if spellutils.IsMezSpell(entry) then
+            local remMs = spellutils.SpawnEnthrallRemainingMs(evalId)
+            if remMs > 0 then
+                myduration = mq.gettime() + remMs
+            end
+        end
+        spellstates.DebuffListUpdate(evalId, entry.spell, myduration)
+    elseif durationSec == 0 then
+        spellstates.DebuffListUpdate(evalId, entry.spell, mq.gettime() + 12 * 1000)
+    end
+end
+
+--- BRD notmatar twist-once: wait for song, update debuff state, re-target MA's target, resume combat twist.
+local function DebuffCheckHandleBardNotmatarWait(rc)
+    if mq.TLO.Me.Class.ShortName() ~= 'BRD' or not rc.bardNotmatarWait then
+        return false
+    end
+    local w = rc.bardNotmatarWait
+    if not w or not w.entry or not w.EvalID then
+        rc.bardNotmatarWait = nil
+        state.clearRunState()
+        return false
+    end
+    local now = mq.gettime()
+    if w.deadline and now < w.deadline then
+        local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
+        if stillSinging then
+            w.singingStarted = true
+            return true
+        end
+    end
+    rc.bardNotmatarWait = nil
+    state.clearRunState()
+    updateBardNotmatarDebuffState(w.entry, w.EvalID)
+    retargetMaTargetAfterBardMez()
+    bardtwist.RestoreCombatTwistAfterNotmatar()
+    return true
+end
+
+local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, runPriority, _spellcheckResume)
     if sub ~= 'debuff' or targethit ~= 'notmatar' or mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
+    local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry or type(entry.gem) ~= 'number' then return false end
     local spellName = entry.spell or ('gem' .. tostring(entry.gem))
     local targetName = (mq.TLO.Spawn(EvalID) and mq.TLO.Spawn(EvalID).CleanName()) or tostring(EvalID)
     mq.cmd('/squelch /attack off')
     targeting.TargetAndWait(EvalID, 500)
-    if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed() then
+    if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed()
+        and spellutils.SpawnMezActive(EvalID)
+        and not spellutils.SpawnHasDebuffSpell(entry.spell, EvalID) then
         printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
+        spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
+        retargetMaTargetAfterBardMez()
+        bardtwist.RestoreCombatTwistAfterNotmatar()
         return true
     end
     printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
+    bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
-    local castTimeMs = (castTime and castTime > 0) and (castTime) or 3000
-    -- wait for cast to finish
-    mq.delay(castTimeMs + 100)
+    local castTimeMs = (castTime and castTime > 0) and castTime or 3000
+    rc.bardNotmatarWait = {
+        spellIndex = spellIndex,
+        EvalID = EvalID,
+        entry = entry,
+        singingStarted = false,
+        deadline = mq.gettime() + castTimeMs + 100,
+    }
+    if state.canStartBusyState(state.STATES.casting) then
+        state.setRunState(state.STATES.casting, {
+            deadline = mq.gettime() + 20000,
+            priority = runPriority or bothooks.getPriority('doDebuff'),
+        })
+    end
     return true
 end
 
@@ -614,6 +688,8 @@ local function debuffBuildContext(rc)
 end
 
 local function refreshBardCombatTwistIfNeeded()
+    local rc = state.getRunconfig()
+    if rc.bardNotmatarWait then return end
     if mq.TLO.Me.Class.ShortName() == 'BRD' and state.getMobCount() > 0 then
         bardtwist.EnsureDefaultTwistRunning()
     end
@@ -623,11 +699,12 @@ function botdebuff.DebuffCheck(runPriority)
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     ---@type RunConfig
     local rc = state.getRunconfig()
+    if DebuffCheckHandleBardNotmatarWait(rc) then return false end
     if spellutils.handleSpellCheckReentry('debuff', { runPriority = runPriority, skipInterruptForBRD = true }) then
         return false
     end
     if state.getMobCount() <= 0 then return false end
-    if rc.MobList and rc.MobList[1] then
+    if rc.MobList and rc.MobList[1] and not rc.bardNotmatarWait then
         local desiredPetTargetId = rc.engageTargetId
         local _, _, maTargetId = spellutils.GetAssistInfo(true)
         if maTargetId == 0 then maTargetId = nil end

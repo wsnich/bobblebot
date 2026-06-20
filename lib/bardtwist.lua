@@ -221,6 +221,7 @@ end
 
 --- Set twist list for mode. Only issue /twist when not twisting or list differs (avoid restart every tick). For travel with no song, stop twist.
 function bardtwist.EnsureTwistForMode(mode)
+    if state.getRunconfig().bardNotmatarWait then return end
     if not bardtwist.SongsEnabled() then return end
     local desiredGems = bardtwist.GetTwistListForMode(mode)
     if not desiredGems or #desiredGems == 0 then
@@ -244,6 +245,7 @@ function bardtwist.EnsureTwistForMode(mode)
 end
 
 function bardtwist.EnsureDefaultTwistRunning()
+    if state.getRunconfig().bardNotmatarWait then return end
     if utils.isNearPrimaryBindPoint() then
         bardtwist.StopTwist()
         return
@@ -298,6 +300,14 @@ function bardtwist.getLastTwistOnceGem()
         return nil
     end
     return lastTwistOnceGem
+end
+
+--- Restore combat twist after BRD notmatar wait ends. Call only when bardNotmatarWait was just cleared.
+function bardtwist.RestoreCombatTwistAfterNotmatar()
+    twistOnceActive = false
+    clearTwistOnceGemHint()
+    if not bardtwist.SongsEnabled() then return end
+    bardtwist.EnsureTwistForMode('combat')
 end
 
 return bardtwist
