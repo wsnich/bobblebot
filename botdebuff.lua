@@ -720,7 +720,8 @@ function botdebuff.DebuffCheck(runPriority)
             end
         end
 
-        if desiredPetTargetId and desiredPetTargetId > 0 and mq.TLO.Pet.Target.ID() ~= desiredPetTargetId and not mq.TLO.Me.Pet.Combat() then
+        if mq.TLO.Me.Pet.ID() and desiredPetTargetId and desiredPetTargetId > 0
+            and mq.TLO.Pet.Target.ID() ~= desiredPetTargetId and not mq.TLO.Me.Pet.Combat() then
             botmelee.AdvCombat()
         end
     end
@@ -731,7 +732,7 @@ function botdebuff.DebuffCheck(runPriority)
         skipInterruptForBRD = true,
         runPriority = runPriority,
         noResume = true,
-        mezDebug = true,
+        mezDebug = mq.TLO.Me.Class.ShortName() == 'BRD',
         immuneCheck = true,
         beforeCast = DebuffOnBeforeCast,
         customCastFn = DebuffCheckBardNotmatarCast,

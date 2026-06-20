@@ -1475,9 +1475,6 @@ function spellutils.clearCastingStateOrResume()
     rc.statusMessage = ''
     casting.clear()
     local sr = resolveSpellcheckResumePayload(state.getRunStatePayload())
-    if hadSub == 'debuff' then
-        spellutils.MezLog('clearCastingStateOrResume -> idle (debuff does not resume)')
-    end
     if shouldSetHookResumeAfterCast(sr) then
         state.setRunState(state.RESUME_BY_HOOK[sr.hook], sr)
     else
@@ -1525,9 +1522,9 @@ function spellutils.handleSpellCheckReentry(sub, options)
     local rc = state.getRunconfig()
     casting.tick()
 
-    -- Stuck casting recovery: clear if we've been in casting state past deadline. Do not clear while memorizing.
+    -- Stuck casting recovery: clear if we've been in casting state past deadline. Do not clear while memorizing or bard mez wait.
     if state.getRunState() == state.STATES.casting and state.runStateDeadlinePassed() then
-        if not spellutils.IsMemorizing() then
+        if not rc.bardNotmatarWait and not spellutils.IsMemorizing() then
             spellutils.clearCastingStateOrResume()
             return false
         end
