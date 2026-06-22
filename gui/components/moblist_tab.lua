@@ -37,7 +37,7 @@ local function drawMobListSection(listType, runconfigKey, label)
             ImGui.TableNextColumn()
             if ImGui.SmallButton('Remove##' .. listType .. i) then
                 table.remove(list, i)
-                mobfilter.process(listType, 'save')
+                mobfilter.process(listType, 'save_replace')
             end
         end
         ImGui.EndTable()

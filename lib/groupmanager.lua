@@ -39,29 +39,28 @@ function M.SaveRaid(raidname)
         printf('\ayCZBot:\ax Noname given, cant save raid (/cz raid save raidname)')
         return
     end
-    local comkeytable = botconfig.getCommon()
-    if not comkeytable.raidlist then comkeytable.raidlist = {} end
     printf('\ayCZBot:\ax saving raidconfig \ag%s\ax', raidname)
-    comkeytable.raidlist[raidname] = {}
-    comkeytable.raidlist[raidname].leaders = {}
-    comkeytable.raidlist[raidname].groups = {}
+    local raidSnapshot = { leaders = {}, groups = {} }
     for i = 1, raidmembers do
         local raidmember = mq.TLO.Raid.Member(i)() or false
         local groupldr = mq.TLO.Raid.Member(i).GroupLeader() or false
         local groupnum = mq.TLO.Raid.Member(i).Group() or false
         if groupldr and raidmember and groupnum then
-            comkeytable.raidlist[raidname].leaders[groupnum] = raidmember
+            raidSnapshot.leaders[groupnum] = raidmember
         elseif raidmember and groupnum then
-            if not comkeytable.raidlist[raidname].groups[groupnum] then
-                comkeytable.raidlist[raidname].groups[groupnum] = {}
-                if not comkeytable.raidlist[raidname].leaders[groupnum] then
-                    comkeytable.raidlist[raidname].leaders[groupnum] = raidmember
+            if not raidSnapshot.groups[groupnum] then
+                raidSnapshot.groups[groupnum] = {}
+                if not raidSnapshot.leaders[groupnum] then
+                    raidSnapshot.leaders[groupnum] = raidmember
                 end
             end
-            comkeytable.raidlist[raidname].groups[groupnum][raidmember] = raidmember
+            raidSnapshot.groups[groupnum][raidmember] = raidmember
         end
     end
-    botconfig.saveCommon()
+    botconfig.mutateCommon(function(common)
+        if not common.raidlist then common.raidlist = {} end
+        common.raidlist[raidname] = raidSnapshot
+    end)
 end
 
 function M.LoadRaid(raidname)

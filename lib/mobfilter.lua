@@ -23,13 +23,24 @@ local LIST_CONFIG = {
     },
 }
 
-local function saveList(listType)
+local function saveList(listType, replace)
     local opts = LIST_CONFIG[listType]
     if not opts then return end
     local zone = mq.TLO.Zone.ShortName()
-    local zb = botconfig.ensureZoneBlock(zone)
-    zb[opts.commonKey] = state.getRunconfig()[opts.runconfigKey]
-    botconfig.saveCommon()
+    if not zone or zone == '' then return end
+    local memList = botconfig.copyStringList(state.getRunconfig()[opts.runconfigKey])
+    botconfig.mutateCommon(function(common)
+        local zb = common.zones and common.zones[zone]
+        local diskList = zb and zb[opts.commonKey] or {}
+        if not common.zones then common.zones = {} end
+        if not common.zones[zone] then common.zones[zone] = {} end
+        zb = common.zones[zone]
+        if replace then
+            zb[opts.commonKey] = memList
+        else
+            zb[opts.commonKey] = botconfig.unionStringList(diskList, memList)
+        end
+    end)
 end
 
 local function loadZone(listType)
@@ -38,13 +49,15 @@ local function loadZone(listType)
     local zone = mq.TLO.Zone.ShortName()
     local zb = botconfig.getZoneBlock(zone)
     local val = (zb and zb[opts.commonKey]) or {}
-    state.getRunconfig()[opts.runconfigKey] = val
+    state.getRunconfig()[opts.runconfigKey] = botconfig.copyStringList(val)
     if opts.onZoneLoad then opts.onZoneLoad() end
 end
 
 function M.process(listType, command)
     if command == 'save' then
-        saveList(listType)
+        saveList(listType, false)
+    elseif command == 'save_replace' then
+        saveList(listType, true)
     elseif command == 'zone' then
         loadZone(listType)
     end

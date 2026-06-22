@@ -60,28 +60,37 @@ end
 
 function nocombatzones.addZone(zone)
     if not zone or zone == '' then return false end
-    local list = ensureList()
-    if nocombatzones.zoneInList(zone, list) then return false end
-    table.insert(list, zone)
-    botconfig.saveCommon()
-    return true
+    if nocombatzones.zoneInList(zone, ensureList()) then return false end
+    local added = false
+    botconfig.mutateCommon(function(common)
+        if not common.noCombatZones then common.noCombatZones = {} end
+        if nocombatzones.zoneInList(zone, common.noCombatZones) then return end
+        common.noCombatZones = botconfig.unionStringList(common.noCombatZones, { zone })
+        added = true
+    end)
+    return added
 end
 
 function nocombatzones.removeZone(zone)
     if not zone or zone == '' then return false end
-    local list = ensureList()
     local key = zoneKey(zone)
     local removed = false
-    for i = #list, 1, -1 do
-        if zoneKey(list[i]) == key then
-            table.remove(list, i)
-            removed = true
+    botconfig.mutateCommon(function(common)
+        local list = common.noCombatZones
+        if not list then return end
+        local newList = {}
+        for _, z in ipairs(list) do
+            if zoneKey(z) ~= key then
+                newList[#newList + 1] = z
+            else
+                removed = true
+            end
         end
-    end
-    if removed then
-        _disabled[key] = nil
-        botconfig.saveCommon()
-    end
+        if removed then
+            common.noCombatZones = newList
+            _disabled[key] = nil
+        end
+    end)
     return removed
 end
 

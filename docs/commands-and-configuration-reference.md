@@ -62,7 +62,9 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **priority remove** | `<name>` or target     | Remove a mob from the priority list.                                                                                                                    |
 | **charm**           | `<name>` or target     | Add a mob to the charm list for the current zone (allowed charm targets). Saved to common config (cz_common.lua).                                        |
 | **charm remove**    | `<name>` or target     | Remove a mob from the charm list.                                                                                                                        |
-| **reloadcommon**    | —                      | Reload `cz_common.lua` from disk and refresh current-zone exclude/priority/charm lists and nuke flavor auto-disable state. Does not reset temporary no-combat zone enable/disable checkboxes (session-only). |
+| **reloadcommon**    | —                      | Reload `cz_common.lua` from disk and refresh current-zone exclude/priority/charm lists and nuke flavor auto-disable state. Does not reset temporary no-combat zone enable/disable checkboxes (session-only). Use on each bot after another client edits shared lists so runtime state matches disk. Saves from any bot reload and union-merge with disk first, so concurrent edits are less likely to wipe data. |
+
+**Multi-box:** All bots sharing `cz_common.lua` should run **`/cz reloadcommon`** after one bot edits exclude/priority/charm lists in the GUI or via commands, so each client's runtime lists match disk. Saves automatically reload from disk and union list entries before writing.
 
 **GUI Mob lists tab** (`/czshow` → Mob lists): edit per-zone **exclude**, **priority**, and **charm** lists for the current zone, and the global **no combat zones** list. See [Safety and stealth](safety-and-stealth.md) for no-combat zone controls (Add current zone, Enabled checkbox, Remove).
 

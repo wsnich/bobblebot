@@ -16,16 +16,16 @@ function M.load()
     botconfig.getCommon()
 end
 
-function M.save()
-    botconfig.saveCommon()
-end
-
 function M.add(spell, zone, mobName)
-    local zb = botconfig.ensureZoneBlock(zone)
-    if not zb.immune then zb.immune = {} end
-    if not zb.immune[spell] then zb.immune[spell] = {} end
-    zb.immune[spell][mobName] = true
-    M.save()
+    if not spell or not zone or zone == '' or not mobName or mobName == '' then return end
+    botconfig.mutateCommon(function(common)
+        if not common.zones then common.zones = {} end
+        if not common.zones[zone] then common.zones[zone] = {} end
+        local zb = common.zones[zone]
+        if not zb.immune then zb.immune = {} end
+        if not zb.immune[spell] then zb.immune[spell] = {} end
+        zb.immune[spell][mobName] = true
+    end)
 end
 
 ---@param immuneID number|nil spawn ID of immune target

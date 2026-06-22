@@ -110,6 +110,7 @@ M.DEBUFF_DONTSTACK_ALLOWED = { Charmed = true, Crippled = true, Feared = true, M
 M.DEBUFF_STOPWHEN_ALLOWED = { Slowed = true, Snared = true, Rooted = true, Mezzed = true, Charmed = true, Crippled = true, Feared = true, Maloed = true, Tashed = true }
 M._configLoaders = {}
 M._common = nil
+M._commonReadOnly = false
 M._guiDirty = false
 
 -- Consider (con) color names and name-to-index map for pull filtering and UI. Indices 1-7.
@@ -207,6 +208,70 @@ end
 
 local COMMON_FILENAME = 'cz_common.lua'
 
+local function commonFilePath()
+    return mq.configDir .. '/' .. COMMON_FILENAME
+end
+
+local function commonFileExists()
+    local f = io.open(commonFilePath(), 'r')
+    if f then f:close(); return true end
+    return false
+end
+
+--- Union of string arrays: disk order first, then memory entries not already present.
+function M.unionStringList(diskList, memList)
+    local out = {}
+    local seen = {}
+    if type(diskList) == 'table' then
+        for _, name in ipairs(diskList) do
+            if name and name ~= '' and not seen[name] then
+                seen[name] = true
+                out[#out + 1] = name
+            end
+        end
+    end
+    if type(memList) == 'table' then
+        for _, name in ipairs(memList) do
+            if name and name ~= '' and not seen[name] then
+                seen[name] = true
+                out[#out + 1] = name
+            end
+        end
+    end
+    return out
+end
+
+--- Copy a string array (ipairs order).
+function M.copyStringList(list)
+    local copy = {}
+    if type(list) == 'table' then
+        for i, v in ipairs(list) do copy[i] = v end
+    end
+    return copy
+end
+
+--- Union of bool maps (key -> true); keys from either map are kept.
+function M.unionBoolMap(diskMap, memMap)
+    local out = {}
+    if type(diskMap) == 'table' then
+        for k, v in pairs(diskMap) do
+            if v then out[k] = true end
+        end
+    end
+    if type(memMap) == 'table' then
+        for k, v in pairs(memMap) do
+            if v then out[k] = true end
+        end
+    end
+    return next(out) and out or nil
+end
+
+local function ensureZoneBlockIn(common, zone)
+    if not common.zones then common.zones = {} end
+    if not common.zones[zone] then common.zones[zone] = {} end
+    return common.zones[zone]
+end
+
 local function migrateOldCommonToZones(common)
     if not common.nukeFlavorsByZone and not common.excludelist then return false end
     if not common.zones then common.zones = {} end
@@ -277,22 +342,56 @@ function M.ensureZoneBlock(zone)
 end
 
 function M.loadCommon()
-    local commonData, errr = loadfile(mq.configDir .. '/' .. COMMON_FILENAME)
+    local path = commonFilePath()
+    local commonData, errr = loadfile(path)
+    local newFile = false
     if not errr and commonData then
         M._common = commonData()
         if not M._common then M._common = {} end
+        M._commonReadOnly = false
+    elseif commonFileExists() then
+        printf('\ayCZBot:\ax Failed to load \ar%s\ax: %s', path, errr or 'unknown error')
+        M._common = {}
+        M._commonReadOnly = true
     else
         M._common = {}
+        M._commonReadOnly = false
+        newFile = true
     end
     local migrated = migrateOldCommonToZones(M._common) or migrateCzimmuneIntoZones(M._common)
     local nocombatzones = require('lib.nocombatzones')
     if nocombatzones.seedDefaultsIfEmpty() then migrated = true end
-    if migrated or not commonData then M.saveCommon() end
+    if not M._commonReadOnly and (migrated or newFile) then M.saveCommon() end
     return M._common
 end
 
 function M.saveCommon()
-    if M._common then mq.pickle(COMMON_FILENAME, M._common) end
+    if M._commonReadOnly or not M._common then return end
+    local path = commonFilePath()
+    local src = io.open(path, 'rb')
+    if src then
+        local content = src:read('*all')
+        src:close()
+        local dst = io.open(path .. '.bak', 'wb')
+        if dst then
+            dst:write(content)
+            dst:close()
+        end
+    end
+    mq.pickle(COMMON_FILENAME, M._common)
+end
+
+--- Reload cz_common from disk, apply mutator, then save. No-op when file failed to load (read-only).
+function M.mutateCommon(mutator)
+    if mutator == nil then return false end
+    M.loadCommon()
+    if M._commonReadOnly then
+        printf('\ayCZBot:\ax Cannot save \ar%s\ax — fix load error and reload script', commonFilePath())
+        return false
+    end
+    mutator(M._common)
+    M.saveCommon()
+    return true
 end
 
 --- Reload cz_common from disk and refresh current-zone exclude/priority/charm lists and nuke flavors.
@@ -322,10 +421,11 @@ function M.saveNukeFlavorsToCommon()
     local zone = mq.TLO.Zone.ShortName()
     if not zone or zone == '' then return end
     local rc = state.getRunconfig()
-    local zb = M.ensureZoneBlock(zone)
-    zb.nukeFlavors = rc.nukeFlavorsAllowed
-    zb.nukeFlavorsAutoDisabled = rc.nukeFlavorsAutoDisabled
-    M.saveCommon()
+    M.mutateCommon(function(common)
+        local zb = ensureZoneBlockIn(common, zone)
+        zb.nukeFlavors = rc.nukeFlavorsAllowed
+        zb.nukeFlavorsAutoDisabled = M.unionBoolMap(zb.nukeFlavorsAutoDisabled, rc.nukeFlavorsAutoDisabled)
+    end)
 end
 
 --- Zone junk list (cz_common zones[zone].junk): set of item names to destroy when foraged in this zone.
@@ -336,10 +436,10 @@ end
 
 function M.addZoneJunk(zone, itemName)
     if not zone or zone == '' or not itemName or itemName == '' then return end
-    local zb = M.ensureZoneBlock(zone)
-    if not zb.junk then zb.junk = {} end
-    zb.junk[itemName] = true
-    M.saveCommon()
+    M.mutateCommon(function(common)
+        local zb = ensureZoneBlockIn(common, zone)
+        zb.junk = M.unionBoolMap(zb.junk, { [itemName] = true })
+    end)
 end
 
 function M.isZoneJunk(zone, itemName)
@@ -361,9 +461,10 @@ end
 
 function M.setForageDisabledInZone(zone, disabled)
     if not zone or zone == '' then return end
-    local zb = M.ensureZoneBlock(zone)
-    zb.forageDisabled = disabled and true or false
-    M.saveCommon()
+    M.mutateCommon(function(common)
+        local zb = ensureZoneBlockIn(common, zone)
+        zb.forageDisabled = disabled and true or false
+    end)
 end
 
 function M.getSubOrder()

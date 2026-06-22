@@ -334,7 +334,7 @@ local function cmd_exclude(args)
             printf('\ayCZBot:\axRemoved %s from exclude list', name)
             if APTarget and APTarget.ID() then APTarget = nil end
             mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
-            mobfilter.process('exclude', 'save')
+            mobfilter.process('exclude', 'save_replace')
         end
         return
     end
@@ -380,7 +380,7 @@ local function cmd_priority(args)
         local name = args[3] or mq.TLO.Target.CleanName()
         if name and removeFromList(rc.PriorityList, name) then
             printf('\ayCZBot:\axRemoved %s from priority list', name)
-            mobfilter.process('priority', 'save')
+            mobfilter.process('priority', 'save_replace')
         end
         return
     end
@@ -399,7 +399,7 @@ local function cmd_charm(args)
         local name = args[3] or mq.TLO.Target.CleanName()
         if name and removeFromList(rc.CharmList, name) then
             printf('\ayCZBot:\axRemoved %s from charm list', name)
-            mobfilter.process('charm', 'save')
+            mobfilter.process('charm', 'save_replace')
         end
         return
     end
