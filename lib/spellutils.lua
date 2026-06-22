@@ -350,11 +350,8 @@ end
 function spellutils.HasReagents(Sub, ID)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if not entry or not entry.spell then return true end
-    local spellForReagents = entry.spell
-    if entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() then
-        spellForReagents = mq.TLO.FindItem(entry.spell).Spell.Name()
-        if not spellForReagents or spellForReagents == '' then return true end
-    end
+    local spellForReagents = spellutils.GetResolvedSpellName(entry) or entry.spell
+    if entry.gem == 'item' and not spellForReagents then return true end
     if not mq.TLO.Spell(spellForReagents)() then return true end
     for slot = 1, 4 do
         local rid = mq.TLO.Spell(spellForReagents).ReagentID(slot)()
@@ -369,30 +366,32 @@ end
 
 -- checks spell is loaded, minmana is met, and gem is ready, precondition is good
 function spellutils.SpellCheck(Sub, ID)
-    local spell = nil
-    local minmana = nil
-    local gem = nil
     local entry = botconfig.getSpellEntry(Sub, ID)
-    if gem ~= "item" and entry and type(entry.alias) == 'string' and spellsdb and spellsdb.resolve_entry then
+    if not entry or not entry.spell then return false end
+    local gem = entry.gem
+    local spell = entry.spell
+    if gem ~= 'item' and type(entry.alias) == 'string' and spellsdb and spellsdb.resolve_entry then
         local level = tonumber(mq.TLO.Me.Level()) or 1
         if (not entry.spell or entry.spell == '' or entry._resolved_level ~= level) then
             spellsdb.resolve_entry(Sub, ID, false)
         end
     end
-    if entry and entry.spell then spell = entry.spell end
-    if not spell then return false end
-    minmana = (entry and entry.minmana ~= nil) and entry.minmana or 0
-    if entry and entry.gem then gem = entry.gem end
+    if entry.spell then spell = entry.spell end
+    local minmana = (entry.minmana ~= nil) and entry.minmana or 0
     if mq.TLO.Window('SpellBookWnd').Open() then mq.cmd('/book') end
     if spellstates.GetReagentDelay(Sub, ID) and spellstates.GetReagentDelay(Sub, ID) > mq.gettime() then return false end
     if not spellutils.HasReagents(Sub, ID) then
-        if entry then entry.enabled = false end
+        entry.enabled = false
         spellstates.SetReagentDelay(Sub, ID, mq.gettime() + (5 * 60 * 1000)) -- 5 min before retrying this spell
         printf('\ayCZBot:\axMissing reagent for %s, disabling spell for 5 minutes', spell)
         return false
     end
     local spellmana, spellend
-    if gem ~= 'ability' then
+    if gem == 'item' then
+        if not mq.TLO.FindItem(spell)() then return false end
+        local spellForTlo = spellutils.GetResolvedSpellName(entry)
+        if spellForTlo and not mq.TLO.Spell(spellForTlo)() then return false end
+    elseif gem ~= 'ability' then
         if not mq.TLO.Spell(spell)() then return false end
         spellmana = mq.TLO.Spell(spell).Mana()
         spellend = mq.TLO.Spell(spell).EnduranceCost()
@@ -879,20 +878,33 @@ function spellutils.GetBotListShuffled()
     return bots
 end
 
+-- MQ spell name for TLO lookups: book/AA/disc spell name, or FindItem.Spell.Name() for items.
+function spellutils.GetResolvedSpellName(entry)
+    if not entry or not entry.spell or entry.spell == '' then return nil end
+    if entry.gem == 'item' then
+        if not mq.TLO.FindItem(entry.spell)() then return nil end
+        local name = mq.TLO.FindItem(entry.spell).Spell.Name()
+        if name and name ~= '' then return name end
+        return nil
+    end
+    return mq.TLO.Spell(entry.spell)() or entry.spell
+end
+
 -- Resolve spell name, range, target type from config entry; if gem == 'item' use FindItem spell.
 -- entry must have .spell and .gem. Returns spell (name), range, tartype, and optionally spellid.
 function spellutils.GetSpellInfo(entry)
     if not entry or not entry.spell then return nil, nil, nil, nil end
     local gem = entry.gem
-    local spell = entry.spell
-    local range = mq.TLO.Spell(spell).MyRange()
-    local tartype = mq.TLO.Spell(spell).TargetType()
-    if gem == 'item' then
-        spell = mq.TLO.FindItem(spell).Spell.Name()
-        if mq.TLO.FindItem(entry.spell)() then
-            range = mq.TLO.FindItem(entry.spell).Spell.MyRange()
-            tartype = mq.TLO.FindItem(entry.spell).Spell.TargetType()
-        end
+    local spell = spellutils.GetResolvedSpellName(entry)
+    if gem == 'item' and not spell then return nil, nil, nil, nil end
+    if not spell then spell = entry.spell end
+    local range, tartype
+    if gem == 'item' and mq.TLO.FindItem(entry.spell)() then
+        range = mq.TLO.FindItem(entry.spell).Spell.MyRange()
+        tartype = mq.TLO.FindItem(entry.spell).Spell.TargetType()
+    else
+        range = mq.TLO.Spell(spell).MyRange()
+        tartype = mq.TLO.Spell(spell).TargetType()
     end
     local spellid = mq.TLO.Spell(spell).ID() or
         (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.ID())
@@ -2071,7 +2083,7 @@ function spellutils.InterruptCheck()
     local spell = rc.CurSpell.spell
     local entry = botconfig.getSpellEntry(sub, spell)
     if not entry then return false end
-    local spellname = entry.spell or (entry.gem == 'item' and mq.TLO.FindItem(entry.spell).Spell())
+    local spellname = spellutils.GetResolvedSpellName(entry) or entry.spell
     if not spellname then return false end
     local criteria = rc.CurSpell.targethit
     local target = rc.CurSpell.target
@@ -2206,7 +2218,8 @@ end
 
 function spellutils.ShouldWaitForMovement(entry)
     if not entry or not entry.spell then return false end
-    local spell = string.lower(entry.spell or '')
+    local spellname = spellutils.GetResolvedSpellName(entry) or entry.spell
+    local spell = string.lower(spellname or '')
     local castTime = mq.TLO.Spell(spell).MyCastTime()
     if not castTime or castTime <= 0 then return false end
     if mq.TLO.Me.Class.ShortName() == 'BRD' then return false end

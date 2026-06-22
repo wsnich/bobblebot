@@ -616,10 +616,20 @@ end
 -- Cast by alias (section: heal, buff, debuff, cure)
 local function cmd_cast(args)
     if not args[2] then return end
-    local tgtSpawn = args[3] and mq.TLO.Spawn(args[3]) or mq.TLO.Target()
-    if not tgtSpawn then return end
-    local tgtID = tgtSpawn.ID()
-    local tgtName = tgtSpawn.CleanName()
+    local function resolveCastTarget()
+        if args[3] and args[3] ~= 'on' and args[3] ~= 'off' then
+            local sp = mq.TLO.Spawn(args[3])
+            local id = sp and sp.ID()
+            if id and id > 0 then
+                return id, sp.CleanName()
+            end
+        end
+        local tid = mq.TLO.Target.ID()
+        if tid and tid > 0 then
+            return tid, mq.TLO.Target.CleanName()
+        end
+        return mq.TLO.Me.ID(), mq.TLO.Me.CleanName()
+    end
     local function do_spell_section(cfgkey, loadfn, settingkey)
         local cnt = botconfig.getSpellCount(cfgkey)
         if not cnt or cnt <= 0 then return end
@@ -628,6 +638,7 @@ local function cmd_cast(args)
             if not entry then return end
             for value in tostring(entry.alias or ''):gmatch("[^|]+") do
                 if value == args[2] and (args[3] ~= 'on' and args[3] ~= 'off') then
+                    local tgtID, tgtName = resolveCastTarget()
                     printf('\ayCZBot:\ax\agCasting\ax %s on %s', entry.spell, tgtName)
                     if cfgkey == 'debuff' and mq.TLO.Me.CastTimeLeft() > 0 then
                         spellutils.InterruptCheck()
@@ -801,16 +812,25 @@ local function cmd_clickdoor()
     mq.cmd('/click left door')
 end
 
-local function cmd_saytarget(args, str)
+local function resolveSaytargetScope(args)
+    local sub = args[2] and string.lower(args[2])
+    if sub == 'group' or sub == 'raid' then
+        return sub, 3
+    end
+    local scope = ((mq.TLO.Raid.Members() or 0) > 0) and 'raid' or 'group'
+    return scope, 2
+end
+
+local function cmd_syt(args, str)
     local id = args[2] and tonumber(args[2])
     local message
     if args[3] then
         message = table.concat(args, ' ', 3)
     elseif str then
-        message = str:match('saytarget%s+%S+%s+(.+)')
+        message = str:match('syt%s+%S+%s+(.+)') or str:match('saytarget%s+%S+%s+(.+)')
     end
     if not id or id == 0 or not message or message == '' then
-        printf('\ayCZBot:\ax usage: /cz saytarget <spawnId> <message>')
+        printf('\ayCZBot:\ax usage: /cz syt <spawnId> <message>')
         return
     end
     if not targeting.TargetAndWait(id, 500) then
@@ -819,6 +839,40 @@ local function cmd_saytarget(args, str)
     end
     mq.delay(math.random(10, 50) * 500)
     mq.cmdf('/say %s', message)
+end
+
+local function cmd_saytarget(args, str)
+    local legacyId = args[2] and tonumber(args[2])
+    if legacyId and legacyId ~= 0 then
+        return cmd_syt(args, str)
+    end
+
+    local scope, msgStart = resolveSaytargetScope(args)
+    local message = (msgStart <= #args) and table.concat(args, ' ', msgStart) or nil
+    if (not message or message == '') and str then
+        local sub = args[2] and string.lower(args[2])
+        if sub == 'group' or sub == 'raid' then
+            message = str:match('saytarget%s+' .. sub .. '%s+(.+)')
+        else
+            message = str:match('saytarget%s+(.+)')
+        end
+    end
+    if message then
+        local inner = message:match('^"(.*)"$')
+        if inner then message = inner end
+    end
+    if not message or message == '' then
+        printf('\ayCZBot:\ax usage: /cz saytarget [group|raid] <message>')
+        return
+    end
+    local targetId = mq.TLO.Target.ID()
+    if not targetId or targetId == 0 then
+        printf('\ayCZBot:\ax saytarget requires a target')
+        return
+    end
+    mq.cmdf('/rc %s /cz syt %s %s', scope, targetId, message)
+    printf('\ayCZBot:\ax saytarget broadcast (%s)', scope)
+    cmd_syt({ 'syt', tostring(targetId), message }, '')
 end
 
 -- CHChain: stop, setup, start, tank, pause
@@ -1065,6 +1119,7 @@ local handlers = {
     echo = cmd_echo,
     clickdoor = cmd_clickdoor,
     saytarget = cmd_saytarget,
+    syt = cmd_syt,
     chchain = cmd_chchain,
     draghack = cmd_draghack,
     linkitem = cmd_linkitem,

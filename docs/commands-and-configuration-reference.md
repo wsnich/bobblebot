@@ -105,7 +105,8 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **spread**        | —                                             | Spread bots (nav to positions).                                                                                     |
 | **raid**          | `save` / `load` `<name>`                      | Save or load a raid configuration by name. See [Raid mode](raid-mode.md) for save/load behavior and raid formation. |
 | **clickdoor**     | —                                             | Run `/doortarget`, wait 500 ms, then `/click left door`.                                                            |
-| **saytarget**     | `<spawnId> <message>`                         | Target spawn by ID, wait for target to switch, then wait a random 1–5 s (100 ms steps) before `/say` (staggers group translocator requests). For group hotkeys: `/rc group /cz saytarget ${Me.Target.ID} travel to butcherblock`. |
+| **saytarget**     | `[group\|raid] <message>`                     | Leader: target an NPC, broadcast to group/raid bots, and say locally. Default scope: raid if in raid, else group. Example: `/cz saytarget travel to butcherblock`. |
+| **syt**           | `<spawnId> <message>`                         | Worker: target spawn by ID, wait for target to switch, then wait a random 1–5 s (100 ms steps) before `/say` (staggers group translocator requests). Used internally via `/rc`; legacy `/rc group /cz saytarget <spawnId> <message>` still works on remote bots. |
 
 ### Master pause
 
