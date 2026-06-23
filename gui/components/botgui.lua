@@ -8,6 +8,7 @@ local heal_tab = require('gui.components.heal_tab')
 local buff_tab = require('gui.components.buff_tab')
 local cure_tab = require('gui.components.cure_tab')
 local moblist_tab = require('gui.components.moblist_tab')
+local rolelists_tab = require('gui.components.rolelists_tab')
 local script_tab = require('gui.components.script_tab')
 local status_tab = require('gui.components.status_tab')
 local ok, VERSION = pcall(require, 'version')
@@ -26,6 +27,7 @@ local TABS = {
     { label = 'Debuff',    draw = debuff_tab.draw },
     { label = 'Cure',      draw = cure_tab.draw },
     { label = 'Script',    draw = script_tab.draw },
+    { label = 'Roles',     draw = rolelists_tab.draw },
     { label = 'Mob lists', draw = moblist_tab.draw },
 }
 

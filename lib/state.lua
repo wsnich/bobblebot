@@ -4,6 +4,9 @@
 ---@field zonename string
 ---@field engageTargetId number|nil
 ---@field lastAssistTargetId number|nil session-only MA target remembered while MA is dead/hovering
+---@field lastResolvedAssistName string|nil session-only tracker for MA identity changes
+---@field MaList table cz_common ma_list mirror
+---@field MtList table cz_common mt_list mirror
 ---@field allMezzedEngageId number|nil spawn id locked while entire camp is mezzed (shortest remaining mez)
 ---@field attackCommandEngage boolean|nil when true, engageTargetId was set by /cz attack; do not overwrite in AdvCombat for DPS/OT.
 ---@field AlertList number
@@ -235,6 +238,7 @@ function M.resetRunconfig()
         zonename = '',
         engageTargetId = nil,
         lastAssistTargetId = nil,
+        lastResolvedAssistName = nil,
         allMezzedEngageId = nil,
         attackCommandEngage = nil,
         AlertList = 20,
@@ -245,6 +249,8 @@ function M.resetRunconfig()
         ExcludeList = {},
         PriorityList = {},
         CharmList = {},
+        MaList = {},
+        MtList = {},
         MobList = {},
         engagetracker = {},
         campstatus = false,

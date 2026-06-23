@@ -346,32 +346,6 @@ function M.draw()
                 botconfig.config.settings.zradius = zradiusNew; runConfigLoaders()
             end
             if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp Z (vertical) radius for in-camp mob checks.') end
-            ImGui.TextColored(WHITE, '%s', 'MA anchor: ')
-            ImGui.SameLine(0, 2)
-            local maAnchorOn = botconfig.config.settings.maCampAnchor ~= false
-            local maAnchorChecked, maAnchorToggled = ImGui.Checkbox('##ma_camp_anchor', maAnchorOn)
-            if maAnchorToggled then
-                botconfig.config.settings.maCampAnchor = maAnchorChecked
-                runConfigLoaders()
-            end
-            if ImGui.IsItemHovered() then
-                ImGui.SetTooltip(
-                    'When on, mob bubble centers on nearby MA (charinfo) and injects MA ATTACK targets into the mob list.')
-            end
-            ImGui.SameLine()
-            ImGui.TextColored(WHITE, '%s', 'MA leash: ')
-            ImGui.SameLine(0, 2)
-            ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-            local maLeashVal = botconfig.config.settings.maAnchorLeash or botconfig.config.settings.acleash or 75
-            local maLeashNew, maLeashCh = inputs.boundedInt('ma_anchor_leash', maLeashVal, 1, 10000, 5,
-                '##ma_anchor_leash')
-            if maLeashCh then
-                botconfig.config.settings.maAnchorLeash = maLeashNew
-                runConfigLoaders()
-            end
-            if ImGui.IsItemHovered() then
-                ImGui.SetTooltip('Max MA distance for mob bubble anchor and combat target inject (defaults to Radius).')
-            end
             ImGui.TextColored(WHITE, '%s', 'RestDist: ')
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)

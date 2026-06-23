@@ -1193,12 +1193,19 @@ end
 -- Returns fromCache (5th value) when the target came from lastAssistTargetId (MA dead/hover).
 function spellutils.GetAssistInfo(includeTarget, assistpct)
     local assistName = tankrole.GetAssistTargetName()
-    if not assistName or assistName == '' then return nil, nil, nil, nil end
+    if not assistName or assistName == '' then
+        state.getRunconfig().lastResolvedAssistName = nil
+        return nil, nil, nil, nil
+    end
 
     local assistid = mq.TLO.Spawn('pc =' .. assistName).ID()
     if not includeTarget then return assistName, assistid, nil, nil end
 
     local rc = state.getRunconfig()
+    if rc.lastResolvedAssistName ~= assistName then
+        rc.lastAssistTargetId = nil
+        rc.lastResolvedAssistName = assistName
+    end
     clearLastAssistTargetIfDead(rc)
 
     local unavailable = isAssistUnavailable(assistName, assistid)

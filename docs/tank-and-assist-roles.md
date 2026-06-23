@@ -25,7 +25,7 @@ Heals always go to the MT. DPS and offtank behavior follow the MA (or the MA’s
 - **Values:**
   - **Character name** — e.g. `Warriorname`. This character is the Main Tank; healers focus on them, and if this bot is that character, it picks from the mob list.
   - **`"manual"`** — No default MT; set at runtime with `/cz tank SomeName`.
-  - **`"automatic"`** — Use the **group’s Main Tank** role (from the group window). In raids, Main Tank still comes from the **group** (raid has no Main Tank role).
+  - **`"automatic"`** — Use the **group’s Main Tank** role (from the group window) when not in a raid; if the assigned MT is dead, hovering, or not in zone, fall back to **`mt_list`** in cz_common (first alive, in-zone name within **MA leash**). In a **raid**, there is no raid Main Tank — automatic mode uses **`mt_list`** directly (same proximity rules).
 
 Healers always use the resolved MT. Only the character who is the MT (when a bot) picks from the mob list and uses puller priority.
 
@@ -35,7 +35,7 @@ Healers always use the resolved MT. Only the character who is the MT (when a bot
 - **Values:**
   - **Character name** — This character is the Main Assist; DPS and offtank follow their target. **`/cz attack`** engages the MA’s target immediately (ignores assist-at %).
   - **`"manual"`** — No default MA; set at runtime with `/cz assist SomeName`.
-  - **`"automatic"`** — Use **raid Main Assist** when in a raid, otherwise **group Main Assist**.
+  - **`"automatic"`** — Use **raid Main Assist** when in a raid, otherwise **group Main Assist**. If the assigned MA is dead, hovering, or not in zone, fall back to **`ma_list`** in cz_common (first alive, in-zone name within **MA leash**).
 
 If you do **not** set AssistName (leave it unset or empty), the bot treats it as the same as TankName so that “everyone assists the tank” (backward compatible).
 
@@ -66,9 +66,11 @@ flowchart LR
 
 When **automatic**:
 
-- **MT** = Group.MainTank (raid has no Main Tank; always from group).
-- **MA** = Raid.MainAssist when in raid, else Group.MainAssist.
+- **MT** = Group.MainTank when not in a raid (if available); in raid, or when primary MT unavailable → **`mt_list`** fallback (proximity-gated).
+- **MA** = Raid.MainAssist when in raid, else Group.MainAssist; when primary MA unavailable → **`ma_list`** fallback (proximity-gated).
 - **Puller** = Group.Puller (raid has no Puller; always from group).
+
+Resolution is **stateless** — recomputed every main-loop tick (~100ms) from live group/raid roles, availability (alive, in zone), and list order. No cached MA/MT name between ticks.
 
 ---
 
@@ -147,12 +149,24 @@ flowchart LR
 ### Automatic mode
 
 - Set **TankName** and/or **AssistName** to **`"automatic"`**.
-- The bot uses the **group** (or **raid** for MA) window roles:
-  - **MT** = Group.MainTank
-  - **MA** = Raid.MainAssist when in raid, else Group.MainAssist
-  - **Puller** = Group.Puller (group only; raid has no Puller)
+- The bot uses the **group** (or **raid** for MA) window roles first, then **`ma_list`** / **`mt_list`** from **cz_common.lua** when the assigned role is unavailable.
+- **Primary** (group/raid assigned): must be alive and in zone; no distance check (puller MA can be outside camp).
+- **List fallback**: must be alive, in zone, and within **`maAnchorLeash`** of this bot (defaults to **Radius** / `acleash`). Distant groups sharing the same list do not steal assist when a local MA dies until someone on the list enters range.
 
-Raid has no Main Tank or Puller in the game UI, so those always come from the group.
+Raid has no Main Tank or Puller in the game UI. In raid, automatic MT skips group Main Tank and uses **`mt_list`** only.
+
+---
+
+## MA/MT fallback lists (cz_common)
+
+Global ordered lists in **cz_common.lua** (not per-zone):
+
+- **`ma_list`** — Main Assist fallback when automatic MA is unavailable.
+- **`mt_list`** — Main Tank fallback when automatic MT is unavailable (or in raid).
+
+Edit in the GUI **Roles** tab. After editing, run **`/cz reloadcommon`** on other bots so runtime lists match disk.
+
+Order matters: the first name that passes availability checks wins. Put local backups before other groups’ MAs if you share one list across independent camps in the same zone.
 
 ---
 
@@ -163,6 +177,6 @@ When **`settings.maCampAnchor`** is on (default), DPS/support bots center their 
 - **Anchor:** Uses charinfo `Zone.X/Y/Z` for bot MAs (Spawn TLO fallback for human MAs). MA must be within **`maAnchorLeash`** of this bot (defaults to **Radius** / `acleash`). If the MA is farther away (e.g. out pulling), the bubble falls back to the camp pin or player position.
 - **Combat inject:** When the MA's charinfo `State[]` includes **`ATTACK`** (auto-attack on; often alongside `STAND`, `GROUP`, etc.) and the MA has an NPC target, that target is added to MobList even if it failed normal area/LoS filters. MT is used as fallback when MA has no injectable target.
 - **Commands:** `/cz macampanchor on|off`, `/cz maanchorleash <n>`, `/cz mobfilter [id]` for diagnostics.
-- **GUI:** Status tab — **MA anchor** checkbox and **MA leash** next to Radius/ZRadius; `# Mobs` shows `[MA]`, `[Camp]`, or `[Self]` for the active scan center.
+- **GUI:** **Roles** tab — **MA anchor** checkbox and **MA leash**; Status tab **Camp** section still shows `# Mobs` with `[MA]`, `[Camp]`, or `[Self]` for the active scan center. **`maAnchorLeash`** also gates **`ma_list`** / **`mt_list`** fallback distance.
 
 Pull radius and camp-return leash are **not** affected — only the combat/debuff mob bubble follows the MA.

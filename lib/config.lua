@@ -401,6 +401,8 @@ function M.refreshZoneStateFromCommon()
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
     mobfilter.process('charm', 'zone')
+    local rolelists = require('lib.rolelists')
+    rolelists.loadFromCommon()
     M.loadNukeFlavorsFromZone()
 end
 

@@ -378,6 +378,7 @@ function botlogic.StartUp(...)
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
     mobfilter.process('charm', 'zone')
+    require('lib.rolelists').loadFromCommon()
     local comkeytable = botconfig.getCommon()
     if not comkeytable.raidlist then comkeytable.raidlist = {} end
     --make sure char isnt doing anything already (stop nav, clear cursor, ect)
