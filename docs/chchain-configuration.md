@@ -1,6 +1,6 @@
 ﻿# CHChain Configuration
 
-This document explains **CHChain** (Complete Heal chain): how to configure and run a coordinated Complete Heal rotation across multiple clerics on a shared tank target. It is intended for operators running CZBot on each cleric in the chain.
+This document explains **CHChain** (Complete Heal chain): how to configure and run a coordinated Complete Heal rotation across multiple clerics on a shared tank target. It is intended for operators running bobblebot on each cleric in the chain.
 
 ## Overview
 
@@ -14,7 +14,7 @@ CHChain rotates **Complete Heal** casts across an ordered list of clerics. Each 
 
 ## Prerequisites
 
-- Each cleric in the chain runs CZBot and has **Complete Heal** memorized or in their spell book.
+- Each cleric in the chain runs bobblebot and has **Complete Heal** memorized or in their spell book.
 - Cleric names in the setup list must match in-game character names (comparison is case-insensitive).
 - All participating bots must hear coordination messages. Use **`/rs`** (raid say) to broadcast setup, start, tank, pause, and turn-pass messages to every client.
 

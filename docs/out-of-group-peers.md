@@ -4,7 +4,7 @@ This document explains how the bot interacts with **peers** who are not in the b
 
 ## What is a peer?
 
-A **peer** is any character known to the bot via the **actor net** (charinfo). Other CZBot (or compatible) clients publish their character data (HP, buffs, detrimentals, pet state, etc.) to this shared state. The bot’s peer list is built from that data; peers do **not** have to be in the bot’s group. So you can have multiple bots in the same zone (or raid) on the same network, and they will see each other as peers even when they are in different groups.
+A **peer** is any character known to the bot via the **actor net** (charinfo). Other bobblebot (or compatible) clients publish their character data (HP, buffs, detrimentals, pet state, etc.) to this shared state. The bot’s peer list is built from that data; peers do **not** have to be in the bot’s group. So you can have multiple bots in the same zone (or raid) on the same network, and they will see each other as peers even when they are in different groups.
 
 ## How the bot sees peers
 

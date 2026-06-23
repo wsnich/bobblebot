@@ -1,4 +1,4 @@
-﻿# CZBot Documentation Index
+﻿# bobblebot Documentation Index
 
 Short index of all documentation pages. Use this to find the right doc for configuring healing, tanking, pulling, buffing, debuffing, curing, pets, nuking, mezzing, and melee combat abilities.
 

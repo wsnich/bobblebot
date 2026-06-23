@@ -1,6 +1,6 @@
 ﻿# Safety and Stealth
 
-CZBot includes always-on safety rules to avoid attacking service NPCs and to reduce obvious bot behavior at bind points. Non-combat zones are configurable in **cz_common.lua** via the GUI.
+bobblebot includes always-on safety rules to avoid attacking service NPCs and to reduce obvious bot behavior at bind points. Non-combat zones are configurable in **cz_common.lua** via the GUI.
 
 ---
 
@@ -55,7 +55,7 @@ Zones where combat logic is skipped (no mob list build for combat, no melee/debu
 noCombatZones = { 'GuildHall', 'GuildLobby', 'PoKnowledge', 'Nexus', 'Bazaar', 'AbysmalSea', 'potranquility' }
 ```
 
-On first load, if `noCombatZones` is missing or empty, CZBot seeds these defaults and saves **cz_common.lua**.
+On first load, if `noCombatZones` is missing or empty, bobblebot seeds these defaults and saves **cz_common.lua**.
 
 **Comparison:** Zone short names are matched case-insensitively (same as `mq.TLO.Zone.ShortName()`).
 

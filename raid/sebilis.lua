@@ -19,7 +19,7 @@ function TrakBreathOut()
             state.getRunconfig().engageTargetId = nil
             mq.cmd('/multiline ; /stick off ; /attack off ; /pet back off')
             mq.cmd('/nav loc -1180 -75 -178')
-            print('\ayCZBot:\ax TrotsRaid: Moving away from Trak')
+            print('\aybobblebot:\ax TrotsRaid: Moving away from Trak')
             mq.delay(200)
         end
     end
@@ -39,7 +39,7 @@ function TrakBreathIn()
             state.getRunconfig().engageTargetId = nil
             mq.cmd('/multiline ; /stick off ; /attack off ; /pet back off')
             mq.cmd('/nav id ${Spawn[Trakanon].ID} distance=35')
-            print('\ayCZBot:\ax TrotsRaid: Resuming Combat with Trak...')
+            print('\aybobblebot:\ax TrotsRaid: Resuming Combat with Trak...')
             mq.delay(200)
         end
     end

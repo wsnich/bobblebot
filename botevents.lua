@@ -63,7 +63,7 @@ end
 function botevents.Event_Slain()
     botevents.ResetCombatSession('death')
     local respawntimeleft = (state.getRunconfig().HoverEchoTimer - mq.gettime()) / 1000
-    printf('\ayCZBot:\axI died and am hovering, %s seconds until I release', respawntimeleft)
+    printf('\aybobblebot:\axI died and am hovering, %s seconds until I release', respawntimeleft)
     mq.cmd('/multiline ; /consent group ; /consent raid ; /consent guild')
     state.getRunconfig().HoverTimer = mq.gettime() + 30000
 end
@@ -121,7 +121,7 @@ function botevents.Event_LinkItem(line, Slot, HPFilter)
         if HPFilter < mq.TLO.InvSlot(Slot).Item.HP() then return false end
     end
     if not mq.TLO.Me.Inventory(Slot).ID() then
-        printf('\ayCZBot:\ax\arMy \at%s slot \aris empty!', Slot)
+        printf('\aybobblebot:\ax\arMy \at%s slot \aris empty!', Slot)
         mq.cmdf('/rs My %s slot is empty!', Slot)
         return
     end
@@ -129,8 +129,8 @@ function botevents.Event_LinkItem(line, Slot, HPFilter)
     local itemac = mq.TLO.InvSlot(Slot).Item.AC()
     local itemhp = mq.TLO.InvSlot(Slot).Item.HP()
     local itemmana = mq.TLO.InvSlot(Slot).Item.Mana()
-    printf('\ayCZBot:\ax%s AC:%s HP:%s Mana:%s', itemlink, itemac, itemhp, itemmana)
-    mq.cmdf('/rs \ayCZBot:\ax%s AC:%s HP:%s Mana:%s', itemlink, itemac, itemhp, itemmana)
+    printf('\aybobblebot:\ax%s AC:%s HP:%s Mana:%s', itemlink, itemac, itemhp, itemmana)
+    mq.cmdf('/rs \aybobblebot:\ax%s AC:%s HP:%s Mana:%s', itemlink, itemac, itemhp, itemmana)
 end
 
 function botevents.Event_TooSteep()
@@ -145,7 +145,7 @@ function botevents.Event_FTELocked()
         displayName = sp.CleanName() or sp.Name() or tostring(spawnId)
     end
     if displayName and displayName ~= '' then
-        printf('\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arFTE locked\ax to someone else!', displayName)
+        printf('\aybobblebot:\ax\arUh Oh, \ag%s\ax is \arFTE locked\ax to someone else!', displayName)
     end
     if not spawnId then return end
     local isProbe = rc.fteRecheckProbeId and rc.fteRecheckProbeId == spawnId
@@ -180,7 +180,7 @@ end
 
 function botevents.Event_GMDetected()
     if state.getRunconfig().gmtimer < mq.gettime() then
-        printf('\ayCZBot:\axGM Detected! Disabling DoMelee, MakeCamp, and Stick!')
+        printf('\aybobblebot:\axGM Detected! Disabling DoMelee, MakeCamp, and Stick!')
         botconfig.config.settings.domelee = false
         mq.cmd('/stick off')
         state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
@@ -203,7 +203,7 @@ end
 
 function botevents.Event_MobProb(line, arg1, arg2)
     local rc = state.getRunconfig()
-    if rc.mobprobtimer <= mq.gettime() then return true end
+    if rc.mobprobtimer > mq.gettime() then return true end
     if rc.dopull and state.getRunState() == state.STATES.pulling and (rc.pullState == 'returning' or rc.pullState == 'returning_after_abort') then
         rc.mobprobtimer = mq.gettime() + 3000
         return true

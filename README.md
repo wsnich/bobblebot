@@ -1,6 +1,6 @@
-# CZBot
+# bobblebot
 
-Fork of LUA TrotsBot which is a fork of Woobs Modbot
+Fork of CZBot (a fork of LUA TrotsBot, which is a fork of Woobs Modbot)
 
 Base documentation: [README](docs/README.md)
 

@@ -613,6 +613,58 @@ function spawnutils.mergeEngageTargetIntoMobList(rc)
     if sp and sp.ID() then table.insert(rc.MobList, sp) end
 end
 
+--- NPCs occupying an XTarget "Auto Hater" slot (spawns that have us/our group on THEIR hate list),
+--- within the camp area, that pass the normal engage safety filters. Line of sight is intentionally
+--- NOT required here: this lets the tank engage nearby mobs that are blocked by a wall/corner (the
+--- MobList filter requires LoS for TargetFilter 0/1, so those mobs are otherwise invisible to the MT).
+--- The "Auto Hater" slot type excludes friendly PCs/NPCs and group/pet/mez-target slots by definition.
+--- Mirrors MuleAssist's GetHostilesOnXTarget + TankAllMobs; engageTarget navs (pathfinds) to these.
+function spawnutils.getXTargetAutoHaterEngageables(rc)
+    rc = rc or state.getRunconfig()
+    local out = {}
+    local n = mq.TLO.Me.XTarget() or 0
+    if n == 0 then return out end
+    local myconfig = botconfig.config
+    local zradius = myconfig.settings.zradius or 75
+    local acleash = tonumber(myconfig.settings.acleash) or 75
+    local acleashSq = myconfig.settings.acleashSq or (acleash * acleash)
+    local cx, cy, cz = spawnutils.getMobListAnchor(rc)
+    local seen = {}
+    for i = 1, n do
+        local xt = mq.TLO.Me.XTarget(i)
+        local xtid = xt and xt.ID() or nil
+        if xtid and xtid > 0 and not seen[xtid]
+            and xt.TargetType() == 'Auto Hater' and xt.Type() == 'NPC' then
+            seen[xtid] = true
+            local spawn = mq.TLO.Spawn(xtid)
+            if spawnutils.isNpcEngageTarget(spawn)
+                and spawnInArea(spawn, cx, cy, cz, acleashSq, zradius)
+                and spawnutils.filterSpawnProtected(spawn)
+                and spawnutils.filterSpawnExcludeAndFTE(spawn, rc)
+                and not charm.isCharmSkipped(xtid, rc)
+                and not (spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(xtid, rc)) then
+                out[#out + 1] = spawn
+            end
+        end
+    end
+    return out
+end
+
+--- True if spawnId currently occupies an XTarget "Auto Hater" slot (i.e. has aggro on us/our group).
+--- Used to gate non-LoS pathfinding so the tank only chases mobs that are actually attacking us,
+--- not unaggro'd NPCs the camp MobList may include under TargetFilter "All NPCs".
+function spawnutils.isOnXTargetAutoHater(spawnId)
+    if not spawnId or spawnId <= 0 then return false end
+    local n = mq.TLO.Me.XTarget() or 0
+    for i = 1, n do
+        local xt = mq.TLO.Me.XTarget(i)
+        if xt and xt.ID() == spawnId and xt.TargetType() == 'Auto Hater' and not xt.Dead() then
+            return true
+        end
+    end
+    return false
+end
+
 local function mobListContainsId(mobList, spawnId)
     for _, v in ipairs(mobList or {}) do
         if v.ID() == spawnId then return true end
@@ -674,14 +726,14 @@ end
 function spawnutils.explainMobFilter(spawnId)
     spawnId = tonumber(spawnId) or mq.TLO.Target.ID()
     if not spawnId or spawnId == 0 then
-        printf('\ayCZBot:\ax mobfilter: no target (pass spawn id or select a spawn)')
+        printf('\aybobblebot:\ax mobfilter: no target (pass spawn id or select a spawn)')
         return
     end
     local rc = state.getRunconfig()
     local myconfig = botconfig.config
     local spawn = mq.TLO.Spawn(spawnId)
     if not spawn or not spawn.ID() or spawn.ID() == 0 then
-        printf('\ayCZBot:\ax mobfilter: spawn id %s not found', tostring(spawnId))
+        printf('\aybobblebot:\ax mobfilter: spawn id %s not found', tostring(spawnId))
         return
     end
     local ax, ay, az, anchorSource = spawnutils.getMobListAnchor(rc)
@@ -691,7 +743,7 @@ function spawnutils.explainMobFilter(spawnId)
     local tfNum = myconfig.settings.TargetFilter or 0
     local inList = mobListContainsId(rc.MobList, spawnId)
 
-    printf('\ayCZBot:\ax mobfilter for %s (id %s)', spawn.CleanName() or '?', tostring(spawnId))
+    printf('\aybobblebot:\ax mobfilter for %s (id %s)', spawn.CleanName() or '?', tostring(spawnId))
     printf('  MobList anchor: %s at %.1f, %.1f, %.1f', anchorSource, ax or 0, ay or 0, az or 0)
     printf('  In MobList: %s', inList and 'yes' or 'no')
     printf('  alive: %s', spawnutils.isAliveEngageSpawn(spawn) and 'yes' or 'no')

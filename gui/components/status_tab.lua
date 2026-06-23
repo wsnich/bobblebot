@@ -108,20 +108,24 @@ local STATE_NUM_TO_LABEL = {
     [state.STATES.resume_priorityCure] = 'Resuming priority cure',
 }
 
-local function getStatusLine()
+-- Status messages that are just the idle subsystem-check cycle (noise for the detail line/activity log).
+local IDLE_NOISE = {
+    [''] = true, ['Buff Check'] = true, ['Heal Check'] = true,
+    ['Cure Check'] = true, ['Debuff Check'] = true,
+}
+local ACTIVITY_MAX = 8           -- recent-activity entries kept
+local ACTIVITY_RECENT_SECS = 20  -- how long a finished action lingers on the header detail line
+local _activity = {}             -- ring buffer { {msg=..., t=...}, ... } oldest-first
+local _lastActivityMsg = nil
+
+-- Steady, flicker-free high-level state: run-state + camp/follow context. Ignores the rapid
+-- statusMessage "X Check" cycle so the header line doesn't blink.
+local function getSteadyStateLabel()
     local rc = state.getRunconfig()
-    if rc.pullHealerManaWait and rc.pullHealerManaWait.name then
-        local w = rc.pullHealerManaWait
-        if w.current ~= nil then
-            return string.format("Waiting on %s's mana (%d%% <= %d%%)", w.name, w.current, w.pct)
-        end
-        return string.format("Waiting on %s's mana (must be > %d%%)", w.name, w.pct)
-    end
-    if rc.pullDebuffWait and rc.pullDebuffWait.name then
-        return string.format('Waiting: non-curable debuff (%s)', rc.pullDebuffWait.name)
-    end
-    if rc.statusMessage and rc.statusMessage ~= '' then return rc.statusMessage end
+    if rc.pullHealerManaWait and rc.pullHealerManaWait.name then return 'Pull: waiting on healer mana' end
+    if rc.pullDebuffWait and rc.pullDebuffWait.name then return 'Pull: waiting on debuff' end
     local runState = state.getRunState()
+    if runState == state.STATES.casting then return 'Casting' end
     local label = STATE_NUM_TO_LABEL[runState]
     if label then
         if runState == state.STATES.dragging then
@@ -141,8 +145,45 @@ local function getStatusLine()
     return 'Idle'
 end
 
-function M.draw()
-    ImGui.TextColored(YELLOW, '%s', getStatusLine())
+-- The detailed action the bot is doing right now (Casting/Pulling/Tanking/waiting/...), or nil when
+-- it's only running the idle subsystem-check cycle.
+local function currentDetail()
+    local rc = state.getRunconfig()
+    if rc.pullHealerManaWait and rc.pullHealerManaWait.name then
+        local w = rc.pullHealerManaWait
+        if w.current ~= nil then
+            return string.format("Waiting on %s's mana (%d%% <= %d%%)", w.name, w.current, w.pct)
+        end
+        return string.format("Waiting on %s's mana (must be > %d%%)", w.name, w.pct)
+    end
+    if rc.pullDebuffWait and rc.pullDebuffWait.name then
+        return string.format('Waiting: non-curable debuff (%s)', rc.pullDebuffWait.name)
+    end
+    local m = rc.statusMessage
+    if m and not IDLE_NOISE[m] then return m end
+    return nil
+end
+
+-- Record the current action into the recent-activity ring buffer (called each frame by drawControls).
+-- Consecutive duplicates are collapsed; resets between actions so a repeated action logs again.
+local function sampleActivity()
+    local cur = currentDetail()
+    if cur then
+        if cur ~= _lastActivityMsg then
+            _lastActivityMsg = cur
+            _activity[#_activity + 1] = { msg = cur, t = mq.gettime() }
+            while #_activity > ACTIVITY_MAX do table.remove(_activity, 1) end
+        end
+    else
+        _lastActivityMsg = nil
+    end
+end
+
+-- Status line + Pause/Exit buttons. Rendered as a persistent header (above the tab bar by botgui)
+-- so the controls and current status are visible from every tab, not just Status.
+function M.drawControls()
+    sampleActivity()
+    ImGui.TextColored(YELLOW, '%s', getSteadyStateLabel())
     ImGui.SameLine()
     local style = ImGui.GetStyle()
     local isPaused = (_G.MasterPause == true)
@@ -167,7 +208,7 @@ function M.draw()
     if ImGui.SmallButton(Icons.FA_PAUSE_CIRCLE .. '##pause') then
         state.czpause()
     end
-    if ImGui.IsItemHovered() then ImGui.SetTooltip(isPaused and 'Resume CZBot' or 'Pause CZBot') end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip(isPaused and 'Resume bobblebot' or 'Pause bobblebot') end
     ImGui.PopStyleColor(2)
     ImGui.SameLine()
     ImGui.Text('%s', 'Exit')
@@ -178,6 +219,25 @@ function M.draw()
         state.getRunconfig().terminate = true
     end
     ImGui.PopStyleColor(2)
+
+    -- Second line: the current detailed action (white), or the last action (grey, with elapsed) so a
+    -- finished action lingers briefly instead of the line blinking back to idle.
+    local detail = currentDetail()
+    if detail then
+        ImGui.TextColored(WHITE, '%s', detail)
+    else
+        local last = _activity[#_activity]
+        local ago = last and math.floor((mq.gettime() - last.t) / 1000) or nil
+        if last and ago <= ACTIVITY_RECENT_SECS then
+            ImGui.TextColored(LIGHT_GREY, 'last: %s (%ds ago)', last.msg, ago)
+        else
+            ImGui.TextColored(LIGHT_GREY, '%s', 'monitoring...')
+        end
+    end
+end
+
+function M.draw()
+    local style = ImGui.GetStyle()
     ImGui.Spacing()
     if ImGui.BeginTable('flags wrapper', 2, ImGuiTableFlags.None) then
         ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthStretch, 0)
@@ -652,6 +712,22 @@ function M.draw()
         end
         ImGui.PopStyleVar(1)
         ImGui.EndTable()
+    end
+
+    -- Recent activity (newest first): the real actions the bot has taken, so the rapid subsystem-check
+    -- ("X Check") idle cycle in the header doesn't hide what actually happened.
+    ImGui.Spacing()
+    ImGui.Separator()
+    ImGui.TextColored(WHITE, '%s', 'Recent activity')
+    if #_activity == 0 then
+        ImGui.TextColored(LIGHT_GREY, '%s', '  (nothing yet)')
+    else
+        local now = mq.gettime()
+        for i = #_activity, 1, -1 do
+            local e = _activity[i]
+            local ago = math.floor((now - e.t) / 1000)
+            ImGui.TextColored(LIGHT_GREY, '  %3ds  %s', ago, e.msg)
+        end
     end
 end
 

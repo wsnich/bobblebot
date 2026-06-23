@@ -27,7 +27,7 @@ function combat.ResetCombatState(opts)
             local targetId = mq.TLO.Target.ID() or 0
             local petTargetId = mq.TLO.Me.Pet.Target.ID() or 0
             printf(
-                '\ayCZBot:\axDebug petResetCombatState backoff follower\ax runState=%s engageTargetId=%s targetId=%s petTargetId=%s petAgg=%s meCombat=%s opts={clearPet=%s,clearTarget=%s}',
+                '\aybobblebot:\axDebug petResetCombatState backoff follower\ax runState=%s engageTargetId=%s targetId=%s petTargetId=%s petAgg=%s meCombat=%s opts={clearPet=%s,clearTarget=%s}',
                 state.getRunStateName(),
                 tostring(engageId),
                 tostring(targetId),

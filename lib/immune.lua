@@ -48,7 +48,7 @@ function M.processList(immuneID, opts)
         local t = M.get()
         if not t[spell] or not t[spell][mobName] then
             M.add(spell, zone, mobName)
-            printf('\ayCZBot:\ax%s is \\arIMMUNE\\ax to spell \\ag%s\\ax, adding to the ImmuneList', mobName, spell)
+            printf('\aybobblebot:\ax%s is \\arIMMUNE\\ax to spell \\ag%s\\ax, adding to the ImmuneList', mobName, spell)
         end
     end
 end

@@ -93,6 +93,18 @@ function M.draw()
         runConfigLoaders()
     end
 
+    ImGui.Text('Engage XTarget only')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('When on, only engage mobs on your XTarget (Auto-Hater / aggro\'d on the group).\nUse with an external puller; stops proactive engaging of nearby NPCs. A manual /cz attack still works.')
+    end
+    ImGui.SameLine()
+    local xtOnlyChecked = (botconfig.config.settings.engageXTargetOnly ~= false)
+    local xtVal, xtPressed = ImGui.Checkbox('##combat_engageXTargetOnly', xtOnlyChecked)
+    if xtPressed then
+        botconfig.config.settings.engageXTargetOnly = xtVal
+        runConfigLoaders()
+    end
+
     -- Line 2: Stick Settings
     ImGui.Spacing()
     ImGui.Text('Stick Settings')

@@ -1,6 +1,6 @@
 # Nuking Configuration
 
-This document explains how to set up **nuking** (direct-damage spells on the tank’s or MA’s target, or on adds). In CZBot, nuking is configured using the **debuff** system: you add nuke spells as debuff entries and use **bands** to choose which mobs they hit.
+This document explains how to set up **nuking** (direct-damage spells on the tank’s or MA’s target, or on adds). In bobblebot, nuking is configured using the **debuff** system: you add nuke spells as debuff entries and use **bands** to choose which mobs they hit.
 
 ## Overview
 

@@ -38,7 +38,7 @@ local function followSpawnMatchesName(spawnId, followname)
     local sp = mq.TLO.Spawn('id ' .. spawnId)
     if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
     local stype = sp.Type() or ''
-    if stype == 'Corpse' or stype == 'CORPSE' then return false end
+    if stype == 'Corpse' then return false end
     local clean = sp.CleanName()
     if not clean or clean == '' then return false end
     return string.lower(clean) == string.lower(followname)
@@ -66,7 +66,7 @@ local function refreshFollowId()
             local now = mq.gettime()
             if now >= lastFollowResolveFailTime + 15000 then
                 lastFollowResolveFailTime = now
-                printf('\ayCZBot:\axFollow: waiting for leader "%s" in zone.', rc.followname)
+                printf('\aybobblebot:\axFollow: waiting for leader "%s" in zone.', rc.followname)
             end
         end
         return
@@ -89,7 +89,7 @@ local function shouldCallFollow(rc)
     local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
     local engageId = rc.engageTargetId or 0
     local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
-    return followid > 0 and followdistance > 0 and engageId == 0 and followtype ~= 'CORPSE' and
+    return followid > 0 and followdistance > 0 and engageId == 0 and followtype ~= 'Corpse' and
         followdistance >= myconfig.settings.followdistance
 end
 
@@ -107,7 +107,7 @@ local function isValidFollowTarget(followid)
     local sid = mq.TLO.Spawn('id ' .. followid).ID() or 0
     if sid == 0 then return false end
     local stype = mq.TLO.Spawn('id ' .. followid).Type() or ''
-    return stype ~= 'Corpse' and stype ~= 'CORPSE'
+    return stype ~= 'Corpse'
 end
 
 local function clearUnstuckIfFollowInactive(rc)
@@ -318,7 +318,7 @@ local function doNavToCamp(opts)
     opts = opts or {}
     local rc = state.getRunconfig()
     if not rc.makecamp.x or not rc.makecamp.y or not rc.makecamp.z then return end
-    if opts.echoMsg then printf('\ayCZBot:\ax %s', opts.echoMsg) end
+    if opts.echoMsg then printf('\aybobblebot:\ax %s', opts.echoMsg) end
     if opts.dist ~= nil then
         mq.cmdf('/nav locxyz %s %s %s log=off dist=%s', rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, opts.dist)
     else
@@ -341,7 +341,7 @@ local function makeCampOn()
     if mq.TLO.Stick.Active() then mq.cmd('/stick off') end
     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
     if not mq.TLO.Navigation.MeshLoaded() then
-        printf('\ayCZBot:\axCannot use makecamp (no mesh loaded)')
+        printf('\aybobblebot:\axCannot use makecamp (no mesh loaded)')
         return false
     end
     setCampHere()
@@ -349,7 +349,7 @@ local function makeCampOn()
     local rc = state.getRunconfig()
     rc.followid = 0
     rc.followname = ''
-    printf('\ayCZBot:\axhanging out using mq2nav')
+    printf('\aybobblebot:\axhanging out using mq2nav')
     return true
 end
 
@@ -359,7 +359,7 @@ local function makeCampOff()
     if not myconfig.pull.hunter and not myconfig.pull.roam then
         rc.makecamp = { x = nil, y = nil, z = nil }
     end
-    printf('\ayCZBot:\axmakecamp \aroff\ax')
+    printf('\aybobblebot:\axmakecamp \aroff\ax')
 end
 
 local function makeCampReturn()
@@ -594,7 +594,7 @@ function botmove.StartReturnToFollowAfterEngage()
     local followid = mq.TLO.Spawn(rc.followid).ID() or 0
     local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
     local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
-    if followdistance < myconfig.settings.followdistance or not followid or followtype == 'CORPSE' then return end
+    if followdistance < myconfig.settings.followdistance or not followid or followtype == 'Corpse' then return end
     mq.cmd('/multiline ; /stick off ; /squelch /attack off ; /mqtarget self')
     botmove.FollowCall()
     if state.canStartBusyState(state.STATES.engage_return_follow) then
@@ -695,7 +695,7 @@ function botmove.ClearCamp(reason)
     rc.campstatus = false
     rc.makecamp = { x = nil, y = nil, z = nil }
     if reason == 'death' then
-        printf('\ayCZBot:\ax\arCamp cleared (death)\ax')
+        printf('\aybobblebot:\ax\arCamp cleared (death)\ax')
     end
     return true
 end

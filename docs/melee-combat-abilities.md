@@ -1,6 +1,6 @@
 # Melee Combat Abilities Configuration
 
-This document explains how to set up **melee combat abilities** (disciplines and kick/bash-style abilities) for melee classes. In CZBot, combat abilities are configured using the **debuff** system: you add disciplines or abilities as debuff entries with **gem** `'disc'` or `'ability'` and use **bands** to choose which mobs they hit.
+This document explains how to set up **melee combat abilities** (disciplines and kick/bash-style abilities) for melee classes. In bobblebot, combat abilities are configured using the **debuff** system: you add disciplines or abilities as debuff entries with **gem** `'disc'` or `'ability'` and use **bands** to choose which mobs they hit.
 
 ## Overview
 

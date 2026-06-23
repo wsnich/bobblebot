@@ -1,6 +1,6 @@
 # Mezzing Configuration
 
-This document explains how to set up **mezzing** (crowd control: mez spells on adds, and charm). In CZBot, mezzing is configured using the **debuff** system: you add mez (and optionally charm) spells as debuff entries and use **bands** to choose which mobs they hit.
+This document explains how to set up **mezzing** (crowd control: mez spells on adds, and charm). In bobblebot, mezzing is configured using the **debuff** system: you add mez (and optionally charm) spells as debuff entries and use **bands** to choose which mobs they hit.
 
 ## Overview
 

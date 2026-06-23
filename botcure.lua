@@ -52,9 +52,9 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
     if not cureindex then return nil, nil end
     for _, v in pairs(CureType[index] or {}) do
         if not botname then
-            local curetype = mq.TLO.Me[v] and mq.TLO.Me[v]()
-            if string.lower(v) ~= 'all' and curetype then
-                if spelltartype == 'Self' then return mq.TLO.Me.ID(), 'self' end
+            -- Self-cure: Me has no lowercase poison/disease/curse/corruption member (the old
+            -- mq.TLO.Me[v] read was always nil), so walk our own buffs for the matching counter.
+            if string.lower(v) ~= 'all' and spellutils.MeDetrimentalsForCure({ v }) then
                 return mq.TLO.Me.ID(), 'self'
             end
         else

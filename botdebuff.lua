@@ -318,7 +318,7 @@ local function debuffGetTargetsForPhase(phase, context)
                 local name = (sp and sp.CleanName and sp.CleanName()) or tostring(t.id)
                 parts[i] = string.format('%s(%s)', name, t.id)
             end
-            printf('\ayCZBot:\ax [Mez t=%s] notmatar targets this tick: %s', tostring(mq.gettime()),
+            printf('\aybobblebot:\ax [Mez t=%s] notmatar targets this tick: %s', tostring(mq.gettime()),
                 table.concat(parts, ', '))
         end
         return out
@@ -479,16 +479,23 @@ local function DebuffCheckHandleBardNotmatarWait(rc)
         return false
     end
     local now = mq.gettime()
+    local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
+    if stillSinging then w.singingStarted = true end
     if w.deadline and now < w.deadline then
-        local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
-        if stillSinging then
-            w.singingStarted = true
+        -- Keep waiting while the song is in progress, or before it has begun (mq2twist queues a tick
+        -- before casting actually starts). Otherwise we'd phantom-complete and record a mez that never
+        -- landed, leaving the add un-mezzed but treated as handled.
+        if stillSinging or not w.singingStarted then
             return true
         end
     end
     rc.bardNotmatarWait = nil
     state.clearRunState()
-    updateBardNotmatarDebuffState(w.entry, w.EvalID)
+    -- Only record the mez if we actually sang it. A deadline that expires without ever singing is a
+    -- failed cast: clean up and resume, but do not mark the debuff as landed.
+    if w.singingStarted then
+        updateBardNotmatarDebuffState(w.entry, w.EvalID)
+    end
     retargetMaTargetAfterBardMez()
     bardtwist.RestoreCombatTwistAfterNotmatar()
     return true
@@ -506,13 +513,13 @@ local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, r
     if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed()
         and spellutils.SpawnMezActive(EvalID)
         and not spellutils.SpawnHasDebuffSpell(entry.spell, EvalID) then
-        printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
+        printf('\aybobblebot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
         spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
         retargetMaTargetAfterBardMez()
         bardtwist.RestoreCombatTwistAfterNotmatar()
         return true
     end
-    printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
+    printf('\aybobblebot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
     bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
@@ -552,7 +559,7 @@ local function DebuffCheckAfterCast(spellIndex, EvalID, targethit, mobcountstart
         if newCount >= adEntry.recast then
             local rc = state.getRunconfig()
             printf(
-                '\ayCZBot:\ax\ar%s\ax has resisted spell \ar%s\ax debuff[%s] \am%s\ax times, disabling spell for this spawn',
+                '\aybobblebot:\ax\ar%s\ax has resisted spell \ar%s\ax debuff[%s] \am%s\ax times, disabling spell for this spawn',
                 mq.TLO.Spawn(EvalID).CleanName(), adEntry.spell, spellIndex, adEntry.recast)
             local recastduration = 600000 + mq.gettime()
             local duration_sec = spellutils.GetSpellDurationSec(adEntry)
@@ -572,7 +579,7 @@ local function DebuffCheckAfterCast(spellIndex, EvalID, targethit, mobcountstart
                             if not rc.nukeFlavorsAutoDisabled then rc.nukeFlavorsAutoDisabled = {} end
                             if not rc.nukeFlavorsAutoDisabled[f] then
                                 rc.nukeFlavorsAutoDisabled[f] = true
-                                printf('\ayCZBot:\ax \ar%s\ax nukes auto-disabled after resists on 3 mobs in a row.', f:gsub('^%l', string.upper))
+                                printf('\aybobblebot:\ax \ar%s\ax nukes auto-disabled after resists on 3 mobs in a row.', f:gsub('^%l', string.upper))
                                 botconfig.saveNukeFlavorsToCommon()
                             end
                         end

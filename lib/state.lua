@@ -449,24 +449,24 @@ function M.isCombatContextForBuff(rc)
     return false
 end
 
----Toggle or set global MasterPause (pause CZBot). Used by status tab Pause button and /czp.
+---Toggle or set global MasterPause (pause bobblebot). Used by status tab Pause button and /czp.
 ---@param ... string|nil 'on' = pause, 'off' = resume, none = toggle
 function M.czpause(...)
     local args = { ... }
     if args[1] and args[1] == 'off' then
         _G.MasterPause = false
-        print('Unpausing CZBot')
+        print('Unpausing bobblebot')
     elseif args[1] and args[1] == 'on' then
         _G.MasterPause = true
-        print('Pausing CZBot')
+        print('Pausing bobblebot')
     else
         -- Treat nil as not paused (e.g. before first use)
         if _G.MasterPause ~= true then
             _G.MasterPause = true
-            print('Pausing CZBot')
+            print('Pausing bobblebot')
         else
             _G.MasterPause = false
-            print('Unpausing CZBot')
+            print('Unpausing bobblebot')
         end
     end
 end

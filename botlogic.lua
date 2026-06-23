@@ -33,7 +33,7 @@ local _petAttackRetargetLastTime = 0
 local function charState_StartupIfRequested(args)
     if args[1] ~= 'startup' then return end
     if mq.TLO.Me.Hovering() then
-        printf('\ayCZBot:\axCan\'t start CZBot cause I\'m hovering over my corpse!')
+        printf('\aybobblebot:\axCan\'t start bobblebot cause I\'m hovering over my corpse!')
         state.getRunconfig().terminate = true
         return
     end
@@ -146,7 +146,7 @@ local function charState_Always()
             mq.cmd('/destroy')
         elseif mq.TLO.Me.FreeInventory() == 0 then
             if not rc.OutOfSpace then
-                printf('\ayCZBot:\axI\'m out of inventory space!')
+                printf('\aybobblebot:\axI\'m out of inventory space!')
             end
             rc.OutOfSpace = true
         elseif not rc.OutOfSpace and rc.forageExpectCursor and mq.TLO.Me.FreeInventory() > 0 then
@@ -344,10 +344,10 @@ local function _registerBuiltinHooks()
 end
 
 function botlogic.StartUp(...)
-    print('CZBot is starting! (' .. VERSION .. ')')
+    print('bobblebot is starting! (' .. VERSION .. ')')
     math.randomseed(os.time() * 1000 + os.clock() * 1000)
     if mq.TLO.Me.Hovering() or string.find(mq.TLO.Me.Name() or '', 'corpse') then
-        printf('\ayCZBot:\axCan\'t start CZBot cause I\'m hovering over my corpse!')
+        printf('\aybobblebot:\axCan\'t start bobblebot cause I\'m hovering over my corpse!')
         state.getRunconfig().terminate = true
         return
     end

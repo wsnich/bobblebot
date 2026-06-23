@@ -42,8 +42,12 @@ local function updateImGui()
     if not czgui then return end
     ImGui.SetNextWindowPos(ImVec2(200, 200), ImGuiCond.FirstUseEver)
     ImGui.SetNextWindowSize(ImVec2(600, 800), ImGuiCond.FirstUseEver)
-    isOpen, shouldDraw = ImGui.Begin('CZBot ' .. VERSION .. '###CZBotMain', isOpen)
+    isOpen, shouldDraw = ImGui.Begin('bobblebot ' .. VERSION .. '###CZBotMain', isOpen)
     if shouldDraw then
+        ImGui.Spacing()
+        -- Persistent header: status line + Pause/Exit, visible regardless of the active tab.
+        status_tab.drawControls()
+        ImGui.Separator()
         ImGui.Spacing()
         if ImGui.BeginTabBar('CZBot GUI') then
             for _, tab in ipairs(TABS) do

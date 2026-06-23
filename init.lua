@@ -3,7 +3,7 @@ local mq = require('mq')
 -- Require MQCharinfo before loading bot (so we can end macro if unavailable).
 local ok, _ = pcall(require, 'plugin.charinfo')
 if not ok then
-    print('\ayCZBot:\ax MQCharinfo (charinfo) is required but failed to load.')
+    print('\aybobblebot:\ax MQCharinfo (charinfo) is required but failed to load.')
     return
 end
 
@@ -12,11 +12,11 @@ if not mq.TLO.Plugin('MQ2MoveUtils').IsLoaded() then mq.cmd('/squelch /plugin MQ
 if not mq.TLO.Plugin('MQ2Twist').IsLoaded() then mq.cmd('/squelch /plugin MQ2Twist load') end
 mq.delay(2000)
 if not mq.TLO.Plugin('MQ2MoveUtils').IsLoaded() then
-    print('\ayCZBot:\ax MQ2MoveUtils is required but failed to load.')
+    print('\aybobblebot:\ax MQ2MoveUtils is required but failed to load.')
     return
 end
 if not mq.TLO.Plugin('MQ2Twist').IsLoaded() then
-    print('\ayCZBot:\ax MQ2Twist is required but failed to load.')
+    print('\aybobblebot:\ax MQ2Twist is required but failed to load.')
     return
 end
 

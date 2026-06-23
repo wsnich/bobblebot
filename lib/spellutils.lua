@@ -12,7 +12,15 @@ local bothooks = require('lib.bothooks')
 local utils = require('lib.utils')
 local casting = require('lib.casting')
 local botmove = require('botmove')
-local spawnutils = require('lib.spawnutils')
+-- Lazily required (see spawnutilsMod) to break a load-time require cycle:
+-- spawnutils -> charm -> spellutils -> spawnutils, which Lua 5.1 rejects with
+-- "loop or previous error loading module 'lib.spawnutils'". By the time the call sites below run,
+-- spawnutils is fully loaded, so require() returns the cached module instantly.
+local _spawnutils
+local function spawnutilsMod()
+    if not _spawnutils then _spawnutils = require('lib.spawnutils') end
+    return _spawnutils
+end
 local spellutils = {}
 local _deps = {}
 local _instantDebuffCastPending = nil
@@ -282,7 +290,7 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
     end
     if ctx.spellid and spawnLevel and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < spawnLevel and isMez then
         local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawn.ID()))
-        printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - target level %s exceeds spell max level %s', name, spawn.ID(), spawnLevel, ctx.spellmaxlvl)
+        printf('\aybobblebot:\ax [Mez] skipping \at%s\ax (id %s) - target level %s exceeds spell max level %s', name, spawn.ID(), spawnLevel, ctx.spellmaxlvl)
         return false
     end
     if entry.stopWhen and spawnId then
@@ -309,7 +317,7 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks then
         if phase == 'notmatar' and isMez then
             local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawn.ID()))
-            printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', name, spawn.ID())
+            printf('\aybobblebot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', name, spawn.ID())
             return false
         end
         if phase == 'matar' and not spellutils.IsConcussionSpell(entry) then
@@ -390,7 +398,7 @@ function spellutils.SpellCheck(Sub, ID)
     if not spellutils.HasReagents(Sub, ID) then
         entry.enabled = false
         spellstates.SetReagentDelay(Sub, ID, mq.gettime() + (5 * 60 * 1000)) -- 5 min before retrying this spell
-        printf('\ayCZBot:\axMissing reagent for %s, disabling spell for 5 minutes', spell)
+        printf('\aybobblebot:\axMissing reagent for %s, disabling spell for 5 minutes', spell)
         return false
     end
     local spellmana, spellend
@@ -408,10 +416,10 @@ function spellutils.SpellCheck(Sub, ID)
         if (spellmana > 0 and ((mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < spellmana) or (mq.TLO.Me.PctMana() < minmana)) then return false end
     end
     if gem == 'alt' then
-        if not mq.TLO.Me.AltAbilityReady(spell) then return false end
+        if not mq.TLO.Me.AltAbilityReady(spell)() then return false end
     end
     if gem == 'disc' and spellend then
-        if not mq.TLO.Me.CombatAbilityReady(spell) then return false end
+        if not mq.TLO.Me.CombatAbilityReady(spell)() then return false end
         if (spellend and ((mq.TLO.Me.CurrentEndurance() - (mq.TLO.Me.EnduranceRegen() * 2)) < spellend) or (mq.TLO.Me.PctMana() < minmana)) then return false end
     end
     return true
@@ -556,9 +564,9 @@ function spellutils.handleTargetImmuneEvent(_line)
     if not ctx.spellName or ctx.spellName == '' then
         if curtarget and curtarget > 0 then
             local name = mq.TLO.Spawn(curtarget).CleanName() or tostring(curtarget)
-            printf('\ayCZBot:\ax\at%s\ax is \arimmune\ax (unknown spell)', name)
+            printf('\aybobblebot:\ax\at%s\ax is \arimmune\ax (unknown spell)', name)
         else
-            printf('\ayCZBot:\axTarget is \arimmune\ax (unknown spell)')
+            printf('\aybobblebot:\axTarget is \arimmune\ax (unknown spell)')
         end
         return
     end
@@ -583,23 +591,27 @@ function spellutils.handleTargetImmuneEvent(_line)
 end
 
 --Check Distance (uses distance squared for comparisons)
-function spellutils.DistanceCheck(Sub, ID, EvalID)
-    local entry = botconfig.getSpellEntry(Sub, ID)
-    if not entry then return false end
-    local spell = entry.spell
-    if not spell then return false end
-    local spellid = nil
-    local myrange = mq.TLO.Spell(spell).MyRange()
-    local aeRange = mq.TLO.Spell(spell).AERange()
+-- Range check by spell NAME against a target spawn id. True when the target is within the spell's
+-- MyRange (or AERange for AE spells). Used directly when the spell is not a config entry (e.g. the
+-- hardcoded Complete Heal in chchain).
+function spellutils.DistanceCheckByName(spellName, EvalID)
+    if not spellName or spellName == '' or not EvalID or EvalID <= 0 then return false end
+    local myrange = mq.TLO.Spell(spellName).MyRange()
+    local aeRange = mq.TLO.Spell(spellName).AERange()
     local targ = mq.TLO.Spawn(EvalID)
     local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), targ.X(), targ.Y())
     if aeRange and aeRange > 0 and distSq and distSq <= (aeRange * aeRange) then
         return true
     elseif distSq and myrange and distSq <= (myrange * myrange) then
         return true
-    else
-        return false
     end
+    return false
+end
+
+function spellutils.DistanceCheck(Sub, ID, EvalID)
+    local entry = botconfig.getSpellEntry(Sub, ID)
+    if not entry or not entry.spell then return false end
+    return spellutils.DistanceCheckByName(entry.spell, EvalID)
 end
 
 -- Returns true if peer has spellid in Buff or ShortBuff (rich array scan).
@@ -716,6 +728,39 @@ function spellutils.SpawnDetrimentalsForCure(spawnId, cureTypeList)
     local hasCurable = false
     for i = 1, maxSlots do
         local b = sp.Buff(i)
+        if b then
+            local total = b.TotalCounters and b.TotalCounters() or 0
+            if total > 0 then
+                hasCurable = true
+                countPoison = countPoison + (b.CountersPoison and b.CountersPoison() or 0)
+                countDisease = countDisease + (b.CountersDisease and b.CountersDisease() or 0)
+                countCurse = countCurse + (b.CountersCurse and b.CountersCurse() or 0)
+                countCorruption = countCorruption + (b.CountersCorruption and b.CountersCorruption() or 0)
+            end
+        end
+    end
+    if not hasCurable then return false end
+    for _, v in ipairs(cureTypeList) do
+        local vlower = string.lower(tostring(v))
+        if vlower == 'all' then return true end
+        if vlower == 'poison' and countPoison > 0 then return true end
+        if vlower == 'disease' and countDisease > 0 then return true end
+        if vlower == 'curse' and countCurse > 0 then return true end
+        if vlower == 'corruption' and countCorruption > 0 then return true end
+    end
+    return false
+end
+
+-- Self: does my own buff list contain a matching curable counter? Mirrors SpawnDetrimentalsForCure
+-- but walks Me.Buff(i) (always populated for self; no targeting needed). Used for self-cure, since
+-- Me has no lowercase poison/disease/curse/corruption member.
+function spellutils.MeDetrimentalsForCure(cureTypeList)
+    if not cureTypeList or type(cureTypeList) ~= 'table' then return false end
+    local maxSlots = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
+    local countPoison, countDisease, countCurse, countCorruption = 0, 0, 0, 0
+    local hasCurable = false
+    for i = 1, maxSlots do
+        local b = mq.TLO.Me.Buff(i)
         if b then
             local total = b.TotalCounters and b.TotalCounters() or 0
             if total > 0 then
@@ -1182,7 +1227,7 @@ end
 --- Clear lastAssistTargetId when the cached spawn is no longer alive.
 local function clearLastAssistTargetIfDead(rc)
     local cached = rc.lastAssistTargetId
-    if cached and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
+    if cached and not spawnutilsMod().isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
         rc.lastAssistTargetId = nil
     end
 end
@@ -1241,7 +1286,7 @@ function spellutils.GetAssistInfo(includeTarget, assistpct)
     local fromCache = false
     if unavailable and (not assistar or assistar == 0) then
         local cached = rc.lastAssistTargetId
-        if cached and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
+        if cached and spawnutilsMod().isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
             assistar = cached
             assistarhp = mq.TLO.Spawn(cached).PctHPs()
             fromCache = true
@@ -1275,7 +1320,7 @@ local MEZ_DBG_INTERVAL_MS = 2000
 
 --- Mez diagnostic with session ms timestamp (unthrottled).
 function spellutils.MezLog(fmt, ...)
-    printf('\ayCZBot:\ax [Mez t=%s] ' .. fmt, tostring(mq.gettime()), ...)
+    printf('\aybobblebot:\ax [Mez t=%s] ' .. fmt, tostring(mq.gettime()), ...)
 end
 
 --- Throttled mez/debuff resume diagnostic (see botdebuff multi-mez debugging).
@@ -1542,7 +1587,7 @@ local function dbgBuffResumeTrace(phase, callerSub, options, rc)
     if now < _buffResumeDbgNextTime then return end
     _buffResumeDbgNextTime = now + BUFF_RESUME_DBG_INTERVAL_MS
     local hook = cs.spellcheckResume and cs.spellcheckResume.hook
-    printf('\ayCZBot:\ax [buff-resume] %s callerSub=%s optPri=%s resolvedPri=%s resumeHook=%s', tostring(phase),
+    printf('\aybobblebot:\ax [buff-resume] %s callerSub=%s optPri=%s resolvedPri=%s resumeHook=%s', tostring(phase),
         tostring(callerSub), tostring(optPri), tostring(resolved), tostring(hook))
 end
 
@@ -1597,7 +1642,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
         local idleLike = (not string.find(status, 'C') and not string.find(status, 'M') and storedId == (rc.CurSpell.spellid or 0))
         local complete = idleLike and CASTING_LIB_SUCCESS_RESULTS[castResult]
         if idleLike and not complete then
-            printf('\ayCZBot:\ax cast lib finished without success (\ar%s\ax) sub=\at%s\ax spellidx=\at%s\ax', castResult,
+            printf('\aybobblebot:\ax cast lib finished without success (\ar%s\ax) sub=\at%s\ax spellidx=\at%s\ax', castResult,
                 tostring(rc.CurSpell.sub), tostring(rc.CurSpell.spell))
             spellutils.clearCastingStateOrResume()
             return false
@@ -1612,7 +1657,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
                 if entry and entry.spell then
                     spellstates.DebuffListUpdate(rc.CurSpell.target, entry.spell, mq.gettime() + BLOCKED_SKIP_MS)
                     local spawnName = mq.TLO.Spawn(rc.CurSpell.target).CleanName() or tostring(rc.CurSpell.target)
-                    printf('\ayCZBot:\ax %s did not take hold on \at%s\ax (blocked); skipping for %d min', entry.spell,
+                    printf('\aybobblebot:\ax %s did not take hold on \at%s\ax (blocked); skipping for %d min', entry.spell,
                         spawnName, math.floor(BLOCKED_SKIP_MS / 60000))
                 end
             end
@@ -1990,7 +2035,7 @@ function spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, target
     if not th or not targetSpawn.PctHPs() or targetSpawn.ID() ~= target then return end
     local maxVal = type(th) == 'table' and th.max or th
     if (maxVal + (math.abs(maxVal - 100) * botconfig.config.heal.interruptlevel)) <= targetSpawn.PctHPs() then
-        printf('\ayCZBot:\axInterrupting Spell %s, target is above the threshold', entry.spell)
+        printf('\aybobblebot:\axInterrupting Spell %s, target is above the threshold', entry.spell)
         spellutils.interruptActiveCast(rc)
         spellutils.clearCastingStateOrResume()
     end
@@ -2009,7 +2054,7 @@ function spellutils.InterruptCheckDontStack(entry, target, spellname)
         end
     end
     if not tag then return end
-    printf('\ayCZBot:\axInterrupt %s, target already %s', spellname, tag)
+    printf('\aybobblebot:\axInterrupt %s, target already %s', spellname, tag)
     spellutils.RecordDontStackDebuffFromSpawn(target, entry.spell, tag)
     spellutils.interruptActiveCast(state.getRunconfig())
     spellutils.clearCastingStateOrResume()
@@ -2063,14 +2108,14 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
 
     if sub == 'buff' then
         if not stacks and spellTargetType ~= 'Self' then
-            printf('\ayCZBot:\axInterrupt %s, buff does not stack on target: %s', spellname, targetname)
+            printf('\aybobblebot:\axInterrupt %s, buff does not stack on target: %s', spellname, targetname)
             spellutils.interruptActiveCast(rc)
             if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
             rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
             spellutils.clearCastingStateOrResume()
         elseif buffPresent and buffdur >= BUFF_REFRESH_THRESHOLD_MS and not isSelfGroupBuff then
             -- Buff present with enough time left: interrupt. Below threshold we allow refresh cast to complete.
-            printf('\ayCZBot:\axInterrupt %s, buff already present', spellname)
+            printf('\aybobblebot:\axInterrupt %s, buff already present', spellname)
             spellutils.interruptActiveCast(rc)
             if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
             rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
@@ -2082,7 +2127,7 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
         if buffPresent then
             local thresholdMs = spellutils.GetDebuffRefreshThresholdMs()
             if (buffdur or 0) > thresholdMs then
-                printf('\ayCZBot:\axInterrupt %s on MobID %s, debuff remaining %sms > %sms', spellname, target,
+                printf('\aybobblebot:\axInterrupt %s on MobID %s, debuff remaining %sms > %sms', spellname, target,
                     tostring(buffdur or 0), tostring(thresholdMs))
                 local expire = (mq.TLO.Target.Buff(spellname).Duration() or 0) + mq.gettime()
                 spellstates.DebuffListUpdate(target, spellid, expire)
@@ -2134,7 +2179,7 @@ function spellutils.InterruptCheck()
 
     spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltartype)
     if criteria ~= 'corpse' and targetSpawn.Type() == 'Corpse' then
-        printf('\ayCZBot:\axMy target is dead, interrupting')
+        printf('\aybobblebot:\axMy target is dead, interrupting')
         spellutils.interruptActiveCast(rc)
         mq.cmd('/squelch /mqtarget clear')
         spellutils.clearCastingStateOrResume()
@@ -2189,7 +2234,7 @@ function spellutils.CheckGemReadiness(sub, index, entry)
     local gem = entry.gem
     if type(gem) == 'number' then
         if not mq.TLO.Me.Book(spell)() then
-            printf('\ayCZBot:\ax %s[%s]: Spell %s not found in your book', sub, index, spell)
+            printf('\aybobblebot:\ax %s[%s]: Spell %s not found in your book', sub, index, spell)
             entry.enabled = false
             if not rc.spellNotInBook then rc.spellNotInBook = {} end
             if not rc.spellNotInBook[sub] then rc.spellNotInBook[sub] = {} end
@@ -2300,7 +2345,7 @@ local function dbgCastPhase(phase, sub, index, runPriority)
     local now = mq.gettime()
     if now < _castPhaseDbgNextTime then return end
     _castPhaseDbgNextTime = now + CAST_PHASE_DBG_INTERVAL_MS
-    printf('\ayCZBot:\ax [cast t=%s] %s sub=%s idx=%s runPriority=%s', tostring(now), tostring(phase),
+    printf('\aybobblebot:\ax [cast t=%s] %s sub=%s idx=%s runPriority=%s', tostring(now), tostring(phase),
         tostring(sub), tostring(index), tostring(runPriority))
 end
 
@@ -2411,7 +2456,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     end
     invokePrepareImmediateCast(sub, index, EvalID, targethit)
     if entry.announce then
-        printf("\ayCZBot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
+        printf("\aybobblebot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
     end
     -- Stand to cast only when not about to memorize: standing interrupts MQ2Cast memorization.
     if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() and (not rc.CurSpell or rc.CurSpell.phase ~= 'casting') then

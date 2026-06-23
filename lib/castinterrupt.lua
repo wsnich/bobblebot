@@ -109,7 +109,7 @@ local function executeInterrupt(targetId, spellIndex)
     local runPriority = bothooks.getPriority('doDebuff')
     local ok = spellutils.CastSpell(spellIndex, targetId, 'matar', 'debuff', runPriority)
     if ok then
-        printf('\ayCZBot:\ax interrupting \ag%s\ax on \at%s\ax (Complete Heal/Gate)', entry.spell or '?',
+        printf('\aybobblebot:\ax interrupting \ag%s\ax on \at%s\ax (Complete Heal/Gate)', entry.spell or '?',
             targetDisplayName(targetId))
     end
     return ok
@@ -124,7 +124,7 @@ local function queuePending(rc, targetId, mobName)
     local spellIndex = findInterruptSpellIndex(targetId)
     local entry = spellIndex and botconfig.getSpellEntry('debuff', spellIndex)
     if entry then
-        printf('\ayCZBot:\ax queued \ag%s\ax interrupt on \at%s\ax (waiting for current cast)', entry.spell or '?',
+        printf('\aybobblebot:\ax queued \ag%s\ax interrupt on \at%s\ax (waiting for current cast)', entry.spell or '?',
             targetDisplayName(targetId))
     end
 end

@@ -87,7 +87,7 @@ function charm.EvalTarget(index, ctx)
         (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.ID())
     _charmindex = index
     local rc = state.getRunconfig()
-    if not mq.TLO.Me.Pet.ID() and not mq.TLO.Me.Pet.IsSummoned() and rc.charmid then rc.charmid = nil end
+    if (mq.TLO.Me.Pet.ID() or 0) == 0 and not mq.TLO.Me.Pet.IsSummoned() and rc.charmid then rc.charmid = nil end
     if mq.TLO.Me.Pet.ID() and mq.TLO.Me.Pet.ID() > 0 and not mq.TLO.Me.Pet.IsSummoned() and not rc.charmid then
         rc.charmid = mq.TLO.Me.Pet.ID()
         charm.trackCharmSkip(rc.charmid, rc)
@@ -102,7 +102,7 @@ function charm.EvalTarget(index, ctx)
         local overLevel = ctx.spellid and v.Level() and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < v.Level()
         local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
         local outOfRange = ctx.myrange and distSq and distSq > (ctx.myrange * ctx.myrange)
-        if not overLevel and not outOfRange and tarstacks and tonumber(ctx.spelldur) > 0 then
+        if not overLevel and not outOfRange and tarstacks and (tonumber(ctx.spelldur) or 0) > 0 then
             local mobhp = v.PctHPs()
             if ctx.mobMin ~= nil and (mobhp == nil or mobhp < ctx.mobMin) then
                 -- skip: mob below band
@@ -155,7 +155,7 @@ function charm.OnCharmBroke(line, spellNameFromEvent)
     if spellNameFromEvent ~= charmspellname then return end
     spellstates.ClearDebuffOnSpawn(rc.charmid, _charmspellid)
     charm.trackCharmSkip(rc.charmid, rc)
-    printf('\ayCZBot:\ax\arCHARM %s wore off!', spellNameFromEvent)
+    printf('\aybobblebot:\ax\arCHARM %s wore off!', spellNameFromEvent)
     _recastRequest = { index = _charmindex, spawnId = rc.charmid }
 end
 
