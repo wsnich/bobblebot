@@ -599,6 +599,15 @@ local function cmd_engagextargetonly(args)
     printf('\aybobblebot:\ax Engage XTarget-only %s', botconfig.config.settings.engageXTargetOnly ~= false and 'on' or 'off')
 end
 
+local function cmd_role(args)
+    local ok, key = botconfig.ApplyRole(args[2])
+    if ok then
+        printf('\aybobblebot:\ax Applied role preset: \ag%s\ax', key)
+    else
+        printf('\aybobblebot:\ax Unknown role "%s" (use: tank, ma, dps, healer)', tostring(args[2]))
+    end
+end
+
 local function cmd_maanchorleash(args)
     local val = tonumber(args[2])
     if not val or val < 1 then
@@ -1127,6 +1136,7 @@ local handlers = {
     macampanchor = cmd_macampanchor,
     engagextargetonly = cmd_engagextargetonly,
     xtargetonly = cmd_engagextargetonly,
+    role = cmd_role,
     maanchorleash = cmd_maanchorleash,
     offtank = cmd_offtank,
     cast = cmd_cast,

@@ -410,6 +410,13 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     local entry = botconfig.getSpellEntry('debuff', i)
     if not entry then return false end
     if EvalID and utils.isProtectedSpawn(mq.TLO.Spawn(EvalID)) then return false end
+    -- Reactive mode (settings.engageXTargetOnly, default on): only debuff/mez/nuke mobs on our XTarget
+    -- Auto-Hater list (aggro'd on the group). Stops the bot casting on -- and thereby aggroing -- unwanted
+    -- MobList NPCs (e.g. an enchanter slowing/mezzing a mob nobody is fighting). /cz attack bypasses it.
+    if myconfig.settings.engageXTargetOnly ~= false and not state.getRunconfig().attackCommandEngage
+        and EvalID and EvalID > 0 and not require('lib.spawnutils').isOnXTargetAutoHater(EvalID) then
+        return false
+    end
     if not spellutils.CheckGemReadiness('debuff', i, entry) then return false end
     if not spellutils.IsConcussionSpell(entry) and entry.recast ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
         return false

@@ -73,7 +73,7 @@ end
 --- Custom section for debuff entries: recast, delay, dontStack (passed to spell_entry as customSection).
 local function debuffCustomSection(entry, idPrefix, onChanged)
     -- First line: Recast and Delay (SameLine)
-    ImGui.Text('Recast')
+    ImGui.Text('Resist limit')
     if ImGui.IsItemHovered() then ImGui.SetTooltip(
         'After this many resists on the same spawn, disable this spell for that spawn. 0 = no limit.') end
     ImGui.SameLine()
@@ -168,6 +168,8 @@ function M.draw()
     if not debuff then return end
     if not debuff.spells then debuff.spells = {} end
     local spells = debuff.spells
+    spell_entry.drawTabIntro({ flagKey = 'dodebuff', flagNoun = 'Debuff / Mez / Nuke', isEmpty = #spells == 0,
+        emptyHint = 'No entries configured. Click "Add debuff" below — this tab also holds mez, nukes, DoTs, and combat abilities.' })
     for i, entry in ipairs(spells) do
         -- Normalize legacy tokens so the UI reflects canonical matar/notmatar.
         if entry.bands and type(entry.bands) == 'table' then

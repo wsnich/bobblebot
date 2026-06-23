@@ -118,7 +118,7 @@ M.ConColors = { "Grey", "Green", "Light Blue", "Blue", "White", "Yellow", "Red" 
 M.ConColorsNameToId = {}
 for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 
-local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
+local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script', 'roles' }
 
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly' },
@@ -129,6 +129,25 @@ local subOrder = {
     debuff = { 'spells' },
     cure = { 'spells' },
     script = {}
+}
+
+-- Role presets: each role applies a bundle of behavior flags + a Tank/Assist designation when
+-- selected (Roles-tab buttons or /cz role <name>). Editable in the UI, persisted in config.roles.
+-- mtSticky/offtank apply to config.melee; setTank/setAssist set TankName/AssistName to this character
+-- (else 'automatic'); the rest apply to config.settings.
+local ROLE_KEYS = { 'tank', 'ma', 'dps', 'healer' }
+local ROLE_FIELDS = { 'domelee', 'doheal', 'docure', 'dobuff', 'dodebuff', 'dosit', 'mtSticky', 'offtank', 'engageXTargetOnly', 'setTank', 'setAssist' }
+local ROLE_DEFAULTS = {
+    tank   = { domelee = true,  doheal = false, docure = true, dobuff = true, dodebuff = false, dosit = true, mtSticky = true,  offtank = false, engageXTargetOnly = true, setTank = true,  setAssist = false },
+    ma     = { domelee = true,  doheal = false, docure = true, dobuff = true, dodebuff = true,  dosit = true, mtSticky = false, offtank = false, engageXTargetOnly = true, setTank = false, setAssist = true  },
+    dps    = { domelee = true,  doheal = false, docure = true, dobuff = true, dodebuff = true,  dosit = true, mtSticky = false, offtank = false, engageXTargetOnly = true, setTank = false, setAssist = false },
+    healer = { domelee = false, doheal = true,  docure = true, dobuff = true, dodebuff = false, dosit = true, mtSticky = false, offtank = false, engageXTargetOnly = true, setTank = false, setAssist = false },
+}
+local ROLE_ALIASES = {
+    tank = 'tank', mt = 'tank',
+    ma = 'ma', mainassist = 'ma', ['non-tank ma'] = 'ma', nontankma = 'ma',
+    dps = 'dps', dd = 'dps',
+    healer = 'healer', heal = 'healer', cleric = 'healer',
 }
 
 local spellSlotOrder = {
@@ -515,6 +534,47 @@ function M.ApplyAndPersist()
     M.MarkDirty()
 end
 
+-- Normalize a user/command role token to a canonical role key (tank/ma/dps/healer), or nil.
+function M.NormalizeRoleKey(roleKey)
+    if not roleKey then return nil end
+    local k = string.lower(tostring(roleKey)):match('^%s*(.-)%s*$')
+    return ROLE_ALIASES[k]
+end
+
+-- Editable role-preset metadata for the GUI/commands.
+function M.GetRoleKeys() return ROLE_KEYS end
+function M.GetRoleFields() return ROLE_FIELDS end
+
+-- Apply a role preset to THIS character: behavior flags + Tank/Assist designation, then persist.
+-- Sets both config.settings (persisted) and the live runconfig (immediate effect). Returns ok, key.
+function M.ApplyRole(roleKey)
+    local key = M.NormalizeRoleKey(roleKey)
+    local r = key and M.config.roles and M.config.roles[key]
+    if not r then return false, roleKey end
+    local s = M.config.settings
+    s.domelee = r.domelee
+    s.doheal = r.doheal
+    s.docure = r.docure
+    s.dobuff = r.dobuff
+    s.dodebuff = r.dodebuff
+    s.dosit = r.dosit
+    s.engageXTargetOnly = r.engageXTargetOnly
+    M.config.melee = M.config.melee or {}
+    M.config.melee.mtSticky = r.mtSticky
+    M.config.melee.offtank = r.offtank
+    local myName = mq.TLO.Me.Name()
+    local tankName = (r.setTank and myName) or 'automatic'
+    local assistName = (r.setAssist and myName) or 'automatic'
+    s.TankName = tankName
+    s.AssistName = assistName
+    local rc = state.getRunconfig()
+    rc.TankName = tankName
+    rc.AssistName = assistName
+    rc.lastAssistTargetId = nil
+    M.ApplyAndPersist()
+    return true, key
+end
+
 --- Swap two spell entries in a section array and persist.
 function M.swapSpellEntries(section, fromIndex, toIndex)
     local spells = M.config[section] and M.config[section].spells
@@ -783,6 +843,17 @@ local function writeConfigToFile(config, filename)
                             end
                             file:flush()
                         end
+                    elseif key == 'roles' then
+                        for _, rk in ipairs(ROLE_KEYS) do
+                            local rv = value[rk]
+                            if type(rv) == 'table' then
+                                file:write(indent .. "  " .. formatKey(rk) .. " = {\n")
+                                file:flush()
+                                writesubTable(rv, ROLE_FIELDS, indent .. "    ")
+                                file:write(indent .. "  },\n")
+                                file:flush()
+                            end
+                        end
                     else
                         writesubTable(value, subOrder[key], indent .. "  ")
                     end
@@ -890,6 +961,16 @@ function M.Load(path)
         .TargetFilter) or 0 end
     if (M.config.settings.petassist == nil) then M.config.settings.petassist = false end
     if (M.config.settings.spelldb == nil) then M.config.settings.spelldb = 'spells.db' end
+    -- Role presets: ensure config.roles exists and every role has all fields (fills new fields on upgrade).
+    M.config.roles = M.config.roles or {}
+    for _, rk in ipairs(ROLE_KEYS) do
+        local def = ROLE_DEFAULTS[rk]
+        local r = M.config.roles[rk]
+        if type(r) ~= 'table' then r = {}; M.config.roles[rk] = r end
+        for _, f in ipairs(ROLE_FIELDS) do
+            if r[f] == nil then r[f] = def[f] end
+        end
+    end
     applySectionDefaults('pull', {
         radius = 400,
         zrange = 150,

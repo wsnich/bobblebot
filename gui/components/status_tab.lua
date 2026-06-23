@@ -52,34 +52,31 @@ local function runConfigLoaders()
     botconfig.ApplyAndPersist()
 end
 
-local YELLOW = ImVec4(1, 1, 0, 1)
-local RED = ImVec4(1, 0, 0, 1)
-local GREEN = ImVec4(0, 0.8, 0, 1)
-local BLACK = ImVec4(0, 0, 0, 1)
-local WHITE = ImVec4(1, 1, 1, 1)
-local LIGHT_GREY = ImVec4(0.75, 0.75, 0.75, 1)
-local TABLE_BORDER_BLUE = ImVec4(51 / 255, 105 / 255, 173 / 255, 1.0)
+local theme = require('gui.widgets.theme')
+local toggle = require('gui.widgets.toggle')
+local YELLOW, RED, GREEN, BLACK, WHITE, LIGHT_GREY, TABLE_BORDER_BLUE =
+    theme.YELLOW, theme.RED, theme.GREEN, theme.BLACK, theme.WHITE, theme.LIGHT_GREY, theme.TABLE_BORDER_BLUE
 
 local FLAGS_COLUMN_WIDTH = 65
 local FLAGS_ROW_PADDING_Y = 2
 local FLAGS_PANEL_WIDTH = 145
-local NUMERIC_INPUT_WIDTH = 80
+local NUMERIC_INPUT_WIDTH = theme.WIDTHS.numeric
 
 local DO_FLAGS = {
-    { key = 'dopull',   label = 'Pull' },
-    { key = 'dodebuff', label = 'Debuff' },
-    { key = 'doheal',   label = 'Heal' },
-    { key = 'dobuff',   label = 'Buff' },
-    { key = 'docure',   label = 'Cure' },
-    { key = 'domelee',  label = 'Melee' },
-    { key = 'doraid',   label = 'Raid' },
-    { key = 'dodrag',   label = 'Drag' },
-    { key = 'domount',  label = 'Mount' },
-    { key = 'dosit',    label = 'Sit' },
-    { key = 'doforage', label = 'Forage' },
+    { key = 'dopull',   label = 'Pull',   tt = 'Pull mobs to camp. Leave OFF if you use a separate puller.' },
+    { key = 'dodebuff', label = 'Debuff', tt = 'Cast debuffs, mez, nukes, DoTs and combat abilities (Debuff tab).' },
+    { key = 'doheal',   label = 'Heal',   tt = 'Heal group/raid members and self (Heal tab).' },
+    { key = 'dobuff',   label = 'Buff',   tt = 'Keep buffs up on self/group/pets (Buff tab).' },
+    { key = 'docure',   label = 'Cure',   tt = 'Cure detrimentals: poison/disease/curse/corruption (Cure tab).' },
+    { key = 'domelee',  label = 'Melee',  tt = 'Engage and melee targets.' },
+    { key = 'doraid',   label = 'Raid',   tt = 'Run raid-mechanic scripts for the current zone.' },
+    { key = 'dodrag',   label = 'Drag',   tt = 'Drag corpses back to camp.' },
+    { key = 'domount',  label = 'Mount',  tt = 'Summon/use a mount when traveling.' },
+    { key = 'dosit',    label = 'Sit',    tt = 'Sit to recover mana/endurance when idle and safe.' },
+    { key = 'doforage', label = 'Forage', tt = 'Use the Forage skill periodically.' },
 }
 
-local SONGS_FLAG = { key = 'dosongs', label = 'Songs' }
+local SONGS_FLAG = { key = 'dosongs', label = 'Songs', tt = 'Bard: keep the song twist running.' }
 
 local function hasForageAbility()
     local ok, v = pcall(function()
@@ -218,6 +215,7 @@ function M.drawControls()
     if ImGui.SmallButton(Icons.FA_POWER_OFF .. '##exit') then
         state.getRunconfig().terminate = true
     end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('%s', 'Exit: stop bobblebot (ends the Lua script).') end
     ImGui.PopStyleColor(2)
 
     -- Second line: the current detailed action (white), or the last action (grey, with elapsed) so a
@@ -418,7 +416,7 @@ function M.draw()
             if ImGui.IsItemHovered() then ImGui.SetTooltip(
                 'Distance (units) from camp to count as \'at camp\' for leash and return.') end
             if fixedCamp then
-                ImGui.TextColored(WHITE, '%s', 'Acleash: ')
+                ImGui.TextColored(WHITE, '%s', 'Leash to radius: ')
                 ImGui.SameLine(0, 2)
                 local acleashOn = rc.doCampAcleash ~= false
                 local acleashChecked, acleashToggled = ImGui.Checkbox('##camp_acleash', acleashOn)
@@ -677,10 +675,9 @@ function M.draw()
                 else
                     value = botconfig.config.settings[entry.key] == true
                 end
-                local icon = value and Icons.FA_TOGGLE_ON or Icons.FA_TOGGLE_OFF
-                ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
-                ImGui.PushStyleColor(ImGuiCol.Text, value and GREEN or RED)
-                if ImGui.SmallButton(icon .. '##' .. entry.key) then
+                local flagTip = (entry.tt or entry.label) .. '\n\n' ..
+                    (value and 'Currently ON (click to turn off)' or 'Currently OFF (click to turn on)')
+                if toggle.pill(entry.key, value, { small = true, tip = flagTip }) then
                     if entry.key == 'dopull' then
                         local rc = state.getRunconfig()
                         rc.dopull = not value
@@ -701,10 +698,6 @@ function M.draw()
                         botconfig.ApplyAndPersist()
                     end
                 end
-                if ImGui.IsItemHovered() then
-                    ImGui.SetTooltip(value and 'On' or 'Off')
-                end
-                ImGui.PopStyleColor(2)
                 ImGui.SameLine(0, 2)
                 ImGui.Text('%s', entry.label)
             end

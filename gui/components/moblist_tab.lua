@@ -5,12 +5,13 @@ local ImGui = require('ImGui')
 local state = require('lib.state')
 local mobfilter = require('lib.mobfilter')
 local nocombatzones = require('lib.nocombatzones')
+local theme = require('gui.widgets.theme')
 
 local M = {}
 
 local excludeAddBuf, priorityAddBuf, charmAddBuf = '', '', ''
 local showExcludeAddInput, showPriorityAddInput, showCharmAddInput = false, false, false
-local YELLOW = ImVec4(1, 1, 0, 1)
+local YELLOW = theme.YELLOW
 
 local function tableContains(list, name)
     if type(list) ~= 'table' then return false end
@@ -63,13 +64,14 @@ local function drawMobListSection(listType, runconfigKey, label)
         else
             local flags = ImGuiInputTextFlags.EnterReturnsTrue
             local newVal, changed = ImGui.InputText('Mob name##' .. listType, addBuf, flags)
-            if changed then
-                if listType == 'exclude' then excludeAddBuf = newVal
-                elseif listType == 'priority' then priorityAddBuf = newVal
-                else charmAddBuf = newVal end
-            end
+            -- Sync the buffer every frame so the Add button (not just Enter) sees the typed name; it
+            -- previously synced only on Enter, leaving the button reading a stale/empty value. `changed`
+            -- is Enter-only (EnterReturnsTrue), so submitting on it never fires per-keystroke.
+            if listType == 'exclude' then excludeAddBuf = newVal
+            elseif listType == 'priority' then priorityAddBuf = newVal
+            else charmAddBuf = newVal end
             ImGui.SameLine()
-            if ImGui.Button('Add##' .. listType .. ' submit') or (changed and newVal and newVal ~= '') then
+            if ImGui.Button('Add##' .. listType .. ' submit') or changed then
                 local name = ((listType == 'exclude' and excludeAddBuf) or (listType == 'priority' and priorityAddBuf) or charmAddBuf):match('^%s*(.-)%s*$')
                 if name and name ~= '' and not tableContains(list, name) then
                     table.insert(list, name)

@@ -2,11 +2,11 @@
 
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
+local theme = require('gui.widgets.theme')
 
 local M = {}
 
-local YELLOW = ImVec4(1, 1, 0, 1)
-local RED = ImVec4(1, 0, 0, 1)
+local YELLOW, RED = theme.YELLOW, theme.RED
 local TABLE_FLAGS = bit32.bor(ImGuiTableFlags.ScrollY, ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter,
     ImGuiTableFlags.BordersV, ImGuiTableFlags.SizingStretchSame, ImGuiTableFlags.Sortable,
     ImGuiTableFlags.Hideable, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable)

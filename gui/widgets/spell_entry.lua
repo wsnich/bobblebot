@@ -17,6 +17,8 @@ local combos = require('gui.widgets.combos')
 local inputs = require('gui.widgets.inputs')
 local labeled_grid = require('gui.widgets.labeled_grid')
 local modals = require('gui.widgets.modals')
+local theme = require('gui.widgets.theme')
+local toggle = require('gui.widgets.toggle')
 
 local M = {}
 
@@ -133,7 +135,7 @@ local _entryState = setmetatable({}, { __mode = 'k' })
 local TYPE_COMBO_WIDTH = 100
 local SPELL_SELECTABLE_WIDTH = 140
 local MIN_SPELL_SELECTABLE_WIDTH = 70
-local NUMERIC_INPUT_WIDTH = 80
+local NUMERIC_INPUT_WIDTH = theme.WIDTHS.numeric
 local ALIAS_INPUT_WIDTH = 100
 
 local function hasAnyPhase(phases, wanted)
@@ -148,9 +150,7 @@ local function hasAnyPhase(phases, wanted)
     return false
 end
 
-local GREEN = ImVec4(0, 0.8, 0, 1)
-local RED = ImVec4(1, 0, 0, 1)
-local BLACK = ImVec4(0, 0, 0, 1)
+local GREEN, RED, BLACK = theme.GREEN, theme.RED, theme.BLACK
 
 local function calcRightControlsWidth(opts)
     local enabledIconW = select(1, ImGui.CalcTextSize(Icons.FA_TOGGLE_ON))
@@ -399,16 +399,14 @@ function M.draw(spell, opts)
             ImGui.PopStyleColor(2)
             ImGui.SameLine()
         end
-        ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
-        ImGui.PushStyleColor(ImGuiCol.Text, enabledColor)
-        if ImGui.Button(enabledIcon .. '##' .. id .. '_enabled') then
+        local noun = string.lower(opts.deleteEntryLabel or 'entry')
+        if toggle.pill(id .. '_enabled', enabled, {
+                onTip = 'This ' .. noun .. ' is ENABLED (click to disable)',
+                offTip = 'This ' .. noun .. ' is DISABLED (click to enable)',
+            }) then
             spell.enabled = not (spell.enabled ~= false)
             if onChanged then onChanged() end
         end
-        if ImGui.IsItemHovered() then
-            ImGui.SetTooltip(enabled and 'On' or 'Off')
-        end
-        ImGui.PopStyleColor(2)
     end
 
     if displayCommonFields then
@@ -686,6 +684,29 @@ function M.draw(spell, opts)
             end
             if onChanged then onChanged() end
         end
+    end
+end
+
+-- Tab intro for spell tabs (Heal/Buff/Debuff/Cure): a master-switch banner with an Enable button when
+-- the global flag is off (the #1 "I configured it and nothing happens" trap), plus an empty-state hint
+-- when nothing is configured. opts = { flagKey, flagNoun, isEmpty, emptyHint }.
+function M.drawTabIntro(opts)
+    opts = opts or {}
+    local botconfig = require('lib.config')
+    if opts.flagKey and botconfig.config.settings[opts.flagKey] ~= true then
+        ImGui.TextColored(ImVec4(1, 0.85, 0.2, 1), '%s is OFF — this tab does nothing until you enable it.',
+            opts.flagNoun or 'This feature')
+        if ImGui.SmallButton('Enable##tabintro_' .. opts.flagKey) then
+            botconfig.config.settings[opts.flagKey] = true
+            botconfig.ApplyAndPersist()
+        end
+        ImGui.Spacing()
+        ImGui.Separator()
+        ImGui.Spacing()
+    end
+    if opts.isEmpty then
+        ImGui.TextColored(ImVec4(0.75, 0.75, 0.75, 1), '%s', opts.emptyHint or 'Nothing configured yet.')
+        ImGui.Spacing()
     end
 end
 

@@ -71,7 +71,7 @@ end
 
 local function buffCustomSection(entry, idPrefix, onChanged)
     -- spellicon row: input a spell ID or spell name (validated => stored as numeric spell ID)
-    ImGui.Text('Spellicon')
+    ImGui.Text('Check buff')
     if ImGui.IsItemHovered() then
         ImGui.SetTooltip('Spell ID used to detect whether the target already has this buff. Input can be a spell name or a numeric spell ID. Empty/0 disables.')
     end
@@ -186,6 +186,8 @@ function M.draw()
     if not buff then return end
     local spells = buff.spells or {}
     buff.spells = spells
+    spell_entry.drawTabIntro({ flagKey = 'dobuff', flagNoun = 'Buffing', isEmpty = #spells == 0,
+        emptyHint = 'No buffs configured. Click "Add buff" below to create one.' })
     for i, entry in ipairs(spells) do
         spell_entry.draw(entry, {
             id = 'buff_' .. i,

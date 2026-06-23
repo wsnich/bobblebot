@@ -4,11 +4,12 @@
 -- validateFn(value) returns success (boolean), optional errorMessage (string).
 
 local imgui = require('ImGui')
+local theme = require('gui.widgets.theme')
 
 local M = {}
 
 local ImGuiInputTextFlags = ImGuiInputTextFlags or {}
-local RED = ImVec4(1, 0, 0, 1)
+local RED = theme.RED
 local EnterReturnsTrue = ImGuiInputTextFlags.EnterReturnsTrue or 0
 local POPUP_FLAGS = bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoResize)
 
