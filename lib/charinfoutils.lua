@@ -59,7 +59,7 @@ local function spawnInAttack(spawn)
     local psFn = spawn.PlayerState
     if psFn then
         local ps = psFn()
-        if ps then return (ps & (PLAYERSTATE_AGGRESSIVE | PLAYERSTATE_FORCED_AGGRESSIVE)) ~= 0 end
+        if ps then return bit32.band(ps, bit32.bor(PLAYERSTATE_AGGRESSIVE, PLAYERSTATE_FORCED_AGGRESSIVE)) ~= 0 end
     end
     local aggFn = spawn.Aggressive
     if aggFn then return aggFn() == true end
