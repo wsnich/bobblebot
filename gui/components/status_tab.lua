@@ -605,6 +605,19 @@ function M.draw()
                 ImGui.SameLine(0, 2)
                 ImGui.TextColored(LIGHT_GREY, '%s', locationStr)
             end
+            -- Live distance from the camp pin (camp active only); red once you're past Radius.
+            if fixedCamp and rc.makecamp and rc.makecamp.x and rc.makecamp.y and rc.makecamp.z then
+                local d = utils.calcDist3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(),
+                    rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
+                local radius = tonumber(botconfig.config.settings.acleash) or 100
+                ImGui.TextColored(WHITE, '%s', 'Dist from camp: ')
+                ImGui.SameLine(0, 2)
+                ImGui.TextColored((d and d > radius) and RED or GREEN, '%s',
+                    d and string.format('%.1f / %d', d, radius) or '—')
+                if ImGui.IsItemHovered() then
+                    ImGui.SetTooltip('Your distance from the camp pin / camp Radius. Red = past Radius.')
+                end
+            end
             ImGui.TextColored(WHITE, '%s', 'Radius: ')
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
