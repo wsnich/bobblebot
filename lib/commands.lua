@@ -770,6 +770,28 @@ local function cmd_upgradedebug(args)
     printf('\aybobblebot:\axUpgrade debug logging %s', su.IsDebug() and 'on' or 'off')
 end
 
+local function cmd_aetankmezzer(args)
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        botconfig.config.settings.aeTankIgnoreMezzer = true
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        botconfig.config.settings.aeTankIgnoreMezzer = false
+    else
+        botconfig.config.settings.aeTankIgnoreMezzer = not (botconfig.config.settings.aeTankIgnoreMezzer == true)
+    end
+    botconfig.ApplyAndPersist()
+    printf('\aybobblebot:\axAE-tank ignore-mezzer %s', (botconfig.config.settings.aeTankIgnoreMezzer == true) and 'on (AE-tank runs with ENC/BRD in group)' or 'off (auto-suppress on ENC/BRD)')
+end
+
+local function cmd_aetankdebug(args)
+    local botmelee = require('botmelee')
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then botmelee.SetAeTankDebug(true)
+    elseif mode == 'off' or mode == 'false' or mode == '0' then botmelee.SetAeTankDebug(false)
+    else botmelee.SetAeTankDebug(not botmelee.IsAeTankDebug()) end
+    printf('\aybobblebot:\axAE-tank debug logging %s', botmelee.IsAeTankDebug() and 'on' or 'off')
+end
+
 local function cmd_charmpetsetup(args)
     local mode = args[2] and string.lower(args[2]) or ''
     if mode == 'on' or mode == 'true' or mode == '1' then
@@ -1318,6 +1340,8 @@ local handlers = {
     rezaccept = cmd_rezaccept,
     charmpetsetup = cmd_charmpetsetup,
     aetank = cmd_aetank,
+    aetankmezzer = cmd_aetankmezzer,
+    aetankdebug = cmd_aetankdebug,
     premem = cmd_premem,
     prememdebug = cmd_prememdebug,
     scribe = cmd_scribe,

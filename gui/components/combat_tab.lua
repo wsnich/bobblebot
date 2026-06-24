@@ -109,6 +109,20 @@ function M.draw()
         runConfigLoaders()
     end
 
+    if atChecked then
+        ImGui.Text('   \u{2514} Ignore mezzer in group')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('By default AE-tank turns itself off when an Enchanter/Bard is in your group.\nEnable this to keep AE-tanking anyway -- e.g. when your bard is just twisting songs, not mezzing.')
+        end
+        ImGui.SameLine()
+        local amChecked = (botconfig.config.settings.aeTankIgnoreMezzer == true)
+        local amVal, amPressed = ImGui.Checkbox('##combat_aeTankIgnoreMezzer', amChecked)
+        if amPressed then
+            botconfig.config.settings.aeTankIgnoreMezzer = amVal
+            runConfigLoaders()
+        end
+    end
+
     ImGui.Text('Pre-memorize gembar when idle')
     if ImGui.IsItemHovered() then
         ImGui.SetTooltip('During downtime (out of combat, not moving/casting), load each configured spell into its gem so combat-critical spells (slow, heals, debuffs) are ready before they are needed.\nOnly touches gems assigned to a single spell -- gems you intentionally share between spells are left alone.\nPrevents the "MEMORIZETIMEOUT" failure where a spell can never finish memorizing mid-fight.')

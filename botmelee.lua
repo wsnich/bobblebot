@@ -624,6 +624,19 @@ end
 -- instant top-of-hate, so cycling re-taunts on peelers holds the pack (the only option in a pre-AE-taunt
 -- era). Auto-suppresses when a mezzer is present so it never wakes/steals the enchanter's mez targets.
 local _aeTauntNextTime = 0
+local _aeDebug = false
+local _aeDebugNextTime = 0
+
+function botmelee.SetAeTankDebug(on) _aeDebug = on and true or false end
+function botmelee.IsAeTankDebug() return _aeDebug end
+
+-- Throttled AE-tank diagnostic line (so /cz aetankdebug shows WHY it's idle without spamming every tick).
+local function aeDbg(fmt, ...)
+    if not _aeDebug then return end
+    if mq.gettime() < _aeDebugNextTime then return end
+    _aeDebugNextTime = mq.gettime() + 2000
+    printf('\ay[aetank]\ax ' .. fmt, ...)
+end
 
 local function mezzerInGroup()
     local n = tonumber(mq.TLO.Group.Members()) or 0
@@ -636,23 +649,34 @@ local function mezzerInGroup()
 end
 
 local function aeTankGrab(rc)
-    if myconfig.settings.tankAllMobs ~= true then return end
-    if rc.attackCommandEngage then return end
-    if not tankrole.AmIMainTank() then return end
-    if mq.gettime() < _aeTauntNextTime then return end
-    if not (mq.TLO.Me.AbilityReady('Taunt') and mq.TLO.Me.AbilityReady('Taunt')()) then return end
-    if mezzerInGroup() then return end
+    if myconfig.settings.tankAllMobs ~= true then return end -- feature off; stay silent
+    if rc.attackCommandEngage then aeDbg('idle: /cz attack engage is active'); return end
+    if not tankrole.AmIMainTank() then
+        aeDbg('idle: not Main Tank (TankName=%s, me=%s)', tostring(tankrole.GetMainTankName()), tostring(mq.TLO.Me.Name()))
+        return
+    end
+    if mezzerInGroup() and myconfig.settings.aeTankIgnoreMezzer ~= true then
+        aeDbg('idle: Enchanter/Bard in group -> AE-tank auto-suppressed (enable "Ignore mezzer" to override)')
+        return
+    end
+    if not (mq.TLO.Me.AbilityReady('Taunt') and mq.TLO.Me.AbilityReady('Taunt')()) then
+        aeDbg('waiting: Taunt skill not ready'); return
+    end
+    if mq.gettime() < _aeTauntNextTime then return end -- post-taunt cooldown; stay silent
     local meId = mq.TLO.Me.ID()
-    for _, spawn in ipairs(spawnutils.getXTargetAutoHaterEngageables(rc)) do
+    local engageables = spawnutils.getXTargetAutoHaterEngageables(rc)
+    for _, spawn in ipairs(engageables) do
         local sid = spawn.ID()
         local tgt = (spawn.Target and spawn.Target.ID()) or 0
         if sid and tgt ~= meId then
             -- Not on me: taunt it to grab aggro (one multiline so /doability hits the mob we just targeted).
             mq.cmdf('/multiline ; /squelch /target id %s ; /squelch /doability Taunt', sid)
             _aeTauntNextTime = mq.gettime() + 1500
+            aeDbg('taunting %s (%s) -- it was not on me', tostring((spawn.CleanName and spawn.CleanName()) or sid), tostring(sid))
             return
         end
     end
+    aeDbg('nothing to grab: %d engageable XTarget mob(s), all already on me', #engageables)
 end
 
 -- Resolve engageTargetId from role (MT/MA/OT/DPS), then engage or disengage. Only sets melee busy state via canStartBusyState.

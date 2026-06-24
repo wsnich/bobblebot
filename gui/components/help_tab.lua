@@ -46,6 +46,7 @@ local GROUPS = {
         { "/cz doforage on|off", "Toggle auto-forage." },
         { "/cz engagextargetonly on|off   (xtargetonly)", "Reactive mode: only engage mobs on your XTarget (use with a separate puller)." },
         { "/cz aetank on|off", "AE-tank: as MT, taunt all XTarget mobs near camp (auto-off when a mezzer is in group)." },
+        { "/cz aetankmezzer on|off", "Let AE-tank run even with an Enchanter/Bard in group (e.g. a non-mezzing bard)." },
         { "/cz premem on|off", "Pre-memorize the configured gembar during downtime so combat spells don't memorize mid-fight." },
         { "/cz burn [seconds|off]", "Open a burn window; spells/abilities with a `burn` precondition fire during it." },
         { "/cz togglenuke", "Toggle nuke usage." },
@@ -87,6 +88,7 @@ local GROUPS = {
         { "/cz buffdebug on|off", "Log why a buff is or isn't cast on a target." },
         { "/cz prememdebug on|off", "Log which gems the pre-mem pass loads (and what it skips)." },
         { "/cz upgradedebug on|off", "Log spell-upgrade scan results (SpellGroup matches per configured spell)." },
+        { "/cz aetankdebug on|off", "Log why AE-tank is idle (not MT, mezzer suppress, taunt cooldown, nothing loose)." },
         { "/cz echo <text>", "Echo a message (testing)." },
     } },
     { title = "Utility", cmds = {
