@@ -7,13 +7,18 @@ local state = require('lib.state')
 local rolelists = require('lib.rolelists')
 local inputs = require('gui.widgets.inputs')
 local theme = require('gui.widgets.theme')
+local section = require('gui.widgets.section')
+local name_list = require('gui.widgets.name_list')
 
 local M = {}
 
-local maAddBuf, mtAddBuf = '', ''
-local showMaAddInput, showMtAddInput = false, false
-local YELLOW, WHITE = theme.YELLOW, theme.WHITE
+local YELLOW, WHITE, GREEN = theme.YELLOW, theme.WHITE, theme.GREEN
 local NUMERIC_INPUT_WIDTH = theme.WIDTHS.numeric
+
+-- Transient confirmation after clicking Apply on a role preset, so the click gives visible feedback
+-- (it changes flags + Tank/Assist designation silently otherwise).
+local _lastApplied = { label = nil, t = 0 }
+local APPLIED_SHOW_SECS = 5
 
 -- Role-preset grid layout (columns = roles, rows = editable fields). Field keys must match
 -- config.lua ROLE_FIELDS; the Apply button calls botconfig.ApplyRole(role).
@@ -41,21 +46,21 @@ local function runConfigLoaders()
     botconfig.ApplyAndPersist()
 end
 
-local function tableContains(list, name)
-    if type(list) ~= 'table' then return false end
-    for _, n in ipairs(list) do
-        if n == name then return true end
-    end
-    return false
-end
-
 local function isPcName(name)
     if not name or name == '' then return false end
     return mq.TLO.Spawn('pc =' .. name).Type() == 'PC'
 end
 
+-- "Add target" candidate: the current target's clean name, but only when it's a PC.
+local function currentPcTargetName()
+    if mq.TLO.Target.ID() and mq.TLO.Target.ID() > 0 and mq.TLO.Target.Type() == 'PC' then
+        return mq.TLO.Target.CleanName()
+    end
+    return nil
+end
+
 local function drawMaAnchorSection()
-    ImGui.TextColored(YELLOW, 'MA anchor settings')
+    section.header('MA anchor settings')
     ImGui.TextColored(WHITE, '%s', 'MA anchor: ')
     ImGui.SameLine(0, 2)
     local maAnchorOn = botconfig.config.settings.maCampAnchor ~= false
@@ -86,78 +91,23 @@ local function drawMaAnchorSection()
     ImGui.Spacing()
 end
 
-local function drawRoleListSection(listType, runconfigKey, label, addBufKey)
+local function drawRoleListSection(listType, runconfigKey, label)
     local rc = state.getRunconfig()
     if type(rc[runconfigKey]) ~= 'table' then rc[runconfigKey] = {} end
-    local list = rc[runconfigKey]
-    ImGui.TextColored(YELLOW, '%s', label)
-    if ImGui.BeginTable(label .. ' table', 3, bit32.bor(ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter), -1, 0) then
-        ImGui.TableSetupColumn('Name', 0, 0.55)
-        ImGui.TableSetupColumn('Order', 0, 0.30)
-        ImGui.TableSetupColumn('', 0, 0.15)
-        ImGui.TableHeadersRow()
-        for i = 1, #list do
-            local name = list[i]
-            ImGui.TableNextRow()
-            ImGui.TableNextColumn()
-            ImGui.Text('%s', name)
-            ImGui.TableNextColumn()
-            if i > 1 and ImGui.SmallButton('Up##' .. listType .. i) then
-                list[i], list[i - 1] = list[i - 1], list[i]
-                rolelists.process(listType, 'save_replace')
-            end
-            ImGui.SameLine()
-            if i < #list and ImGui.SmallButton('Down##' .. listType .. i) then
-                list[i], list[i + 1] = list[i + 1], list[i]
-                rolelists.process(listType, 'save_replace')
-            end
-            ImGui.TableNextColumn()
-            if ImGui.SmallButton('Remove##' .. listType .. i) then
-                table.remove(list, i)
-                rolelists.process(listType, 'save_replace')
-            end
-        end
-        ImGui.EndTable()
-    end
-    local hasPcTarget = mq.TLO.Target.ID() and mq.TLO.Target.ID() > 0 and mq.TLO.Target.Type() == 'PC'
-    local showAddInput = (addBufKey == 'ma' and showMaAddInput) or (addBufKey == 'mt' and showMtAddInput)
-    local addBuf = addBufKey == 'ma' and maAddBuf or mtAddBuf
-    if hasPcTarget then
-        if ImGui.Button('Add target##' .. listType) then
-            local name = mq.TLO.Target.CleanName()
-            if name and name ~= '' and isPcName(name) and not tableContains(list, name) then
-                table.insert(list, name)
-                rolelists.process(listType, 'save')
-            end
-        end
-    else
-        if not showAddInput then
-            if ImGui.Button('Add##' .. listType) then
-                if addBufKey == 'ma' then showMaAddInput = true else showMtAddInput = true end
-            end
-        else
-            local flags = ImGuiInputTextFlags.EnterReturnsTrue
-            local newVal, changed = ImGui.InputText('PC name##' .. listType, addBuf, flags)
-            -- Sync the buffer every frame so the Add button (not just Enter) sees the typed name.
-            -- `changed` is Enter-only (EnterReturnsTrue), so submitting on it never fires per-keystroke.
-            if addBufKey == 'ma' then maAddBuf = newVal else mtAddBuf = newVal end
-            ImGui.SameLine()
-            if ImGui.Button('Add##' .. listType .. ' submit') or changed then
-                local name = (addBufKey == 'ma' and maAddBuf or mtAddBuf):match('^%s*(.-)%s*$')
-                if name and name ~= '' and isPcName(name) and not tableContains(list, name) then
-                    table.insert(list, name)
-                    rolelists.process(listType, 'save')
-                end
-                if addBufKey == 'ma' then maAddBuf = ''; showMaAddInput = false
-                else mtAddBuf = ''; showMtAddInput = false end
-            end
-        end
-    end
-    ImGui.Spacing()
+    name_list.draw({
+        id = 'roles_' .. listType,
+        label = label,
+        list = rc[runconfigKey],
+        reorder = true,
+        addNoun = 'PC name',
+        validateName = isPcName,
+        getTargetName = currentPcTargetName,
+        onChange = function(action) rolelists.process(listType, action) end,
+    })
 end
 
 local function drawRolePresetsSection()
-    ImGui.TextColored(YELLOW, 'Role presets')
+    section.header('Role presets')
     ImGui.TextWrapped(
         'Edit what each role configures, then click Apply to set THIS character to that role (behavior flags + Tank/Assist designation). Edits are saved. Command: /cz role tank|ma|dps|healer.')
     local roles = botconfig.config.roles
@@ -194,9 +144,15 @@ local function drawRolePresetsSection()
             ImGui.TableNextColumn()
             if ImGui.SmallButton('Apply##rp_' .. c.key) then
                 botconfig.ApplyRole(c.key)
+                _lastApplied.label = c.label
+                _lastApplied.t = mq.gettime()
             end
         end
         ImGui.EndTable()
+    end
+    if _lastApplied.label and (mq.gettime() - _lastApplied.t) / 1000 <= APPLIED_SHOW_SECS then
+        ImGui.TextColored(GREEN, 'Applied "%s": behavior flags + Tank/Assist designation set for this character.',
+            _lastApplied.label)
     end
     ImGui.Spacing()
 end
@@ -209,8 +165,8 @@ function M.draw()
     ImGui.TextWrapped(
         'Fallback lists are stored in cz_common.lua. After editing lists, run /cz reloadcommon on other bots. Order matters: first alive, in-zone name within MA leash wins when the assigned MA/MT is unavailable.')
     ImGui.Spacing()
-    drawRoleListSection('ma', 'MaList', 'Main Assist fallback list (ma_list)', 'ma')
-    drawRoleListSection('mt', 'MtList', 'Main Tank fallback list (mt_list)', 'mt')
+    drawRoleListSection('ma', 'MaList', 'Main Assist fallback list (ma_list)')
+    drawRoleListSection('mt', 'MtList', 'Main Tank fallback list (mt_list)')
 end
 
 return M

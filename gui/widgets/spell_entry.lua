@@ -687,18 +687,33 @@ function M.draw(spell, opts)
     end
 end
 
--- Tab intro for spell tabs (Heal/Buff/Debuff/Cure): a master-switch banner with an Enable button when
--- the global flag is off (the #1 "I configured it and nothing happens" trap), plus an empty-state hint
--- when nothing is configured. opts = { flagKey, flagNoun, isEmpty, emptyHint }.
+-- Tab intro for feature tabs (Heal/Buff/Debuff/Cure/Combat/Pull): a master-switch banner with an
+-- Enable button when the feature's master flag is off (the #1 "I configured it and nothing happens"
+-- trap), plus an empty-state hint when nothing is configured.
+-- opts = { flagKey, flagNoun, isEmpty, emptyHint } for settings-backed flags, OR
+--        { isOff, onEnable, enableId, flagNoun, ... } when the flag lives elsewhere (e.g. runconfig).
 function M.drawTabIntro(opts)
     opts = opts or {}
     local botconfig = require('lib.config')
-    if opts.flagKey and botconfig.config.settings[opts.flagKey] ~= true then
-        ImGui.TextColored(ImVec4(1, 0.85, 0.2, 1), '%s is OFF — this tab does nothing until you enable it.',
-            opts.flagNoun or 'This feature')
-        if ImGui.SmallButton('Enable##tabintro_' .. opts.flagKey) then
+    -- Resolve the OFF state + enable action: a settings flagKey, or a caller-supplied isOff/onEnable.
+    local isOff, onEnable, enableId
+    if opts.flagKey then
+        isOff = botconfig.config.settings[opts.flagKey] ~= true
+        enableId = opts.flagKey
+        onEnable = function()
             botconfig.config.settings[opts.flagKey] = true
             botconfig.ApplyAndPersist()
+        end
+    elseif opts.isOff ~= nil then
+        isOff = opts.isOff
+        enableId = opts.enableId or 'custom'
+        onEnable = opts.onEnable or function() end
+    end
+    if isOff then
+        ImGui.TextColored(ImVec4(1, 0.85, 0.2, 1), '%s is OFF — this tab does nothing until you enable it.',
+            opts.flagNoun or 'This feature')
+        if ImGui.SmallButton('Enable##tabintro_' .. enableId) then
+            onEnable()
         end
         ImGui.Spacing()
         ImGui.Separator()

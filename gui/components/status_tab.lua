@@ -17,6 +17,7 @@ local inputs = require('gui.widgets.inputs')
 local combos = require('gui.widgets.combos')
 local labeled_grid = require('gui.widgets.labeled_grid')
 local modals = require('gui.widgets.modals')
+local field_label = require('gui.widgets.field_label')
 
 local M = {}
 
@@ -114,6 +115,9 @@ local ACTIVITY_MAX = 8           -- recent-activity entries kept
 local ACTIVITY_RECENT_SECS = 20  -- how long a finished action lingers on the header detail line
 local _activity = {}             -- ring buffer { {msg=..., t=...}, ... } oldest-first
 local _lastActivityMsg = nil
+
+local EXIT_MODAL_ID = 'status_exit'
+local _exitConfirm = { open = false, pendingClose = nil }
 
 -- Steady, flicker-free high-level state: run-state + camp/follow context. Ignores the rapid
 -- statusMessage "X Check" cycle so the header line doesn't blink.
@@ -213,10 +217,20 @@ function M.drawControls()
     ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
     ImGui.PushStyleColor(ImGuiCol.Text, RED)
     if ImGui.SmallButton(Icons.FA_POWER_OFF .. '##exit') then
-        state.getRunconfig().terminate = true
+        _exitConfirm.open = true
+        _exitConfirm.pendingClose = nil
+        modals.openConfirmModal(EXIT_MODAL_ID)
     end
     if ImGui.IsItemHovered() then ImGui.SetTooltip('%s', 'Exit: stop bobblebot (ends the Lua script).') end
     ImGui.PopStyleColor(2)
+    modals.confirmModal(EXIT_MODAL_ID, _exitConfirm, {
+        message = 'Exit bobblebot? This ends the Lua script.',
+        confirmLabel = 'Exit',
+        cancelLabel = 'Cancel',
+        danger = true,
+    }, function()
+        state.getRunconfig().terminate = true
+    end)
 
     -- Second line: the current detailed action (white), or the last action (grey, with elapsed) so a
     -- finished action lingers briefly instead of the line blinking back to idle.
@@ -499,53 +513,39 @@ function M.draw()
             ImGui.EndTable()
         end
         ImGui.PopStyleColor(2)
-        -- Other section
+        -- Advanced tuning behind collapsing headers (progressive disclosure): the landing stays compact;
+        -- Sit thresholds, Mount, and Nuke types are one click away when needed.
         ImGui.Spacing()
-        do
-            local availX = select(1, ImGui.GetContentRegionAvail())
-            local otherLabel = 'Other'
-            local textW = select(1, ImGui.CalcTextSize(otherLabel))
-            local startX = ImGui.GetCursorPosX()
-            ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
-            ImGui.Text('%s', otherLabel)
+        if ImGui.CollapsingHeader('Sit & rest') then
+            field_label.draw('Sit Mana %: ', { width = NUMERIC_INPUT_WIDTH })
+            local sitmanaVal = botconfig.config.settings.sitmana or 90
+            local sitmanaNew, sitmanaCh = inputs.boundedInt('sit_mana_pct', sitmanaVal, 0, 100, 5, '##sit_mana_pct')
+            if sitmanaCh then
+                botconfig.config.settings.sitmana = sitmanaNew; runConfigLoaders()
+            end
+            if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                'If Sit is on, sit when mana is below this %%; stand when above this %% + 3 (hysteresis).') end
+            ImGui.SameLine()
+            field_label.draw('Sit Endurance %: ', { width = NUMERIC_INPUT_WIDTH })
+            local sitendurVal = botconfig.config.settings.sitendur or 90
+            local sitendurNew, sitendurCh = inputs.boundedInt('sit_endur_pct', sitendurVal, 0, 100, 5, '##sit_endur_pct')
+            if sitendurCh then
+                botconfig.config.settings.sitendur = sitendurNew; runConfigLoaders()
+            end
+            if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                'If Sit is on, sit when endurance is below this %%; stand when above this %% + 3 (hysteresis).') end
+            ImGui.Spacing()
+            field_label.draw('Sit Aggro %: ', { width = NUMERIC_INPUT_WIDTH })
+            local sitaggroVal = botconfig.config.settings.sitaggro or 60
+            local sitaggroNew, sitaggroCh = inputs.boundedInt('sit_aggro_pct', sitaggroVal, 0, 100, 5, '##sit_aggro_pct')
+            if sitaggroCh then
+                botconfig.config.settings.sitaggro = sitaggroNew; runConfigLoaders()
+            end
+            if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                'If Sit is on, only sit when your aggro %% is below this value. Applies when mobs are in camp and you are level 20+.') end
         end
-        ImGui.Spacing()
-        ImGui.TextColored(WHITE, '%s', 'Sit Mana %: ')
-        ImGui.SameLine(0, 2)
-        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-        local sitmanaVal = botconfig.config.settings.sitmana or 90
-        local sitmanaNew, sitmanaCh = inputs.boundedInt('sit_mana_pct', sitmanaVal, 0, 100, 5, '##sit_mana_pct')
-        if sitmanaCh then
-            botconfig.config.settings.sitmana = sitmanaNew; runConfigLoaders()
-        end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip(
-            'If Sit is on, sit when mana is below this %%; stand when above this %% + 3 (hysteresis).') end
-        ImGui.SameLine()
-        ImGui.TextColored(WHITE, '%s', 'Sit Endurance %: ')
-        ImGui.SameLine(0, 2)
-        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-        local sitendurVal = botconfig.config.settings.sitendur or 90
-        local sitendurNew, sitendurCh = inputs.boundedInt('sit_endur_pct', sitendurVal, 0, 100, 5, '##sit_endur_pct')
-        if sitendurCh then
-            botconfig.config.settings.sitendur = sitendurNew; runConfigLoaders()
-        end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip(
-            'If Sit is on, sit when endurance is below this %%; stand when above this %% + 3 (hysteresis).') end
-        ImGui.Spacing()
-        ImGui.TextColored(WHITE, '%s', 'Sit Aggro %: ')
-        ImGui.SameLine(0, 2)
-        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-        local sitaggroVal = botconfig.config.settings.sitaggro or 60
-        local sitaggroNew, sitaggroCh = inputs.boundedInt('sit_aggro_pct', sitaggroVal, 0, 100, 5, '##sit_aggro_pct')
-        if sitaggroCh then
-            botconfig.config.settings.sitaggro = sitaggroNew; runConfigLoaders()
-        end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip(
-            'If Sit is on, only sit when your aggro %% is below this value. Applies when mobs are in camp and you are level 20+.') end
-        -- Mount: type dropdown + click-to-edit name (spellbook/item validation)
-        ImGui.Spacing()
-        ImGui.TextColored(WHITE, '%s', 'Mount: ')
-        ImGui.SameLine(0, 2)
+        -- Mount: type dropdown + click-to-edit name (spellbook/item validation). Mount vars are computed
+        -- outside the header so the edit modal (rendered below) persists regardless of header state.
         local mountcast = botconfig.config.settings.mountcast or 'none'
         local mountName, mountType = mountcast:match('^%s*(.-)%s*|%s*(.-)%s*$')
         if not mountType or mountType == '' then mountType = 'gem' end
@@ -553,29 +553,31 @@ function M.draw()
         if mountName == 'none' then mountName = nil end
         local mountTypeIdx = (mountType == 'item') and 2 or 1
         local MOUNT_TYPE_COMBO_WIDTH = 80
-        ImGui.SetNextItemWidth(MOUNT_TYPE_COMBO_WIDTH)
-        local mountTypeOptions = { 'Spell', 'Item' }
-        local mountTypeNew, mountTypeCh = combos.combo('mount_type', mountTypeIdx, mountTypeOptions, nil)
-        if mountTypeCh then
-            local newType = (mountTypeNew == 1) and 'gem' or 'item'
-            botconfig.config.settings.mountcast = (mountName and mountName ~= '' and mountName ~= 'none') and
-            (mountName .. '|' .. newType) or 'none'
-            runConfigLoaders()
-        end
-        ImGui.SameLine()
-        local mountDisplayName = (mountName and mountName ~= '') and mountName or 'no mount'
         local mountState = getMountModalState()
         local currentMountType = (mountTypeIdx == 1) and 'gem' or 'item'
         local mountValidator = (currentMountType == 'gem') and validateSpellInBook or validateFindItem
-        ImGui.SetNextItemWidth(140)
-        if ImGui.Selectable(mountDisplayName .. '##' .. MOUNT_MODAL_ID, false, 0, ImVec2(140, 0)) then
-            mountState.open = true
-            mountState.buffer = mountName and mountName ~= 'none' and mountName or ''
-            mountState.error = nil
-            modals.openValidatedEditModal(MOUNT_MODAL_ID)
+        if ImGui.CollapsingHeader('Mount') then
+            field_label.draw('Mount: ', { width = MOUNT_TYPE_COMBO_WIDTH })
+            local mountTypeOptions = { 'Spell', 'Item' }
+            local mountTypeNew, mountTypeCh = combos.combo('mount_type', mountTypeIdx, mountTypeOptions, nil)
+            if mountTypeCh then
+                local newType = (mountTypeNew == 1) and 'gem' or 'item'
+                botconfig.config.settings.mountcast = (mountName and mountName ~= '' and mountName ~= 'none') and
+                (mountName .. '|' .. newType) or 'none'
+                runConfigLoaders()
+            end
+            ImGui.SameLine()
+            local mountDisplayName = (mountName and mountName ~= '') and mountName or 'no mount'
+            ImGui.SetNextItemWidth(140)
+            if ImGui.Selectable(mountDisplayName .. '##' .. MOUNT_MODAL_ID, false, 0, ImVec2(140, 0)) then
+                mountState.open = true
+                mountState.buffer = mountName and mountName ~= 'none' and mountName or ''
+                mountState.error = nil
+                modals.openValidatedEditModal(MOUNT_MODAL_ID)
+            end
+            if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                'Click to edit: spell (search spellbook) or item (search inventory).') end
         end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip(
-            'Click to edit: spell (search spellbook) or item (search inventory).') end
         if mountState.open then
             local function onMountSave(value)
                 local trimmed = (value or ''):match('^%s*(.-)%s*$')
@@ -592,7 +594,6 @@ function M.draw()
             end
             modals.validatedEditModal(MOUNT_MODAL_ID, mountState, mountValidator, onMountSave, onMountCancel)
         end
-        ImGui.Spacing()
         do
             local applicable = {}
             local count = botconfig.getSpellCount('debuff')
@@ -605,7 +606,8 @@ function M.draw()
             end
             local order = { 'fire', 'ice', 'magic', 'poison', 'disease', 'chromatic', 'prismatic', 'unresistable',
                 'corruption' }
-            if next(applicable) then
+            -- Only offer the Nuke types header when this character actually has nuke spells configured.
+            if next(applicable) and ImGui.CollapsingHeader('Nuke types') then
                 local options = {}
                 local value = {}
                 for _, f in ipairs(order) do
