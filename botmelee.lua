@@ -619,12 +619,49 @@ local function selectXTargetEngageTarget(rc)
     return selectEngageTargetFromLosList(cands, engageId)
 end
 
+-- AE-tank: when enabled and this bot is the MT with NO mezzer (ENC/BRD) in group, actively grab aggro
+-- on XTarget Auto-Hater mobs near camp that aren't currently on us by taunting them in turn. Taunt is
+-- instant top-of-hate, so cycling re-taunts on peelers holds the pack (the only option in a pre-AE-taunt
+-- era). Auto-suppresses when a mezzer is present so it never wakes/steals the enchanter's mez targets.
+local _aeTauntNextTime = 0
+
+local function mezzerInGroup()
+    local n = tonumber(mq.TLO.Group.Members()) or 0
+    for i = 0, n do
+        local m = mq.TLO.Group.Member(i)
+        local cls = m and m.Class and m.Class.ShortName()
+        if cls == 'ENC' or cls == 'BRD' then return true end
+    end
+    return false
+end
+
+local function aeTankGrab(rc)
+    if myconfig.settings.tankAllMobs ~= true then return end
+    if rc.attackCommandEngage then return end
+    if not tankrole.AmIMainTank() then return end
+    if mq.gettime() < _aeTauntNextTime then return end
+    if not (mq.TLO.Me.AbilityReady('Taunt') and mq.TLO.Me.AbilityReady('Taunt')()) then return end
+    if mezzerInGroup() then return end
+    local meId = mq.TLO.Me.ID()
+    for _, spawn in ipairs(spawnutils.getXTargetAutoHaterEngageables(rc)) do
+        local sid = spawn.ID()
+        local tgt = (spawn.Target and spawn.Target.ID()) or 0
+        if sid and tgt ~= meId then
+            -- Not on me: taunt it to grab aggro (one multiline so /doability hits the mob we just targeted).
+            mq.cmdf('/multiline ; /squelch /target id %s ; /squelch /doability Taunt', sid)
+            _aeTauntNextTime = mq.gettime() + 1500
+            return
+        end
+    end
+end
+
 -- Resolve engageTargetId from role (MT/MA/OT/DPS), then engage or disengage. Only sets melee busy state via canStartBusyState.
 function botmelee.AdvCombat()
     local assistName = tankrole.GetAssistTargetName()
     local mainTankName = tankrole.GetMainTankName()
     local assistpct = myconfig.melee.assistpct or 99
     local rc = state.getRunconfig()
+    aeTankGrab(rc)
 
     if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Type() == 'PC' then
         clearTankCombatState()

@@ -121,7 +121,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script', 'roles' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'doRezAccept', 'rezAcceptMinPct', 'mezMinLevel', 'mezMaxLevel', 'charmPetAutoSetup' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'doRezAccept', 'rezAcceptMinPct', 'mezMinLevel', 'mezMaxLevel', 'charmPetAutoSetup', 'tankAllMobs' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
@@ -980,6 +980,8 @@ function M.Load(path)
     M.config.settings.mezMaxLevel = tonumber(M.config.settings.mezMaxLevel) or 0
     -- On charming a mob, auto-configure the new charm pet (taunt off + send to current target).
     if M.config.settings.charmPetAutoSetup == nil then M.config.settings.charmPetAutoSetup = true end
+    -- AE-tank: when on (and no mezzer in group), the MT taunts XTarget mobs near camp that aren't on it.
+    if M.config.settings.tankAllMobs == nil then M.config.settings.tankAllMobs = false end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "automatic" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end
     if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings

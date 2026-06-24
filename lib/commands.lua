@@ -662,6 +662,19 @@ local function cmd_burn(args)
     printf('\aybobblebot:\axBurn window started (%ds). Spells/abilities with a `burn` precondition will fire.', sec)
 end
 
+local function cmd_aetank(args)
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        botconfig.config.settings.tankAllMobs = true
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        botconfig.config.settings.tankAllMobs = false
+    else
+        botconfig.config.settings.tankAllMobs = not (botconfig.config.settings.tankAllMobs == true)
+    end
+    botconfig.ApplyAndPersist()
+    printf('\aybobblebot:\axAE-tank %s', (botconfig.config.settings.tankAllMobs == true) and 'on' or 'off')
+end
+
 local function cmd_charmpetsetup(args)
     local mode = args[2] and string.lower(args[2]) or ''
     if mode == 'on' or mode == 'true' or mode == '1' then
@@ -1208,6 +1221,7 @@ local handlers = {
     buffdebug = cmd_buffdebug,
     rezaccept = cmd_rezaccept,
     charmpetsetup = cmd_charmpetsetup,
+    aetank = cmd_aetank,
     burn = cmd_burn,
     maanchorleash = cmd_maanchorleash,
     offtank = cmd_offtank,

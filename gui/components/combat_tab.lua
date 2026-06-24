@@ -97,6 +97,18 @@ function M.draw()
         runConfigLoaders()
     end
 
+    ImGui.Text('Tank all mobs (AE-tank)')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('Main-tank only: actively taunt every XTarget mob near camp that is not on you, cycling to grab/hold the whole pull.\nAuto-suppressed when an Enchanter/Bard is in your group (so it never wakes/steals your mezzer\'s targets).\nUses the base Taunt skill (no AE-taunt this era), re-taunting peelers to keep them.')
+    end
+    ImGui.SameLine()
+    local atChecked = (botconfig.config.settings.tankAllMobs == true)
+    local atVal, atPressed = ImGui.Checkbox('##combat_tankAllMobs', atChecked)
+    if atPressed then
+        botconfig.config.settings.tankAllMobs = atVal
+        runConfigLoaders()
+    end
+
     -- Line 2: Stick Settings
     ImGui.Spacing()
     ImGui.Text('Stick Settings')
