@@ -133,6 +133,14 @@ function spawnutils.isRoamPullMode(rc)
     return rc.dopull == true and pull and pull.roam == true
 end
 
+--- True when dopull uses fixed makecamp (return to camp after pull; not hunter/roam).
+function spawnutils.isFixedCampPullMode(rc)
+    rc = rc or state.getRunconfig()
+    local pull = botconfig.config.pull
+    return rc.dopull == true and rc.campstatus == true and pull
+        and pull.hunter ~= true and pull.roam ~= true
+end
+
 function spawnutils.isEngageTracked(spawnId, rc)
     if not spawnId then return false end
     rc = rc or state.getRunconfig()
@@ -499,6 +507,16 @@ local function filterSpawnForPull(spawn, rc)
     if not spawnInPullArc(spawn, rc) then return false end
     if not spawnutils.filterSpawnExcludeAndPullFTE(spawn, rc) then return false end
     if not mq.TLO.Navigation.PathExists('id ' .. spawn.ID())() then return false end
+    if spawnutils.isFixedCampPullMode(rc) then
+        local ps = pull.spell
+        local isWarp = ps and ps.gem == 'script' and ps.spell
+            and string.lower(tostring(ps.spell)) == 'warp'
+        if not isWarp then
+            local navDist = mq.TLO.Navigation.PathLength('id ' .. spawn.ID())()
+            local maxNavDist = (pull.radius or 0) + 40
+            if not navDist or navDist <= 0 or navDist > maxNavDist then return false end
+        end
+    end
     if rc.MobList then
         for _, v in pairs(rc.MobList) do
             if v.ID() == spawn.ID() then return false end

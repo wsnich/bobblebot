@@ -608,10 +608,17 @@ local function selectPullTargets(apmoblist, rc, maxCount)
             candidates = freshUnattempted
         end
     end
+    local ps = myconfig.pull.spell
+    local isWarp = ps and ps.gem == 'script' and ps.spell
+        and string.lower(tostring(ps.spell)) == 'warp'
+    local applyNavFilter = spawnutils.isFixedCampPullMode(rc) and not isWarp
+    local maxNavDist = (myconfig.pull.radius or 0) + 40
     local ranked = {}
     for _, v in ipairs(candidates) do
         local pl = mq.TLO.Navigation.PathLength('id ' .. v.ID())()
-        if pl and pl > 0 then
+        if applyNavFilter and (not pl or pl <= 0 or pl > maxNavDist) then
+            -- fixed camp: skip targets whose nav path exceeds pull radius + 40
+        elseif pl and pl > 0 then
             ranked[#ranked + 1] = { spawn = v, pathLen = pl }
         else
             ranked[#ranked + 1] = { spawn = v, pathLen = math.huge }
