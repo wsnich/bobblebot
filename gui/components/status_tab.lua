@@ -289,30 +289,45 @@ local function twistListText(gems)
     return table.concat(parts, '  ')
 end
 
+local function safeTwistList(mode)
+    -- GetTwistListForMode('combat') reaches into the debuff eval (MatarDebuffNeededForTwist); isolate
+    -- any failure so one mode can't break the panel.
+    local ok, list = pcall(bardtwist.GetTwistListForMode, mode)
+    if ok and type(list) == 'table' then return list end
+    return nil
+end
+
 local function drawBardTwistSection()
     if not bardtwist.IsBard() then return end
     ImGui.Spacing()
     if not ImGui.CollapsingHeader('Bard twist') then return end
-    local curMode = bardtwist.GetCurrentTwistMode()
-    local songsOn = bardtwist.SongsEnabled()
-    ImGui.TextColored(WHITE, '%s', 'Songs: ')
-    ImGui.SameLine(0, 2)
-    ImGui.TextColored(songsOn and GREEN or RED, '%s', songsOn and 'On' or 'Off')
-    ImGui.SameLine()
-    ImGui.TextColored(WHITE, '%s', '  Current mode: ')
-    ImGui.SameLine(0, 2)
-    ImGui.TextColored(YELLOW, '%s', curMode or '—')
-    for _, m in ipairs(TWIST_MODES) do
-        local isCur = (m.mode == curMode)
-        ImGui.TextColored(isCur and YELLOW or LIGHT_GREY, '%s%s:', isCur and '> ' or '  ', m.label)
-        ImGui.SameLine(0, 4)
-        ImGui.TextColored(isCur and WHITE or LIGHT_GREY, '%s', twistListText(bardtwist.GetTwistListForMode(m.mode)))
-    end
-    local liveRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
-    if liveRaw and tostring(liveRaw) ~= '' then
-        ImGui.TextColored(WHITE, '%s', 'Now twisting: ')
+    -- Read-only info panel: it must never crash the GUI. The body has no Begin/End, so wrapping it in
+    -- pcall leaves the ImGui stack balanced even on error; surface the error instead of dying.
+    local ok, err = pcall(function()
+        local curMode = bardtwist.GetCurrentTwistMode()
+        local songsOn = bardtwist.SongsEnabled()
+        ImGui.TextColored(WHITE, '%s', 'Songs: ')
         ImGui.SameLine(0, 2)
-        ImGui.TextColored(LIGHT_GREY, '%s', tostring(liveRaw))
+        ImGui.TextColored(songsOn and GREEN or RED, '%s', songsOn and 'On' or 'Off')
+        ImGui.SameLine()
+        ImGui.TextColored(WHITE, '%s', '  Current mode: ')
+        ImGui.SameLine(0, 2)
+        ImGui.TextColored(YELLOW, '%s', curMode or 'idle')
+        for _, m in ipairs(TWIST_MODES) do
+            local isCur = (m.mode == curMode)
+            ImGui.TextColored(isCur and YELLOW or LIGHT_GREY, '%s', (isCur and '> ' or '  ') .. m.label .. ':')
+            ImGui.SameLine(0, 4)
+            ImGui.TextColored(isCur and WHITE or LIGHT_GREY, '%s', twistListText(safeTwistList(m.mode)))
+        end
+        local liveOk, liveRaw = pcall(function() return mq.TLO.Twist() and mq.TLO.Twist.List() end)
+        if liveOk and liveRaw and tostring(liveRaw) ~= '' then
+            ImGui.TextColored(WHITE, '%s', 'Now twisting: ')
+            ImGui.SameLine(0, 2)
+            ImGui.TextColored(LIGHT_GREY, '%s', tostring(liveRaw))
+        end
+    end)
+    if not ok then
+        ImGui.TextColored(RED, '%s', 'Twist info unavailable: ' .. tostring(err))
     end
 end
 
