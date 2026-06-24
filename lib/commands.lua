@@ -490,6 +490,24 @@ end
 -- Engage MA's target, or (if name given) that player's target for this engagement only.
 local function cmd_attack(args)
     local tankrole = require('lib.tankrole')
+    -- /cz attack <spawnid>: engage a specific NPC id directly (used by the MT target-director buttons,
+    -- dispatched over MQRemote so each peer engages the exact same mob with no MA-target race).
+    local idArg = args[2] and tonumber(args[2])
+    if idArg and idArg > 0 then
+        local sp = mq.TLO.Spawn(idArg)
+        if not (sp() and spawnutils.isNpcEngageTarget(sp)) then
+            printf('\aybobblebot:\ax\ar No engageable NPC for id %s\ax', tostring(idArg)); return
+        end
+        if utils.isProtectedSpawn(sp) then
+            printf('\aybobblebot:\ax\ar Cannot engage protected NPC\ax'); return
+        end
+        local rc = state.getRunconfig()
+        require('lib.charm').releaseCharmTarget(idArg, rc)
+        rc.engageTargetId = idArg
+        rc.attackCommandEngage = true
+        printf('\aybobblebot:\ax\arEngaging\ax \ay%s\ax now (directed)', sp.CleanName())
+        return
+    end
     local assistName
     local overrideName -- used for messages when args[2] was a specific player name
     if args[2] and args[2]:match('%S') then

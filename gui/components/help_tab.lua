@@ -30,7 +30,7 @@ local GROUPS = {
         { "/cz assist <name|automatic>", "Set the Main Assist (persists across reloads)." },
         { "/cz role <tank|ma|dps|healer>", "Apply a role preset: behavior flags + tank/assist designation." },
         { "/cz offtank", "Toggle off-tank mode for this character." },
-        { "/cz attack", "Manually engage your current target (overrides XTarget-only)." },
+        { "/cz attack [id]", "Force-engage your current target, or a specific spawn id (Targets tab / MT director)." },
         { "/cz cast <alias>", "Cast a configured spell/ability by its alias." },
     } },
     { title = "Combat behavior", cmds = {
