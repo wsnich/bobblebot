@@ -121,7 +121,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script', 'roles' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'doRezAccept', 'rezAcceptMinPct' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
@@ -955,6 +955,11 @@ function M.Load(path)
     M.config.settings.campRestDistanceSq = (M.config.settings.campRestDistance or 0) * (M.config.settings.campRestDistance or 0)
     if M.config.settings.maCampAnchor == nil then M.config.settings.maCampAnchor = true end
     if M.config.settings.engageXTargetOnly == nil then M.config.settings.engageXTargetOnly = true end
+    -- Auto-accept incoming resurrection offers while hovering at corpse (rezAcceptMinPct = min %
+    -- experience-restore to accept; 0 = accept any rez).
+    if M.config.settings.doRezAccept == nil then M.config.settings.doRezAccept = true end
+    if M.config.settings.rezAcceptMinPct == nil then M.config.settings.rezAcceptMinPct = 0 end
+    M.config.settings.rezAcceptMinPct = tonumber(M.config.settings.rezAcceptMinPct) or 0
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "automatic" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end
     if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings

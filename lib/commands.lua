@@ -621,6 +621,19 @@ local function cmd_mezdebug(args)
     printf('\aybobblebot:\ax Mez debug logging %s', spellutils.IsMezDebug() and 'on' or 'off')
 end
 
+local function cmd_rezaccept(args)
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        botconfig.config.settings.doRezAccept = true
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        botconfig.config.settings.doRezAccept = false
+    else
+        botconfig.config.settings.doRezAccept = not (botconfig.config.settings.doRezAccept ~= false)
+    end
+    botconfig.ApplyAndPersist()
+    printf('\aybobblebot:\axAuto-accept rez %s', (botconfig.config.settings.doRezAccept ~= false) and 'on' or 'off')
+end
+
 local function cmd_maanchorleash(args)
     local val = tonumber(args[2])
     if not val or val < 1 then
@@ -1151,6 +1164,7 @@ local handlers = {
     xtargetonly = cmd_engagextargetonly,
     role = cmd_role,
     mezdebug = cmd_mezdebug,
+    rezaccept = cmd_rezaccept,
     maanchorleash = cmd_maanchorleash,
     offtank = cmd_offtank,
     cast = cmd_cast,

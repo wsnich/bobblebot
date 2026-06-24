@@ -194,6 +194,10 @@ local function charState_DeadOrHover()
         rc.wasDeadOrHover = true
     end
 
+    -- While hovering at our corpse, accept an incoming rez (text-gated, configurable) so a box crew
+    -- gets back up without manual clicking on each character.
+    botevents.AcceptRezIfOffered()
+
     state.setRunState(state.STATES.dead, nil)
     if not rc.HoverEchoTimer or rc.HoverEchoTimer == 0 then
         rc.HoverEchoTimer = mq.gettime() + 300000
