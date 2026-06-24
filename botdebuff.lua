@@ -196,7 +196,9 @@ local function DebuffEvalNotmatar(index, ctx)
     for _, v in ipairs(ctx.mobList) do
         local vid = v.ID and v.ID() or nil
         if vid and vid ~= maTargetId then
-            if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
+            if charm.isCharmSkipped(vid, state.getRunconfig()) then
+                -- skip: charmed pet or post-charm hold
+            elseif castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
                 if DebuffSpawnNeedsSpell(entry, ctx, v, 'notmatar') then
                     return v.ID(), 'notmatar'
                 end
@@ -309,15 +311,14 @@ local function debuffGetTargetsForPhase(phase, context)
                 end
             end
         end
-        if #out > 0 then
+        if #out > 0 and spellutils.IsMezDebug() then
             local parts = {}
             for i, t in ipairs(out) do
                 local sp = mq.TLO.Spawn(t.id)
                 local name = (sp and sp.CleanName and sp.CleanName()) or tostring(t.id)
                 parts[i] = string.format('%s(%s)', name, t.id)
             end
-            printf('\ayCZBot:\ax [Mez t=%s] notmatar targets this tick: %s', tostring(mq.gettime()),
-                table.concat(parts, ', '))
+            spellutils.MezLog('notmatar targets this tick: %s', table.concat(parts, ', '))
         end
         return out
     end
@@ -408,6 +409,13 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     local entry = botconfig.getSpellEntry('debuff', i)
     if not entry then return false end
     if EvalID and utils.isProtectedSpawn(mq.TLO.Spawn(EvalID)) then return false end
+    -- Reactive mode (settings.engageXTargetOnly, default on): only debuff/mez/nuke mobs on our XTarget
+    -- Auto-Hater list (aggro'd on the group). Stops the bot casting on -- and thereby aggroing -- unwanted
+    -- MobList NPCs (e.g. an enchanter slowing/mezzing a mob nobody is fighting). /cz attack bypasses it.
+    if myconfig.settings.engageXTargetOnly ~= false and not state.getRunconfig().attackCommandEngage
+        and EvalID and EvalID > 0 and not require('lib.spawnutils').isOnXTargetAutoHater(EvalID) then
+        return false
+    end
     if not spellutils.CheckGemReadiness('debuff', i, entry) then return false end
     if not spellutils.IsConcussionSpell(entry) and entry.recast ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
         return false
@@ -477,16 +485,23 @@ local function DebuffCheckHandleBardNotmatarWait(rc)
         return false
     end
     local now = mq.gettime()
+    local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
+    if stillSinging then w.singingStarted = true end
     if w.deadline and now < w.deadline then
-        local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
-        if stillSinging then
-            w.singingStarted = true
+        -- Keep waiting while the song is in progress, or before it has begun (mq2twist queues a tick
+        -- before casting actually starts). Otherwise we'd phantom-complete and record a mez that never
+        -- landed, leaving the add un-mezzed but treated as handled.
+        if stillSinging or not w.singingStarted then
             return true
         end
     end
     rc.bardNotmatarWait = nil
     state.clearRunState()
-    updateBardNotmatarDebuffState(w.entry, w.EvalID)
+    -- Only record the mez if we actually sang it. A deadline that expires without ever singing is a
+    -- failed cast: clean up and resume, but do not mark the debuff as landed.
+    if w.singingStarted then
+        updateBardNotmatarDebuffState(w.entry, w.EvalID)
+    end
     retargetMaTargetAfterBardMez()
     bardtwist.RestoreCombatTwistAfterNotmatar()
     return true

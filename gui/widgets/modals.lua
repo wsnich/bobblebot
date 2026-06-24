@@ -4,11 +4,12 @@
 -- validateFn(value) returns success (boolean), optional errorMessage (string).
 
 local imgui = require('ImGui')
+local theme = require('gui.widgets.theme')
 
 local M = {}
 
 local ImGuiInputTextFlags = ImGuiInputTextFlags or {}
-local RED = ImVec4(1, 0, 0, 1)
+local RED = theme.RED
 local EnterReturnsTrue = ImGuiInputTextFlags.EnterReturnsTrue or 0
 local POPUP_FLAGS = bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoResize)
 
@@ -131,6 +132,58 @@ end
 ---@param id string
 function M.openDeleteConfirmModal(id)
     imgui.OpenPopup('##DeleteConfirm_' .. id)
+end
+
+--- Generic confirmation modal: a custom message with confirm/cancel buttons. Deferred close like the
+--- others. Use for any "are you sure?" that isn't a list delete (e.g. Exit). opts:
+---   { message = string, confirmLabel = 'OK', cancelLabel = 'Cancel', danger = false }
+--- danger paints the confirm button red.
+---@param id string unique id for this popup
+---@param state table { open: boolean, pendingClose: 'confirm'|'cancel'|nil } caller-owned
+---@param opts table
+---@param onConfirm fun() called when confirmed
+---@param onCancel fun()|nil called when cancelled (optional)
+function M.confirmModal(id, state, opts, onConfirm, onCancel)
+    if not state.open then
+        return
+    end
+    opts = opts or {}
+    local popupId = '##Confirm_' .. id
+    local show = imgui.BeginPopupModal(popupId, nil, POPUP_FLAGS)
+    if not show then
+        return
+    end
+    if state.pendingClose then
+        local wasConfirm = (state.pendingClose == 'confirm')
+        imgui.CloseCurrentPopup()
+        if wasConfirm then
+            if onConfirm then onConfirm() end
+        elseif onCancel then
+            onCancel()
+        end
+        state.open = false
+        state.pendingClose = nil
+        imgui.EndPopup()
+        return
+    end
+    imgui.Text('%s', opts.message or 'Are you sure?')
+    imgui.Spacing()
+    if opts.danger then imgui.PushStyleColor(ImGuiCol.Button, RED) end
+    if imgui.Button((opts.confirmLabel or 'OK') .. '##Confirm_Yes_' .. id) then
+        state.pendingClose = 'confirm'
+    end
+    if opts.danger then imgui.PopStyleColor(1) end
+    imgui.SameLine()
+    if imgui.Button((opts.cancelLabel or 'Cancel') .. '##Confirm_No_' .. id) then
+        state.pendingClose = 'cancel'
+    end
+    imgui.EndPopup()
+end
+
+--- Open the generic confirm popup (call after setting state.open = true).
+---@param id string
+function M.openConfirmModal(id)
+    imgui.OpenPopup('##Confirm_' .. id)
 end
 
 return M

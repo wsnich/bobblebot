@@ -118,10 +118,10 @@ M.ConColors = { "Grey", "Green", "Light Blue", "Blue", "White", "Yellow", "Red" 
 M.ConColorsNameToId = {}
 for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 
-local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
+local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script', 'roles' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'doRezAccept', 'rezAcceptMinPct', 'mezMinLevel', 'mezMaxLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'premem', 'campAcleash', 'upgradeCheck', 'autoScribe' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
@@ -131,10 +131,29 @@ local subOrder = {
     script = {}
 }
 
+-- Role presets: each role applies a bundle of behavior flags + a Tank/Assist designation when
+-- selected (Roles-tab buttons or /cz role <name>). Editable in the UI, persisted in config.roles.
+-- mtSticky/offtank apply to config.melee; setTank/setAssist set TankName/AssistName to this character
+-- (else 'automatic'); the rest apply to config.settings.
+local ROLE_KEYS = { 'tank', 'ma', 'dps', 'healer' }
+local ROLE_FIELDS = { 'domelee', 'doheal', 'docure', 'dobuff', 'dodebuff', 'dosit', 'mtSticky', 'offtank', 'engageXTargetOnly', 'setTank', 'setAssist' }
+local ROLE_DEFAULTS = {
+    tank   = { domelee = true,  doheal = false, docure = true, dobuff = true, dodebuff = false, dosit = true, mtSticky = true,  offtank = false, engageXTargetOnly = true, setTank = true,  setAssist = false },
+    ma     = { domelee = true,  doheal = false, docure = true, dobuff = true, dodebuff = true,  dosit = true, mtSticky = false, offtank = false, engageXTargetOnly = true, setTank = false, setAssist = true  },
+    dps    = { domelee = true,  doheal = false, docure = true, dobuff = true, dodebuff = true,  dosit = true, mtSticky = false, offtank = false, engageXTargetOnly = true, setTank = false, setAssist = false },
+    healer = { domelee = false, doheal = true,  docure = true, dobuff = true, dodebuff = false, dosit = true, mtSticky = false, offtank = false, engageXTargetOnly = true, setTank = false, setAssist = false },
+}
+local ROLE_ALIASES = {
+    tank = 'tank', mt = 'tank',
+    ma = 'ma', mainassist = 'ma', ['non-tank ma'] = 'ma', nontankma = 'ma',
+    dps = 'dps', dd = 'dps',
+    healer = 'healer', heal = 'healer', cleric = 'healer',
+}
+
 local spellSlotOrder = {
     heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'inCombat', 'tarcnt', 'bands', 'healResource', 'precondition' },
-    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'precondition' },
-    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack', 'stopWhen' },
+    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'precondition', 'buffNames' },
+    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack', 'stopWhen', 'recastActive', 'mezMinLevel', 'mezMaxLevel' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
     pull = { 'gem', 'spell', 'range' },
 }
@@ -401,6 +420,8 @@ function M.refreshZoneStateFromCommon()
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
     mobfilter.process('charm', 'zone')
+    local rolelists = require('lib.rolelists')
+    rolelists.loadFromCommon()
     M.loadNukeFlavorsFromZone()
 end
 
@@ -511,6 +532,47 @@ end
 function M.ApplyAndPersist()
     M.RunConfigLoaders()
     M.MarkDirty()
+end
+
+-- Normalize a user/command role token to a canonical role key (tank/ma/dps/healer), or nil.
+function M.NormalizeRoleKey(roleKey)
+    if not roleKey then return nil end
+    local k = string.lower(tostring(roleKey)):match('^%s*(.-)%s*$')
+    return ROLE_ALIASES[k]
+end
+
+-- Editable role-preset metadata for the GUI/commands.
+function M.GetRoleKeys() return ROLE_KEYS end
+function M.GetRoleFields() return ROLE_FIELDS end
+
+-- Apply a role preset to THIS character: behavior flags + Tank/Assist designation, then persist.
+-- Sets both config.settings (persisted) and the live runconfig (immediate effect). Returns ok, key.
+function M.ApplyRole(roleKey)
+    local key = M.NormalizeRoleKey(roleKey)
+    local r = key and M.config.roles and M.config.roles[key]
+    if not r then return false, roleKey end
+    local s = M.config.settings
+    s.domelee = r.domelee
+    s.doheal = r.doheal
+    s.docure = r.docure
+    s.dobuff = r.dobuff
+    s.dodebuff = r.dodebuff
+    s.dosit = r.dosit
+    s.engageXTargetOnly = r.engageXTargetOnly
+    M.config.melee = M.config.melee or {}
+    M.config.melee.mtSticky = r.mtSticky
+    M.config.melee.offtank = r.offtank
+    local myName = mq.TLO.Me.Name()
+    local tankName = (r.setTank and myName) or 'automatic'
+    local assistName = (r.setAssist and myName) or 'automatic'
+    s.TankName = tankName
+    s.AssistName = assistName
+    local rc = state.getRunconfig()
+    rc.TankName = tankName
+    rc.AssistName = assistName
+    rc.lastAssistTargetId = nil
+    M.ApplyAndPersist()
+    return true, key
 end
 
 --- Swap two spell entries in a section array and persist.
@@ -678,6 +740,18 @@ local function writeConfigToFile(config, filename)
                         file:flush()
                     end
                     -- omit when empty; readers treat as { 'all' }
+                elseif key == 'buffNames' and type(value) == "table" then
+                    if #value > 0 then
+                        local parts = {}
+                        for _, s in ipairs(value) do
+                            parts[#parts + 1] = '"' .. tostring(s):gsub('\\', '\\\\'):gsub('"', '\\"') .. '"'
+                        end
+                        file:write(indent .. formatKey('buffNames') .. " = { ")
+                        file:write(table.concat(parts, ", "))
+                        file:write(" },\n")
+                        file:flush()
+                    end
+                    -- omit when empty
                 elseif type(value) == "table" then
                     print("detected a corrupted value for:", key, " = ", value)
                     print("setting ", key, " to nil, please check your config")
@@ -781,6 +855,17 @@ local function writeConfigToFile(config, filename)
                             end
                             file:flush()
                         end
+                    elseif key == 'roles' then
+                        for _, rk in ipairs(ROLE_KEYS) do
+                            local rv = value[rk]
+                            if type(rv) == 'table' then
+                                file:write(indent .. "  " .. formatKey(rk) .. " = {\n")
+                                file:flush()
+                                writesubTable(rv, ROLE_FIELDS, indent .. "    ")
+                                file:write(indent .. "  },\n")
+                                file:flush()
+                            end
+                        end
                     else
                         writesubTable(value, subOrder[key], indent .. "  ")
                     end
@@ -881,12 +966,49 @@ function M.Load(path)
     if (M.config.settings.campRestDistance == nil) then M.config.settings.campRestDistance = 15 end
     M.config.settings.campRestDistanceSq = (M.config.settings.campRestDistance or 0) * (M.config.settings.campRestDistance or 0)
     if M.config.settings.maCampAnchor == nil then M.config.settings.maCampAnchor = true end
+    if M.config.settings.engageXTargetOnly == nil then M.config.settings.engageXTargetOnly = true end
+    -- Auto-accept incoming resurrection offers while hovering at corpse (rezAcceptMinPct = min %
+    -- experience-restore to accept; 0 = accept any rez).
+    if M.config.settings.doRezAccept == nil then M.config.settings.doRezAccept = true end
+    if M.config.settings.rezAcceptMinPct == nil then M.config.settings.rezAcceptMinPct = 0 end
+    M.config.settings.rezAcceptMinPct = tonumber(M.config.settings.rezAcceptMinPct) or 0
+    -- Character-wide mez level default (mirrors MuleAssist MezMinLevel/MezMaxLevel); per-spell
+    -- mezMinLevel/mezMaxLevel override per-bound when > 0. 0 = unbounded on that side.
+    if M.config.settings.mezMinLevel == nil then M.config.settings.mezMinLevel = 0 end
+    if M.config.settings.mezMaxLevel == nil then M.config.settings.mezMaxLevel = 0 end
+    M.config.settings.mezMinLevel = tonumber(M.config.settings.mezMinLevel) or 0
+    M.config.settings.mezMaxLevel = tonumber(M.config.settings.mezMaxLevel) or 0
+    -- On charming a mob, auto-configure the new charm pet (taunt off + send to current target).
+    if M.config.settings.charmPetAutoSetup == nil then M.config.settings.charmPetAutoSetup = true end
+    -- AE-tank: when on (and no mezzer in group), the MT taunts XTarget mobs near camp that aren't on it.
+    if M.config.settings.tankAllMobs == nil then M.config.settings.tankAllMobs = false end
+    -- AE-tank override: keep AE-tanking even when an Enchanter/Bard is in the group (e.g. a non-mezzing bard).
+    if M.config.settings.aeTankIgnoreMezzer == nil then M.config.settings.aeTankIgnoreMezzer = false end
+    -- Pre-memorize the configured gembar during downtime so combat-critical spells are loaded before needed.
+    if M.config.settings.premem == nil then M.config.settings.premem = true end
+    -- Leash-to-radius: when on, melee returns to camp instead of chasing an engaged mob past the radius.
+    -- Persisted seed for the session-only rc.doCampAcleash (default on).
+    if M.config.settings.campAcleash == nil then M.config.settings.campAcleash = true end
+    -- Background spell-upgrade detection (Spell.SpellGroup); surfaces better in-book versions (default on).
+    if M.config.settings.upgradeCheck == nil then M.config.settings.upgradeCheck = true end
+    -- Auto-scribe new spell scrolls from bags after a level-up, once out of combat (default on).
+    if M.config.settings.autoScribe == nil then M.config.settings.autoScribe = true end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "automatic" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end
     if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings
         .TargetFilter) or 0 end
     if (M.config.settings.petassist == nil) then M.config.settings.petassist = false end
     if (M.config.settings.spelldb == nil) then M.config.settings.spelldb = 'spells.db' end
+    -- Role presets: ensure config.roles exists and every role has all fields (fills new fields on upgrade).
+    M.config.roles = M.config.roles or {}
+    for _, rk in ipairs(ROLE_KEYS) do
+        local def = ROLE_DEFAULTS[rk]
+        local r = M.config.roles[rk]
+        if type(r) ~= 'table' then r = {}; M.config.roles[rk] = r end
+        for _, f in ipairs(ROLE_FIELDS) do
+            if r[f] == nil then r[f] = def[f] end
+        end
+    end
     applySectionDefaults('pull', {
         radius = 400,
         zrange = 150,

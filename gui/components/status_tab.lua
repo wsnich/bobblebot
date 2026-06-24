@@ -17,6 +17,8 @@ local inputs = require('gui.widgets.inputs')
 local combos = require('gui.widgets.combos')
 local labeled_grid = require('gui.widgets.labeled_grid')
 local modals = require('gui.widgets.modals')
+local field_label = require('gui.widgets.field_label')
+local spellupgrade = require('lib.spellupgrade')
 
 local M = {}
 
@@ -52,34 +54,31 @@ local function runConfigLoaders()
     botconfig.ApplyAndPersist()
 end
 
-local YELLOW = ImVec4(1, 1, 0, 1)
-local RED = ImVec4(1, 0, 0, 1)
-local GREEN = ImVec4(0, 0.8, 0, 1)
-local BLACK = ImVec4(0, 0, 0, 1)
-local WHITE = ImVec4(1, 1, 1, 1)
-local LIGHT_GREY = ImVec4(0.75, 0.75, 0.75, 1)
-local TABLE_BORDER_BLUE = ImVec4(51 / 255, 105 / 255, 173 / 255, 1.0)
+local theme = require('gui.widgets.theme')
+local toggle = require('gui.widgets.toggle')
+local YELLOW, RED, GREEN, BLACK, WHITE, LIGHT_GREY, TABLE_BORDER_BLUE =
+    theme.YELLOW, theme.RED, theme.GREEN, theme.BLACK, theme.WHITE, theme.LIGHT_GREY, theme.TABLE_BORDER_BLUE
 
 local FLAGS_COLUMN_WIDTH = 65
 local FLAGS_ROW_PADDING_Y = 2
 local FLAGS_PANEL_WIDTH = 145
-local NUMERIC_INPUT_WIDTH = 80
+local NUMERIC_INPUT_WIDTH = theme.WIDTHS.numeric
 
 local DO_FLAGS = {
-    { key = 'dopull',   label = 'Pull' },
-    { key = 'dodebuff', label = 'Debuff' },
-    { key = 'doheal',   label = 'Heal' },
-    { key = 'dobuff',   label = 'Buff' },
-    { key = 'docure',   label = 'Cure' },
-    { key = 'domelee',  label = 'Melee' },
-    { key = 'doraid',   label = 'Raid' },
-    { key = 'dodrag',   label = 'Drag' },
-    { key = 'domount',  label = 'Mount' },
-    { key = 'dosit',    label = 'Sit' },
-    { key = 'doforage', label = 'Forage' },
+    { key = 'dopull',   label = 'Pull',   tt = 'Pull mobs to camp. Leave OFF if you use a separate puller.' },
+    { key = 'dodebuff', label = 'Debuff', tt = 'Cast debuffs, mez, nukes, DoTs and combat abilities (Debuff tab).' },
+    { key = 'doheal',   label = 'Heal',   tt = 'Heal group/raid members and self (Heal tab).' },
+    { key = 'dobuff',   label = 'Buff',   tt = 'Keep buffs up on self/group/pets (Buff tab).' },
+    { key = 'docure',   label = 'Cure',   tt = 'Cure detrimentals: poison/disease/curse/corruption (Cure tab).' },
+    { key = 'domelee',  label = 'Melee',  tt = 'Engage and melee targets.' },
+    { key = 'doraid',   label = 'Raid',   tt = 'Run raid-mechanic scripts for the current zone.' },
+    { key = 'dodrag',   label = 'Drag',   tt = 'Drag corpses back to camp.' },
+    { key = 'domount',  label = 'Mount',  tt = 'Summon/use a mount when traveling.' },
+    { key = 'dosit',    label = 'Sit',    tt = 'Sit to recover mana/endurance when idle and safe.' },
+    { key = 'doforage', label = 'Forage', tt = 'Use the Forage skill periodically.' },
 }
 
-local SONGS_FLAG = { key = 'dosongs', label = 'Songs' }
+local SONGS_FLAG = { key = 'dosongs', label = 'Songs', tt = 'Bard: keep the song twist running.' }
 
 local function hasForageAbility()
     local ok, v = pcall(function()
@@ -108,20 +107,27 @@ local STATE_NUM_TO_LABEL = {
     [state.STATES.resume_priorityCure] = 'Resuming priority cure',
 }
 
-local function getStatusLine()
+-- Status messages that are just the idle subsystem-check cycle (noise for the detail line/activity log).
+local IDLE_NOISE = {
+    [''] = true, ['Buff Check'] = true, ['Heal Check'] = true,
+    ['Cure Check'] = true, ['Debuff Check'] = true,
+}
+local ACTIVITY_MAX = 8           -- recent-activity entries kept
+local ACTIVITY_RECENT_SECS = 20  -- how long a finished action lingers on the header detail line
+local _activity = {}             -- ring buffer { {msg=..., t=...}, ... } oldest-first
+local _lastActivityMsg = nil
+
+local EXIT_MODAL_ID = 'status_exit'
+local _exitConfirm = { open = false, pendingClose = nil }
+
+-- Steady, flicker-free high-level state: run-state + camp/follow context. Ignores the rapid
+-- statusMessage "X Check" cycle so the header line doesn't blink.
+local function getSteadyStateLabel()
     local rc = state.getRunconfig()
-    if rc.pullHealerManaWait and rc.pullHealerManaWait.name then
-        local w = rc.pullHealerManaWait
-        if w.current ~= nil then
-            return string.format("Waiting on %s's mana (%d%% <= %d%%)", w.name, w.current, w.pct)
-        end
-        return string.format("Waiting on %s's mana (must be > %d%%)", w.name, w.pct)
-    end
-    if rc.pullDebuffWait and rc.pullDebuffWait.name then
-        return string.format('Waiting: non-curable debuff (%s)', rc.pullDebuffWait.name)
-    end
-    if rc.statusMessage and rc.statusMessage ~= '' then return rc.statusMessage end
+    if rc.pullHealerManaWait and rc.pullHealerManaWait.name then return 'Pull: waiting on healer mana' end
+    if rc.pullDebuffWait and rc.pullDebuffWait.name then return 'Pull: waiting on debuff' end
     local runState = state.getRunState()
+    if runState == state.STATES.casting then return 'Casting' end
     local label = STATE_NUM_TO_LABEL[runState]
     if label then
         if runState == state.STATES.dragging then
@@ -141,9 +147,62 @@ local function getStatusLine()
     return 'Idle'
 end
 
-function M.draw()
-    ImGui.TextColored(YELLOW, '%s', getStatusLine())
+-- The detailed action the bot is doing right now (Casting/Pulling/Tanking/waiting/...), or nil when
+-- it's only running the idle subsystem-check cycle.
+local function currentDetail()
+    local rc = state.getRunconfig()
+    if rc.pullHealerManaWait and rc.pullHealerManaWait.name then
+        local w = rc.pullHealerManaWait
+        if w.current ~= nil then
+            return string.format("Waiting on %s's mana (%d%% <= %d%%)", w.name, w.current, w.pct)
+        end
+        return string.format("Waiting on %s's mana (must be > %d%%)", w.name, w.pct)
+    end
+    if rc.pullDebuffWait and rc.pullDebuffWait.name then
+        return string.format('Waiting: non-curable debuff (%s)', rc.pullDebuffWait.name)
+    end
+    local m = rc.statusMessage
+    if m and not IDLE_NOISE[m] then return m end
+    return nil
+end
+
+-- Record the current action into the recent-activity ring buffer (called each frame by drawControls).
+-- Consecutive duplicates are collapsed; resets between actions so a repeated action logs again.
+local function sampleActivity()
+    local cur = currentDetail()
+    if cur then
+        if cur ~= _lastActivityMsg then
+            _lastActivityMsg = cur
+            _activity[#_activity + 1] = { msg = cur, t = mq.gettime() }
+            while #_activity > ACTIVITY_MAX do table.remove(_activity, 1) end
+        end
+    else
+        _lastActivityMsg = nil
+    end
+end
+
+-- Status line + Pause/Exit buttons. Rendered as a persistent header (above the tab bar by botgui)
+-- so the controls and current status are visible from every tab, not just Status.
+function M.drawControls()
+    sampleActivity()
+    ImGui.TextColored(YELLOW, '%s', getSteadyStateLabel())
     ImGui.SameLine()
+    -- Burn button: start/stop a burn window. Spells/abilities with a `burn` precondition fire during it.
+    do
+        local burnActive = state.IsBurnActive()
+        ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+        ImGui.PushStyleColor(ImGuiCol.Text, burnActive and RED or LIGHT_GREY)
+        local burnLabel = burnActive and string.format('Burn %ds', math.ceil(state.BurnRemainingMs() / 1000)) or 'Burn'
+        if ImGui.SmallButton(burnLabel .. '##burn') then
+            if burnActive then state.ClearBurn() else state.SetBurn() end
+        end
+        ImGui.PopStyleColor(2)
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(
+                'Start/stop a burn window. Spells & abilities with a `burn` precondition (e.g. precondition "return burn") fire while it is active.\nCommand: /cz burn [seconds] | off.')
+        end
+        ImGui.SameLine()
+    end
     local style = ImGui.GetStyle()
     local isPaused = (_G.MasterPause == true)
     local pauseLabel = isPaused and 'Resume' or 'Pause'
@@ -175,9 +234,203 @@ function M.draw()
     ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
     ImGui.PushStyleColor(ImGuiCol.Text, RED)
     if ImGui.SmallButton(Icons.FA_POWER_OFF .. '##exit') then
-        state.getRunconfig().terminate = true
+        _exitConfirm.open = true
+        _exitConfirm.pendingClose = nil
+        modals.openConfirmModal(EXIT_MODAL_ID)
     end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('%s', 'Exit: stop CZBot (ends the Lua script).') end
     ImGui.PopStyleColor(2)
+    modals.confirmModal(EXIT_MODAL_ID, _exitConfirm, {
+        message = 'Exit CZBot? This ends the Lua script.',
+        confirmLabel = 'Exit',
+        cancelLabel = 'Cancel',
+        danger = true,
+    }, function()
+        state.getRunconfig().terminate = true
+    end)
+
+    -- Second line: the current detailed action (white), or the last action (grey, with elapsed) so a
+    -- finished action lingers briefly instead of the line blinking back to idle.
+    local detail = currentDetail()
+    if detail then
+        ImGui.TextColored(WHITE, '%s', detail)
+    else
+        local last = _activity[#_activity]
+        local ago = last and math.floor((mq.gettime() - last.t) / 1000) or nil
+        if last and ago <= ACTIVITY_RECENT_SECS then
+            ImGui.TextColored(LIGHT_GREY, 'last: %s (%ds ago)', last.msg, ago)
+        else
+            ImGui.TextColored(LIGHT_GREY, '%s', 'monitoring...')
+        end
+    end
+end
+
+-- Read-only Bard twist panel: shows the live per-mode twist lists (gem:song, in order) so what the bot
+-- will twist is visible without reverse-engineering the Buff/Debuff flags. Order = Buff/Debuff entry
+-- order; see lib/bardtwist.lua. Bard-only; collapsed by default.
+local TWIST_MODES = {
+    { mode = 'idle',   label = 'Idle' },
+    { mode = 'combat', label = 'Combat' },
+    { mode = 'travel', label = 'Travel' },
+    { mode = 'pull',   label = 'Pull' },
+}
+
+local function twistGemLabel(gem)
+    if gem >= 1 and gem <= 12 then
+        local name = mq.TLO.Me.Gem(gem)()
+        return string.format('%d:%s', gem, (name and name ~= '') and name or 'empty')
+    end
+    return string.format('%d:clicky', gem) -- 21-29 = MQ2Twist clicky slots
+end
+
+local function twistListText(gems)
+    if not gems or #gems == 0 then return '(none)' end
+    local parts = {}
+    for _, g in ipairs(gems) do parts[#parts + 1] = twistGemLabel(g) end
+    return table.concat(parts, '  ')
+end
+
+local function safeTwistList(mode)
+    -- GetTwistListForMode('combat') reaches into the debuff eval (MatarDebuffNeededForTwist); isolate
+    -- any failure so one mode can't break the panel.
+    local ok, list = pcall(bardtwist.GetTwistListForMode, mode)
+    if ok and type(list) == 'table' then return list end
+    return nil
+end
+
+local function drawBardTwistSection()
+    if not bardtwist.IsBard() then return end
+    ImGui.Spacing()
+    if not ImGui.CollapsingHeader('Bard twist') then return end
+    -- Read-only info panel: it must never crash the GUI. The body has no Begin/End, so wrapping it in
+    -- pcall leaves the ImGui stack balanced even on error; surface the error instead of dying.
+    local ok, err = pcall(function()
+        local curMode = bardtwist.GetCurrentTwistMode()
+        local songsOn = bardtwist.SongsEnabled()
+        ImGui.TextColored(WHITE, '%s', 'Songs: ')
+        ImGui.SameLine(0, 2)
+        ImGui.TextColored(songsOn and GREEN or RED, '%s', songsOn and 'On' or 'Off')
+        ImGui.SameLine()
+        ImGui.TextColored(WHITE, '%s', '  Current mode: ')
+        ImGui.SameLine(0, 2)
+        ImGui.TextColored(YELLOW, '%s', curMode or 'idle')
+        for _, m in ipairs(TWIST_MODES) do
+            local isCur = (m.mode == curMode)
+            ImGui.TextColored(isCur and YELLOW or LIGHT_GREY, '%s', (isCur and '> ' or '  ') .. m.label .. ':')
+            ImGui.SameLine(0, 4)
+            ImGui.TextColored(isCur and WHITE or LIGHT_GREY, '%s', twistListText(safeTwistList(m.mode)))
+        end
+        local liveOk, liveRaw = pcall(function() return mq.TLO.Twist() and mq.TLO.Twist.List() end)
+        if liveOk and liveRaw and tostring(liveRaw) ~= '' then
+            ImGui.TextColored(WHITE, '%s', 'Now twisting: ')
+            ImGui.SameLine(0, 2)
+            ImGui.TextColored(LIGHT_GREY, '%s', tostring(liveRaw))
+        end
+    end)
+    if not ok then
+        ImGui.TextColored(RED, '%s', 'Twist info unavailable: ' .. tostring(err))
+    end
+end
+
+-- Read-only "players nearby (out of group)" panel: PCs not in your group, nearest first, with distance
+-- + class. Rebuilt on a throttle so it doesn't scan every frame. Like ezpullnav's PC monitor.
+local _nearbyPlayers = {}
+local _nearbyPlayersNextScan = 0
+local NEARBY_SCAN_INTERVAL_MS = 1000
+local NEARBY_MAX = 40
+
+local function rescanNearbyPlayers()
+    local out = {}
+    local meId = mq.TLO.Me.ID()
+    local count = tonumber(mq.TLO.SpawnCount('pc')()) or 0
+    if count > 200 then count = 200 end
+    for i = 1, count do
+        local sp = mq.TLO.NearestSpawn(i, 'pc') -- nearest-first, so `out` ends up distance-sorted
+        local id = sp and sp.ID()
+        if id and id > 0 and id ~= meId then
+            local name = sp.CleanName() or sp.Name()
+            if name and not mq.TLO.Group.Member(name).Index() then
+                local dist = (sp.Distance3D and sp.Distance3D()) or (sp.Distance and sp.Distance()) or 0
+                local cls = (sp.Class and sp.Class.ShortName()) or '?'
+                local lvl = (sp.Level and tonumber(sp.Level())) or 0
+                local guild = (sp.Guild and sp.Guild()) or ''
+                out[#out + 1] = { name = name, dist = dist, class = cls, level = lvl, guild = guild }
+                if #out >= NEARBY_MAX then break end
+            end
+        end
+    end
+    _nearbyPlayers = out
+end
+
+local function drawNearbyPlayersSection()
+    ImGui.Spacing()
+    if not ImGui.CollapsingHeader('Players nearby (out of group)') then return end
+    if mq.gettime() >= _nearbyPlayersNextScan then
+        if not pcall(rescanNearbyPlayers) then _nearbyPlayers = {} end
+        _nearbyPlayersNextScan = mq.gettime() + NEARBY_SCAN_INTERVAL_MS
+    end
+    if #_nearbyPlayers == 0 then
+        ImGui.TextColored(LIGHT_GREY, '%s', '  (no out-of-group players in zone)')
+        return
+    end
+    for _, p in ipairs(_nearbyPlayers) do
+        local guildStr = (p.guild and p.guild ~= '') and ('  <' .. p.guild .. '>') or ''
+        ImGui.TextColored(LIGHT_GREY, '  %5.0f  %s (%s %d)%s', p.dist or 0, p.name, p.class or '?', p.level or 0, guildStr)
+    end
+end
+
+-- Spell upgrades: prompt to swap a configured spell for a better in-book version (Option C), and a button
+-- to scribe upgrade scrolls from bags (Option A). The header turns yellow + shows a count when upgrades
+-- are pending. Reads the cached list (populated by the background scan) -- no per-frame book scan.
+local function drawSpellUpgradesSection()
+    local pending = spellupgrade.getPending()
+    local n = #pending
+    local label = (n > 0) and string.format('Spell upgrades available (%d)###spellupg', n)
+        or 'Spell upgrades###spellupg'
+    if n > 0 then ImGui.PushStyleColor(ImGuiCol.Text, YELLOW) end
+    local open = ImGui.CollapsingHeader(label)
+    if n > 0 then ImGui.PopStyleColor(1) end
+    if not open then return end
+
+    -- Scribe routes through /cz scribe so the blocking routine runs in the main loop, not the render pass.
+    if ImGui.SmallButton('Scribe scrolls##upg_scribe') then mq.cmd('/cz scribe') end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('Scribe usable spell scrolls from your bags (out of combat), then re-check for upgrades.')
+    end
+    ImGui.SameLine()
+    if ImGui.SmallButton('Re-scan##upg_rescan') then pcall(spellupgrade.scan) end
+    if n > 0 then
+        ImGui.SameLine()
+        if ImGui.SmallButton('Apply all##upg_applyall') then pcall(spellupgrade.applyAll) end
+    end
+
+    local asChecked = (botconfig.config.settings.autoScribe ~= false)
+    local asVal, asPressed = ImGui.Checkbox('Auto-scribe on level-up##upg_autoscribe', asChecked)
+    if asPressed then
+        botconfig.config.settings.autoScribe = asVal
+        botconfig.ApplyAndPersist()
+    end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('When you ding, scribe newly-usable spell scrolls from your bags automatically (once out of combat).')
+    end
+
+    if n == 0 then
+        ImGui.TextColored(LIGHT_GREY, '%s', '  (none detected -- Re-scan after leveling or scribing)')
+        return
+    end
+    for i, u in ipairs(pending) do
+        if ImGui.SmallButton(string.format('Apply##upg_%d', i)) then
+            pcall(spellupgrade.apply, i)
+            break -- list is rebuilt by apply(); stop iterating the stale list this frame
+        end
+        ImGui.SameLine()
+        ImGui.TextColored(LIGHT_GREY, '%s: %s (L%d) -> %s (L%d)',
+            u.section, u.old, u.oldLevel or 0, u.new, u.newLevel or 0)
+    end
+end
+
+function M.draw()
+    local style = ImGui.GetStyle()
     ImGui.Spacing()
     if ImGui.BeginTable('flags wrapper', 2, ImGuiTableFlags.None) then
         ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthStretch, 0)
@@ -274,11 +527,26 @@ function M.draw()
             ImGui.Text('%s', campLabel)
             ImGui.SameLine()
             local campIcon = Icons.FA_FREE_CODE_CAMP
+            local groupCampIcon = Icons.FA_USERS
             local campIconW = (select(1, ImGui.CalcTextSize(campIcon)) or 0) + style.FramePadding.x * 2
+            local groupCampIconW = (select(1, ImGui.CalcTextSize(groupCampIcon)) or 0) + style.FramePadding.x * 2
+            local GROUP_CAMP_GAP = 4
             local campAvail = select(1, ImGui.GetContentRegionAvail())
             if campAvail > 0 then
-                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + campAvail - campIconW)
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + campAvail - campIconW - groupCampIconW - GROUP_CAMP_GAP)
             end
+            -- Make GROUP camp: set my camp here AND tell every group member to camp at their own spot via MQRemote.
+            ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+            ImGui.PushStyleColor(ImGuiCol.Text, WHITE)
+            if ImGui.SmallButton(groupCampIcon .. '##group_camp') then
+                if not mobilePullMode then botmove.MakeCamp('on') end
+                mq.cmd('/rc group /cz makecamp on')
+            end
+            if ImGui.IsItemHovered() then
+                ImGui.SetTooltip('Make GROUP camp: set my camp here and tell every group member (via MQRemote) to camp at their own position.')
+            end
+            ImGui.PopStyleColor(2)
+            ImGui.SameLine(0, GROUP_CAMP_GAP)
             local campIconColor = GREEN
             if fixedCamp then
                 campIconColor = RED
@@ -346,32 +614,6 @@ function M.draw()
                 botconfig.config.settings.zradius = zradiusNew; runConfigLoaders()
             end
             if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp Z (vertical) radius for in-camp mob checks.') end
-            ImGui.TextColored(WHITE, '%s', 'MA anchor: ')
-            ImGui.SameLine(0, 2)
-            local maAnchorOn = botconfig.config.settings.maCampAnchor ~= false
-            local maAnchorChecked, maAnchorToggled = ImGui.Checkbox('##ma_camp_anchor', maAnchorOn)
-            if maAnchorToggled then
-                botconfig.config.settings.maCampAnchor = maAnchorChecked
-                runConfigLoaders()
-            end
-            if ImGui.IsItemHovered() then
-                ImGui.SetTooltip(
-                    'When on, mob bubble centers on nearby MA (charinfo) and injects MA ATTACK targets into the mob list.')
-            end
-            ImGui.SameLine()
-            ImGui.TextColored(WHITE, '%s', 'MA leash: ')
-            ImGui.SameLine(0, 2)
-            ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-            local maLeashVal = botconfig.config.settings.maAnchorLeash or botconfig.config.settings.acleash or 75
-            local maLeashNew, maLeashCh = inputs.boundedInt('ma_anchor_leash', maLeashVal, 1, 10000, 5,
-                '##ma_anchor_leash')
-            if maLeashCh then
-                botconfig.config.settings.maAnchorLeash = maLeashNew
-                runConfigLoaders()
-            end
-            if ImGui.IsItemHovered() then
-                ImGui.SetTooltip('Max MA distance for mob bubble anchor and combat target inject (defaults to Radius).')
-            end
             ImGui.TextColored(WHITE, '%s', 'RestDist: ')
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
@@ -384,7 +626,7 @@ function M.draw()
             if ImGui.IsItemHovered() then ImGui.SetTooltip(
                 'Distance (units) from camp to count as \'at camp\' for leash and return.') end
             if fixedCamp then
-                ImGui.TextColored(WHITE, '%s', 'Acleash: ')
+                ImGui.TextColored(WHITE, '%s', 'Leash to radius: ')
                 ImGui.SameLine(0, 2)
                 local acleashOn = rc.doCampAcleash ~= false
                 local acleashChecked, acleashToggled = ImGui.Checkbox('##camp_acleash', acleashOn)
@@ -467,53 +709,58 @@ function M.draw()
             ImGui.EndTable()
         end
         ImGui.PopStyleColor(2)
-        -- Other section
+        -- Advanced tuning behind collapsing headers (progressive disclosure): the landing stays compact;
+        -- Sit thresholds, Mount, and Nuke types are one click away when needed.
         ImGui.Spacing()
-        do
-            local availX = select(1, ImGui.GetContentRegionAvail())
-            local otherLabel = 'Other'
-            local textW = select(1, ImGui.CalcTextSize(otherLabel))
-            local startX = ImGui.GetCursorPosX()
-            ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
-            ImGui.Text('%s', otherLabel)
+        if ImGui.CollapsingHeader('Sit & rest') then
+            field_label.draw('Sit Mana %: ', { width = NUMERIC_INPUT_WIDTH })
+            local sitmanaVal = botconfig.config.settings.sitmana or 90
+            local sitmanaNew, sitmanaCh = inputs.boundedInt('sit_mana_pct', sitmanaVal, 0, 100, 5, '##sit_mana_pct')
+            if sitmanaCh then
+                botconfig.config.settings.sitmana = sitmanaNew; runConfigLoaders()
+            end
+            if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                'If Sit is on, sit when mana is below this %%; stand when above this %% + 3 (hysteresis).') end
+            ImGui.SameLine()
+            field_label.draw('Sit Endurance %: ', { width = NUMERIC_INPUT_WIDTH })
+            local sitendurVal = botconfig.config.settings.sitendur or 90
+            local sitendurNew, sitendurCh = inputs.boundedInt('sit_endur_pct', sitendurVal, 0, 100, 5, '##sit_endur_pct')
+            if sitendurCh then
+                botconfig.config.settings.sitendur = sitendurNew; runConfigLoaders()
+            end
+            if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                'If Sit is on, sit when endurance is below this %%; stand when above this %% + 3 (hysteresis).') end
+            ImGui.Spacing()
+            field_label.draw('Sit Aggro %: ', { width = NUMERIC_INPUT_WIDTH })
+            local sitaggroVal = botconfig.config.settings.sitaggro or 60
+            local sitaggroNew, sitaggroCh = inputs.boundedInt('sit_aggro_pct', sitaggroVal, 0, 100, 5, '##sit_aggro_pct')
+            if sitaggroCh then
+                botconfig.config.settings.sitaggro = sitaggroNew; runConfigLoaders()
+            end
+            if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                'If Sit is on, only sit when your aggro %% is below this value. Applies when mobs are in camp and you are level 20+.') end
         end
-        ImGui.Spacing()
-        ImGui.TextColored(WHITE, '%s', 'Sit Mana %: ')
-        ImGui.SameLine(0, 2)
-        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-        local sitmanaVal = botconfig.config.settings.sitmana or 90
-        local sitmanaNew, sitmanaCh = inputs.boundedInt('sit_mana_pct', sitmanaVal, 0, 100, 5, '##sit_mana_pct')
-        if sitmanaCh then
-            botconfig.config.settings.sitmana = sitmanaNew; runConfigLoaders()
+        if ImGui.CollapsingHeader('Death & recovery') then
+            local raOn = botconfig.config.settings.doRezAccept ~= false
+            local raVal, raPressed = ImGui.Checkbox('##rezaccept', raOn)
+            if raPressed then
+                botconfig.config.settings.doRezAccept = raVal; runConfigLoaders()
+            end
+            ImGui.SameLine(0, 2)
+            ImGui.TextColored(WHITE, '%s', 'Auto-accept rez')
+            if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                'Automatically accept incoming resurrection offers while hovering at your corpse (whole box crew gets back up without manual clicking).') end
+            field_label.draw('Min XP restore %: ', { width = NUMERIC_INPUT_WIDTH })
+            local rmVal = tonumber(botconfig.config.settings.rezAcceptMinPct) or 0
+            local rmNew, rmCh = inputs.boundedInt('rez_minpct', rmVal, 0, 100, 5, '##rez_minpct')
+            if rmCh then
+                botconfig.config.settings.rezAcceptMinPct = rmNew; runConfigLoaders()
+            end
+            if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                'Only accept rezzes that restore at least this %% experience (0 = accept any).') end
         end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip(
-            'If Sit is on, sit when mana is below this %%; stand when above this %% + 3 (hysteresis).') end
-        ImGui.SameLine()
-        ImGui.TextColored(WHITE, '%s', 'Sit Endurance %: ')
-        ImGui.SameLine(0, 2)
-        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-        local sitendurVal = botconfig.config.settings.sitendur or 90
-        local sitendurNew, sitendurCh = inputs.boundedInt('sit_endur_pct', sitendurVal, 0, 100, 5, '##sit_endur_pct')
-        if sitendurCh then
-            botconfig.config.settings.sitendur = sitendurNew; runConfigLoaders()
-        end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip(
-            'If Sit is on, sit when endurance is below this %%; stand when above this %% + 3 (hysteresis).') end
-        ImGui.Spacing()
-        ImGui.TextColored(WHITE, '%s', 'Sit Aggro %: ')
-        ImGui.SameLine(0, 2)
-        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-        local sitaggroVal = botconfig.config.settings.sitaggro or 60
-        local sitaggroNew, sitaggroCh = inputs.boundedInt('sit_aggro_pct', sitaggroVal, 0, 100, 5, '##sit_aggro_pct')
-        if sitaggroCh then
-            botconfig.config.settings.sitaggro = sitaggroNew; runConfigLoaders()
-        end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip(
-            'If Sit is on, only sit when your aggro %% is below this value. Applies when mobs are in camp and you are level 20+.') end
-        -- Mount: type dropdown + click-to-edit name (spellbook/item validation)
-        ImGui.Spacing()
-        ImGui.TextColored(WHITE, '%s', 'Mount: ')
-        ImGui.SameLine(0, 2)
+        -- Mount: type dropdown + click-to-edit name (spellbook/item validation). Mount vars are computed
+        -- outside the header so the edit modal (rendered below) persists regardless of header state.
         local mountcast = botconfig.config.settings.mountcast or 'none'
         local mountName, mountType = mountcast:match('^%s*(.-)%s*|%s*(.-)%s*$')
         if not mountType or mountType == '' then mountType = 'gem' end
@@ -521,29 +768,31 @@ function M.draw()
         if mountName == 'none' then mountName = nil end
         local mountTypeIdx = (mountType == 'item') and 2 or 1
         local MOUNT_TYPE_COMBO_WIDTH = 80
-        ImGui.SetNextItemWidth(MOUNT_TYPE_COMBO_WIDTH)
-        local mountTypeOptions = { 'Spell', 'Item' }
-        local mountTypeNew, mountTypeCh = combos.combo('mount_type', mountTypeIdx, mountTypeOptions, nil)
-        if mountTypeCh then
-            local newType = (mountTypeNew == 1) and 'gem' or 'item'
-            botconfig.config.settings.mountcast = (mountName and mountName ~= '' and mountName ~= 'none') and
-            (mountName .. '|' .. newType) or 'none'
-            runConfigLoaders()
-        end
-        ImGui.SameLine()
-        local mountDisplayName = (mountName and mountName ~= '') and mountName or 'no mount'
         local mountState = getMountModalState()
         local currentMountType = (mountTypeIdx == 1) and 'gem' or 'item'
         local mountValidator = (currentMountType == 'gem') and validateSpellInBook or validateFindItem
-        ImGui.SetNextItemWidth(140)
-        if ImGui.Selectable(mountDisplayName .. '##' .. MOUNT_MODAL_ID, false, 0, ImVec2(140, 0)) then
-            mountState.open = true
-            mountState.buffer = mountName and mountName ~= 'none' and mountName or ''
-            mountState.error = nil
-            modals.openValidatedEditModal(MOUNT_MODAL_ID)
+        if ImGui.CollapsingHeader('Mount') then
+            field_label.draw('Mount: ', { width = MOUNT_TYPE_COMBO_WIDTH })
+            local mountTypeOptions = { 'Spell', 'Item' }
+            local mountTypeNew, mountTypeCh = combos.combo('mount_type', mountTypeIdx, mountTypeOptions, nil)
+            if mountTypeCh then
+                local newType = (mountTypeNew == 1) and 'gem' or 'item'
+                botconfig.config.settings.mountcast = (mountName and mountName ~= '' and mountName ~= 'none') and
+                (mountName .. '|' .. newType) or 'none'
+                runConfigLoaders()
+            end
+            ImGui.SameLine()
+            local mountDisplayName = (mountName and mountName ~= '') and mountName or 'no mount'
+            ImGui.SetNextItemWidth(140)
+            if ImGui.Selectable(mountDisplayName .. '##' .. MOUNT_MODAL_ID, false, 0, ImVec2(140, 0)) then
+                mountState.open = true
+                mountState.buffer = mountName and mountName ~= 'none' and mountName or ''
+                mountState.error = nil
+                modals.openValidatedEditModal(MOUNT_MODAL_ID)
+            end
+            if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                'Click to edit: spell (search spellbook) or item (search inventory).') end
         end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip(
-            'Click to edit: spell (search spellbook) or item (search inventory).') end
         if mountState.open then
             local function onMountSave(value)
                 local trimmed = (value or ''):match('^%s*(.-)%s*$')
@@ -560,7 +809,6 @@ function M.draw()
             end
             modals.validatedEditModal(MOUNT_MODAL_ID, mountState, mountValidator, onMountSave, onMountCancel)
         end
-        ImGui.Spacing()
         do
             local applicable = {}
             local count = botconfig.getSpellCount('debuff')
@@ -573,7 +821,8 @@ function M.draw()
             end
             local order = { 'fire', 'ice', 'magic', 'poison', 'disease', 'chromatic', 'prismatic', 'unresistable',
                 'corruption' }
-            if next(applicable) then
+            -- Only offer the Nuke types header when this character actually has nuke spells configured.
+            if next(applicable) and ImGui.CollapsingHeader('Nuke types') then
                 local options = {}
                 local value = {}
                 for _, f in ipairs(order) do
@@ -643,10 +892,9 @@ function M.draw()
                 else
                     value = botconfig.config.settings[entry.key] == true
                 end
-                local icon = value and Icons.FA_TOGGLE_ON or Icons.FA_TOGGLE_OFF
-                ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
-                ImGui.PushStyleColor(ImGuiCol.Text, value and GREEN or RED)
-                if ImGui.SmallButton(icon .. '##' .. entry.key) then
+                local flagTip = (entry.tt or entry.label) .. '\n\n' ..
+                    (value and 'Currently ON (click to turn off)' or 'Currently OFF (click to turn on)')
+                if toggle.pill(entry.key, value, { small = true, tip = flagTip }) then
                     if entry.key == 'dopull' then
                         local rc = state.getRunconfig()
                         rc.dopull = not value
@@ -667,10 +915,6 @@ function M.draw()
                         botconfig.ApplyAndPersist()
                     end
                 end
-                if ImGui.IsItemHovered() then
-                    ImGui.SetTooltip(value and 'On' or 'Off')
-                end
-                ImGui.PopStyleColor(2)
                 ImGui.SameLine(0, 2)
                 ImGui.Text('%s', entry.label)
             end
@@ -678,6 +922,31 @@ function M.draw()
         end
         ImGui.PopStyleVar(1)
         ImGui.EndTable()
+    end
+
+    -- Bard twist visibility (bard-only): live per-mode twist lists, so the twist order is readable.
+    drawBardTwistSection()
+
+    -- Out-of-group players nearby + distance (read-only).
+    drawNearbyPlayersSection()
+
+    -- Spell-upgrade prompt + scribe button.
+    drawSpellUpgradesSection()
+
+    -- Recent activity (newest first): the real actions the bot has taken, so the rapid subsystem-check
+    -- ("X Check") idle cycle in the header doesn't hide what actually happened.
+    ImGui.Spacing()
+    ImGui.Separator()
+    ImGui.TextColored(WHITE, '%s', 'Recent activity')
+    if #_activity == 0 then
+        ImGui.TextColored(LIGHT_GREY, '%s', '  (nothing yet)')
+    else
+        local now = mq.gettime()
+        for i = #_activity, 1, -1 do
+            local e = _activity[i]
+            local ago = math.floor((now - e.t) / 1000)
+            ImGui.TextColored(LIGHT_GREY, '  %3ds  %s', ago, e.msg)
+        end
     end
 end
 

@@ -12,7 +12,15 @@ local bothooks = require('lib.bothooks')
 local utils = require('lib.utils')
 local casting = require('lib.casting')
 local botmove = require('botmove')
-local spawnutils = require('lib.spawnutils')
+-- Lazily required (see spawnutilsMod) to break a load-time require cycle:
+-- spawnutils -> charm -> spellutils -> spawnutils, which Lua 5.1 rejects with
+-- "loop or previous error loading module 'lib.spawnutils'". By the time the call sites below run,
+-- spawnutils is fully loaded, so require() returns the cached module instantly.
+local _spawnutils
+local function spawnutilsMod()
+    if not _spawnutils then _spawnutils = require('lib.spawnutils') end
+    return _spawnutils
+end
 local spellutils = {}
 local _deps = {}
 local _instantDebuffCastPending = nil
@@ -249,6 +257,13 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         return false
     end
 
+    if phase == 'notmatar' and spawnId then
+        local charm = require('lib.charm')
+        if charm.isCharmSkipped(spawnId, state.getRunconfig()) then
+            return mezSkip('charm skip')
+        end
+    end
+
     if phase == 'notmatar' and isMez and ctx.mtTargetId and spawnId == ctx.mtTargetId then
         return mezSkip('MT target')
     end
@@ -278,15 +293,32 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - target level %s exceeds spell max level %s', name, spawn.ID(), spawnLevel, ctx.spellmaxlvl)
         return false
     end
+    -- User mez level filter: only mez mobs within [min, max] (0 = unbounded on that side). Per-spell
+    -- mezMinLevel/mezMaxLevel override the character-wide settings.mezMinLevel/mezMaxLevel default per
+    -- bound. Lets an enchanter mez only the dangerous high-level adds, or skip trivial low-level ones.
+    if isMez and spawnId then
+        local minL = tonumber(entry.mezMinLevel) or 0
+        local maxL = tonumber(entry.mezMaxLevel) or 0
+        if minL == 0 then minL = tonumber(botconfig.config.settings.mezMinLevel) or 0 end
+        if maxL == 0 then maxL = tonumber(botconfig.config.settings.mezMaxLevel) or 0 end
+        if (minL > 0 or maxL > 0) and spawnLevel then
+            if minL > 0 and spawnLevel < minL then return mezSkip('below mez min level ' .. minL) end
+            if maxL > 0 and spawnLevel > maxL then return mezSkip('above mez max level ' .. maxL) end
+        end
+    end
+    -- recastActive (e.g. SK threat-snare) re-casts even when the spell's own effect is already on the
+    -- mob: it overrides a dontStack/stopWhen on its OWN category (other categories still apply) plus the
+    -- won't-re-stack and debuff-still-active gates below. HP/level/range/mob-count bands still apply.
+    local recastOwnCat = entry.recastActive and spellutils.GetCCDebuffCategory(entry) or nil
     if entry.stopWhen and spawnId then
         local stopTag = spellutils.SpawnHasStopWhenCategory(spawnId, entry.stopWhen)
-        if stopTag then
+        if stopTag and stopTag ~= recastOwnCat then
             return mezSkip('stopWhen ' .. stopTag)
         end
     end
     if entry.dontStack and spawnId then
         local dontTag = spellutils.SpawnHasDebuffCategory(spawnId, entry.dontStack)
-        if dontTag then
+        if dontTag and dontTag ~= recastOwnCat then
             spellutils.RecordDontStackDebuffFromSpawn(spawnId, entry.spell, dontTag)
             if isMez and phase == 'notmatar' then
                 return mezSkip('spawn already ' .. dontTag)
@@ -298,6 +330,18 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         and spellutils.SpawnHasDebuffSpell(entry.spell, spawnId) then
         return mezSkip('our mez on spawn')
     end
+    -- First-class slow/snare/root/fear: auto-skip a spawn that already has the matching effect (from
+    -- anyone), even with no explicit dontStack/stopWhen entry. Combined with the matar->notmatar
+    -- evaluation order this means the engaged (MA/MT) mob is debuffed first, then the bot moves on to
+    -- camp adds instead of re-applying an already-active CC/mitigation debuff.
+    -- entry.recastActive opts out (e.g. a Shadow Knight mashing snare/Darkness on the MA target to
+    -- build and hold aggro while tanking wants to keep casting even though the mob is already snared).
+    if spawnId and not isMez and not entry.recastActive then
+        local ccCat = spellutils.GetCCDebuffCategory(entry)
+        if ccCat and spellutils.SpawnHasStopWhenCategory(spawnId, { ccCat }) then
+            return false
+        end
+    end
     local tarstacks = spellutils.SpellStacksSpawn(entry, spawn.ID())
     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks then
         if phase == 'notmatar' and isMez then
@@ -305,12 +349,13 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
             printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', name, spawn.ID())
             return false
         end
-        if phase == 'matar' and not spellutils.IsConcussionSpell(entry) then
+        if phase == 'matar' and not spellutils.IsConcussionSpell(entry) and not entry.recastActive then
             return false
         end
     end
     local debuffRefreshThresholdMs = spellutils.GetDebuffRefreshThresholdMs()
     if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and ctx.spellid
+        and not entry.recastActive
         and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, debuffRefreshThresholdMs) then
         if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId) then
             spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
@@ -401,10 +446,10 @@ function spellutils.SpellCheck(Sub, ID)
         if (spellmana > 0 and ((mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < spellmana) or (mq.TLO.Me.PctMana() < minmana)) then return false end
     end
     if gem == 'alt' then
-        if not mq.TLO.Me.AltAbilityReady(spell) then return false end
+        if not mq.TLO.Me.AltAbilityReady(spell)() then return false end
     end
     if gem == 'disc' and spellend then
-        if not mq.TLO.Me.CombatAbilityReady(spell) then return false end
+        if not mq.TLO.Me.CombatAbilityReady(spell)() then return false end
         if (spellend and ((mq.TLO.Me.CurrentEndurance() - (mq.TLO.Me.EnduranceRegen() * 2)) < spellend) or (mq.TLO.Me.PctMana() < minmana)) then return false end
     end
     return true
@@ -414,6 +459,9 @@ end
 function spellutils.ImmuneCheck(Sub, ID, EvalID)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if not entry then return true end
+    -- recastActive (e.g. SK threat-snare) keeps casting even on an immune mob: the cast still generates
+    -- aggro, so don't block it on the immune list (other spells on the same mob are still blocked).
+    if entry.recastActive then return true end
     local spell = mq.TLO.Spell(entry.spell)()
     local zone = mq.TLO.Zone.ShortName()
     local targetname = mq.TLO.Spawn(EvalID).CleanName()
@@ -576,23 +624,27 @@ function spellutils.handleTargetImmuneEvent(_line)
 end
 
 --Check Distance (uses distance squared for comparisons)
-function spellutils.DistanceCheck(Sub, ID, EvalID)
-    local entry = botconfig.getSpellEntry(Sub, ID)
-    if not entry then return false end
-    local spell = entry.spell
-    if not spell then return false end
-    local spellid = nil
-    local myrange = mq.TLO.Spell(spell).MyRange()
-    local aeRange = mq.TLO.Spell(spell).AERange()
+-- Range check by spell NAME against a target spawn id. True when the target is within the spell's
+-- MyRange (or AERange for AE spells). Used directly when the spell is not a config entry (e.g. the
+-- hardcoded Complete Heal in chchain).
+function spellutils.DistanceCheckByName(spellName, EvalID)
+    if not spellName or spellName == '' or not EvalID or EvalID <= 0 then return false end
+    local myrange = mq.TLO.Spell(spellName).MyRange()
+    local aeRange = mq.TLO.Spell(spellName).AERange()
     local targ = mq.TLO.Spawn(EvalID)
     local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), targ.X(), targ.Y())
     if aeRange and aeRange > 0 and distSq and distSq <= (aeRange * aeRange) then
         return true
     elseif distSq and myrange and distSq <= (myrange * myrange) then
         return true
-    else
-        return false
     end
+    return false
+end
+
+function spellutils.DistanceCheck(Sub, ID, EvalID)
+    local entry = botconfig.getSpellEntry(Sub, ID)
+    if not entry or not entry.spell then return false end
+    return spellutils.DistanceCheckByName(entry.spell, EvalID)
 end
 
 -- Returns true if peer has spellid in Buff or ShortBuff (rich array scan).
@@ -709,6 +761,39 @@ function spellutils.SpawnDetrimentalsForCure(spawnId, cureTypeList)
     local hasCurable = false
     for i = 1, maxSlots do
         local b = sp.Buff(i)
+        if b then
+            local total = b.TotalCounters and b.TotalCounters() or 0
+            if total > 0 then
+                hasCurable = true
+                countPoison = countPoison + (b.CountersPoison and b.CountersPoison() or 0)
+                countDisease = countDisease + (b.CountersDisease and b.CountersDisease() or 0)
+                countCurse = countCurse + (b.CountersCurse and b.CountersCurse() or 0)
+                countCorruption = countCorruption + (b.CountersCorruption and b.CountersCorruption() or 0)
+            end
+        end
+    end
+    if not hasCurable then return false end
+    for _, v in ipairs(cureTypeList) do
+        local vlower = string.lower(tostring(v))
+        if vlower == 'all' then return true end
+        if vlower == 'poison' and countPoison > 0 then return true end
+        if vlower == 'disease' and countDisease > 0 then return true end
+        if vlower == 'curse' and countCurse > 0 then return true end
+        if vlower == 'corruption' and countCorruption > 0 then return true end
+    end
+    return false
+end
+
+-- Self: does my own buff list contain a matching curable counter? Mirrors SpawnDetrimentalsForCure
+-- but walks Me.Buff(i) (always populated for self; no targeting needed). Used for self-cure, since
+-- Me has no lowercase poison/disease/curse/corruption member.
+function spellutils.MeDetrimentalsForCure(cureTypeList)
+    if not cureTypeList or type(cureTypeList) ~= 'table' then return false end
+    local maxSlots = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
+    local countPoison, countDisease, countCurse, countCorruption = 0, 0, 0, 0
+    local hasCurable = false
+    for i = 1, maxSlots do
+        local b = mq.TLO.Me.Buff(i)
         if b then
             local total = b.TotalCounters and b.TotalCounters() or 0
             if total > 0 then
@@ -1120,6 +1205,54 @@ function spellutils.IsConcussionSpell(entry)
     return ok and hasConc
 end
 
+-- True if entry's spell has the given SPA. Handles item vs spell gem; never throws. Mirrors the
+-- IsConcussionSpell pattern for the crowd-control SPAs below.
+local function entryHasSPA(entry, spa)
+    if not entry or not entry.spell then return false end
+    if entry.gem == 'item' then
+        if not mq.TLO.FindItem(entry.spell)() then return false end
+        local ok, has = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(spa)() end)
+        return ok and has == true
+    end
+    if not mq.TLO.Spell(entry.spell)() then return false end
+    local ok, has = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(spa)() end)
+    return ok and has == true
+end
+
+-- Crowd-control / mitigation debuff type detectors (MacroQuest spelleffects.h SPAs):
+--   3 = MovementRate (snare), 11 = AttackSpeed (slow), 23 = Fear, 99 = Root.
+function spellutils.IsSnareSpell(entry) return entryHasSPA(entry, 3) end
+function spellutils.IsSlowSpell(entry) return entryHasSPA(entry, 11) end
+function spellutils.IsFearSpell(entry) return entryHasSPA(entry, 23) end
+function spellutils.IsRootSpell(entry) return entryHasSPA(entry, 99) end
+
+-- For a slow/snare/root/fear debuff, the spawn-effect category to auto-skip when already present, plus
+-- a short label for the GUI. Returns (categoryTag, label) or nil. Single primary classification (root
+-- is the most-defining), so a combo spell skips on its strongest effect. Mez/charm are handled by their
+-- own systems and excluded here. Cached per spell once resolvable (SPAs are immutable per spell).
+local _ccCatCache = {}
+function spellutils.GetCCDebuffCategory(entry)
+    if not entry or not entry.spell then return nil end
+    local key = (entry.gem == 'item' and 'item|' or 'spell|') .. entry.spell
+    local c = _ccCatCache[key]
+    if c ~= nil then
+        if c == false then return nil end
+        return c[1], c[2]
+    end
+    local resolvable = (entry.gem == 'item') and (mq.TLO.FindItem(entry.spell)() ~= nil)
+        or (mq.TLO.Spell(entry.spell)() ~= nil)
+    if not resolvable then return nil end -- don't cache a premature negative before spell data loads
+    local cat, label
+    if not (spellutils.IsMezSpell(entry) or spellutils.IsCharmSpell(entry)) then
+        if spellutils.IsRootSpell(entry) then cat, label = 'Rooted', 'Root'
+        elseif spellutils.IsSnareSpell(entry) then cat, label = 'Snared', 'Snare'
+        elseif spellutils.IsFearSpell(entry) then cat, label = 'Feared', 'Fear'
+        elseif spellutils.IsSlowSpell(entry) then cat, label = 'Slowed', 'Slow' end
+    end
+    _ccCatCache[key] = cat and { cat, label } or false
+    return cat, label
+end
+
 --- When MT/MA is self, charinfo may lag; use Target if it is in MobList.
 local function selfTargetIdFromMobList()
     local tid = mq.TLO.Target.ID()
@@ -1175,7 +1308,7 @@ end
 --- Clear lastAssistTargetId when the cached spawn is no longer alive.
 local function clearLastAssistTargetIfDead(rc)
     local cached = rc.lastAssistTargetId
-    if cached and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
+    if cached and not spawnutilsMod().isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
         rc.lastAssistTargetId = nil
     end
 end
@@ -1186,12 +1319,19 @@ end
 -- Returns fromCache (5th value) when the target came from lastAssistTargetId (MA dead/hover).
 function spellutils.GetAssistInfo(includeTarget, assistpct)
     local assistName = tankrole.GetAssistTargetName()
-    if not assistName or assistName == '' then return nil, nil, nil, nil end
+    if not assistName or assistName == '' then
+        state.getRunconfig().lastResolvedAssistName = nil
+        return nil, nil, nil, nil
+    end
 
     local assistid = mq.TLO.Spawn('pc =' .. assistName).ID()
     if not includeTarget then return assistName, assistid, nil, nil end
 
     local rc = state.getRunconfig()
+    if rc.lastResolvedAssistName ~= assistName then
+        rc.lastAssistTargetId = nil
+        rc.lastResolvedAssistName = assistName
+    end
     clearLastAssistTargetIfDead(rc)
 
     local unavailable = isAssistUnavailable(assistName, assistid)
@@ -1227,7 +1367,7 @@ function spellutils.GetAssistInfo(includeTarget, assistpct)
     local fromCache = false
     if unavailable and (not assistar or assistar == 0) then
         local cached = rc.lastAssistTargetId
-        if cached and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
+        if cached and spawnutilsMod().isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
             assistar = cached
             assistarhp = mq.TLO.Spawn(cached).PctHPs()
             fromCache = true
@@ -1259,9 +1399,27 @@ end
 local _mezDbgNextTime = 0
 local MEZ_DBG_INTERVAL_MS = 2000
 
---- Mez diagnostic with session ms timestamp (unthrottled).
+-- Mez/debuff diagnostic logging is OFF by default -- it floods the MQ console every tick during
+-- normal play. Toggle with /cz mezdebug on|off only when troubleshooting mez/notmatar targeting.
+local _mezDebug = false
+function spellutils.SetMezDebug(on) _mezDebug = (on == true) end
+function spellutils.IsMezDebug() return _mezDebug end
+
+--- Mez diagnostic with session ms timestamp (gated by mezdebug; unthrottled).
 function spellutils.MezLog(fmt, ...)
+    if not _mezDebug then return end
     printf('\ayCZBot:\ax [Mez t=%s] ' .. fmt, tostring(mq.gettime()), ...)
+end
+
+-- Buff diagnostic: logs why a buff is/ isn't cast on a target. OFF by default (chatty). Toggle with
+-- /cz buffdebug on|off when troubleshooting "why won't this buff cast".
+local _buffDebug = false
+function spellutils.SetBuffDebug(on) _buffDebug = (on == true) end
+function spellutils.IsBuffDebug() return _buffDebug end
+
+function spellutils.BuffLog(fmt, ...)
+    if not _buffDebug then return end
+    printf('\ayCZBot:\ax [Buff] ' .. fmt, ...)
 end
 
 --- Throttled mez/debuff resume diagnostic (see botdebuff multi-mez debugging).
@@ -1880,6 +2038,9 @@ function spellutils.PreCondCheck(Sub, ID, spawnID)
         EvalID = nil; return false
     end
     EvalID = spawnID
+    -- Expose the burn window to preconditions as the global `burn` (mirrors how EvalID is exposed), so
+    -- users can gate burst cooldowns with e.g. precondition = "return burn" or "return burn and ...".
+    burn = state.IsBurnActive()
     local loadprecond, loadError = load('local mq = require("mq") ' .. precond)
     if loadprecond then
         local env = { EvalID = EvalID }
@@ -1995,6 +2156,8 @@ function spellutils.InterruptCheckDontStack(entry, target, spellname)
         end
     end
     if not tag then return end
+    -- recastActive re-casts on its own effect (threat); don't interrupt for the spell's own category.
+    if entry.recastActive and tag == select(1, spellutils.GetCCDebuffCategory(entry)) then return end
     printf('\ayCZBot:\axInterrupt %s, target already %s', spellname, tag)
     spellutils.RecordDontStackDebuffFromSpawn(target, entry.spell, tag)
     spellutils.interruptActiveCast(state.getRunconfig())
@@ -2065,7 +2228,9 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
     elseif sub == 'debuff' then
         -- For refresh casters: only interrupt if the existing debuff has MORE time left than we want.
         -- This prevents getting interrupted mid-refresh when remaining is already below the recast threshold.
-        if buffPresent then
+        -- recastActive (e.g. SK threat-snare) intentionally re-casts an active debuff for hate, so it must
+        -- never be interrupted for being already present -- otherwise it loops (start cast -> interrupt).
+        if buffPresent and not (entry and entry.recastActive) then
             local thresholdMs = spellutils.GetDebuffRefreshThresholdMs()
             if (buffdur or 0) > thresholdMs then
                 printf('\ayCZBot:\axInterrupt %s on MobID %s, debuff remaining %sms > %sms', spellname, target,
@@ -2329,7 +2494,10 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
             resisted = false,
             spellcheckResume = spellcheckResume,
         }
-        if targethit == 'charmtar' then rc.charmid = EvalID end
+        if targethit == 'charmtar' then
+            rc.charmid = EvalID
+            require('lib.charm').trackCharmSkip(EvalID, rc)
+        end
     else
         if spellcheckResume then rc.CurSpell.spellcheckResume = spellcheckResume end
     end

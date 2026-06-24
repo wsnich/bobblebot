@@ -137,26 +137,28 @@ function botpull.syncPullMapFilter(force)
     end
 end
 
---- Builds a set (id -> true) of current XTarget spawn IDs, excluding dead/corpse.
+--- Builds a set (id -> true) of NPCs in an XTarget "Auto Hater" slot (things with aggro on us).
+--- Filtering to Auto-Hater NPCs avoids counting benign slots (pet/group/current-target) as hostiles,
+--- which would otherwise trigger false add-aborts and false pull-aggro confirmations.
 local function getCurrentXTargetIdSet()
     local set = {}
     local n = mq.TLO.Me.XTarget() or 0
     for i = 1, n do
         local xt = mq.TLO.Me.XTarget(i)
-        if xt and xt.ID() and xt.ID() > 0 and xt.Type() ~= 'Corpse' and not xt.Dead() then
+        if xt and xt.ID() and xt.ID() > 0 and xt.TargetType() == 'Auto Hater' and xt.Type() == 'NPC' and not xt.Dead() then
             set[xt.ID()] = true
         end
     end
     return set
 end
 
---- Returns true if spawnId is on extended target (any slot, skip dead/corpse).
+--- Returns true if spawnId is an Auto-Hater NPC on the extended target window (has aggro on us).
 local function isSpawnOnXTarget(spawnId)
     if not spawnId or spawnId == 0 then return false end
     local n = mq.TLO.Me.XTarget() or 0
     for i = 1, n do
         local xt = mq.TLO.Me.XTarget(i)
-        if xt and xt.ID() == spawnId and xt.Type() ~= 'Corpse' and not xt.Dead() then
+        if xt and xt.ID() == spawnId and xt.TargetType() == 'Auto Hater' and xt.Type() == 'NPC' and not xt.Dead() then
             return true
         end
     end
@@ -717,7 +719,7 @@ function botpull.StartPull()
     local distance = spawn.Distance() and math.floor(spawn.Distance()) or 0
     printf('\ayCZBot:\axAttempting to pull \ar%s \arid %s \auat %s', spawn.Name(), spawn.ID(), distance)
     mq.cmd('/multiline ; /attack off ; /stick off ; /squelch /mqtarget clear')
-    mq.cmdf('/nav id %s dist= 7 log=off los=on', spawn.ID())
+    mq.cmdf('/nav id %s dist=7 log=off los=on', spawn.ID())
     if isWarp then mq.cmdf('/warp id %s', spawn.ID()) end
 
     rc.pullAPTargetID = spawn.ID()
@@ -807,7 +809,7 @@ local function beginPullCandidate(rc, spawn, reason)
     rc.pullXTargetIdsAtStart = getCurrentXTargetIdSet()
     rc.pullState = 'navigating'
     mq.cmd('/multiline ; /attack off ; /stick off ; /squelch /mqtarget clear')
-    mq.cmdf('/nav id %s dist= 7 log=off los=on', spawnId)
+    mq.cmdf('/nav id %s dist=7 log=off los=on', spawnId)
     rc.statusMessage = string.format('Pulling %s (%s)', spawn.Name(), spawnId)
     if reason then
         printf('\ayCZBot:\ax [Pull] %s; trying backup target %s (%s)', reason, spawn.Name(), spawnId)
@@ -937,8 +939,11 @@ local function tickNavigating(rc, spawn)
         return
     end
 
-    -- Add-abort: HP dropped (we took damage)
-    if rc.pullNavStartHP and mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() < rc.pullNavStartHP then
+    -- Add-abort: HP dropped (we took damage) — unless our own pull target is already on XTarget, in
+    -- which case the damage is from the tagged pull target. Let the XTarget transition block below
+    -- turn that into a return-to-camp instead of misclassifying our successful tag as an add.
+    if rc.pullNavStartHP and mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() < rc.pullNavStartHP
+        and not isSpawnOnXTarget(rc.pullAPTargetID) then
         abortNavDuringPull(myconfig.pull.hunter and 'Add aggro / took damage, aborting hunt.' or 'Add aggro / took damage, returning to camp.')
         return
     end
@@ -1042,7 +1047,7 @@ local function tickNavigating(rc, spawn)
         end
     end
     if not mq.TLO.Navigation.Active() and spawnDistSq and rangeSq and spawnDistSq > rangeSq then
-        mq.cmdf('/nav id %s dist= 7 log=off los=on', rc.pullAPTargetID)
+        mq.cmdf('/nav id %s dist=7 log=off los=on', rc.pullAPTargetID)
     end
 end
 
