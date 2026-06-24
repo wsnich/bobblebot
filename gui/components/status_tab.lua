@@ -331,6 +331,50 @@ local function drawBardTwistSection()
     end
 end
 
+-- Read-only "players nearby (out of group)" panel: PCs not in your group, nearest first, with distance
+-- + class. Rebuilt on a throttle so it doesn't scan every frame. Like ezpullnav's PC monitor.
+local _nearbyPlayers = {}
+local _nearbyPlayersNextScan = 0
+local NEARBY_SCAN_INTERVAL_MS = 1000
+local NEARBY_MAX = 40
+
+local function rescanNearbyPlayers()
+    local out = {}
+    local meId = mq.TLO.Me.ID()
+    local count = tonumber(mq.TLO.SpawnCount('pc')()) or 0
+    if count > 200 then count = 200 end
+    for i = 1, count do
+        local sp = mq.TLO.NearestSpawn(i, 'pc') -- nearest-first, so `out` ends up distance-sorted
+        local id = sp and sp.ID()
+        if id and id > 0 and id ~= meId then
+            local name = sp.CleanName() or sp.Name()
+            if name and not mq.TLO.Group.Member(name).Index() then
+                local dist = (sp.Distance3D and sp.Distance3D()) or (sp.Distance and sp.Distance()) or 0
+                local cls = (sp.Class and sp.Class.ShortName()) or '?'
+                out[#out + 1] = { name = name, dist = dist, class = cls }
+                if #out >= NEARBY_MAX then break end
+            end
+        end
+    end
+    _nearbyPlayers = out
+end
+
+local function drawNearbyPlayersSection()
+    ImGui.Spacing()
+    if not ImGui.CollapsingHeader('Players nearby (out of group)') then return end
+    if mq.gettime() >= _nearbyPlayersNextScan then
+        if not pcall(rescanNearbyPlayers) then _nearbyPlayers = {} end
+        _nearbyPlayersNextScan = mq.gettime() + NEARBY_SCAN_INTERVAL_MS
+    end
+    if #_nearbyPlayers == 0 then
+        ImGui.TextColored(LIGHT_GREY, '%s', '  (no out-of-group players in zone)')
+        return
+    end
+    for _, p in ipairs(_nearbyPlayers) do
+        ImGui.TextColored(LIGHT_GREY, '  %5.0f  %s (%s)', p.dist or 0, p.name, p.class or '?')
+    end
+end
+
 function M.draw()
     local style = ImGui.GetStyle()
     ImGui.Spacing()
@@ -813,6 +857,9 @@ function M.draw()
 
     -- Bard twist visibility (bard-only): live per-mode twist lists, so the twist order is readable.
     drawBardTwistSection()
+
+    -- Out-of-group players nearby + distance (read-only).
+    drawNearbyPlayersSection()
 
     -- Recent activity (newest first): the real actions the bot has taken, so the rapid subsystem-check
     -- ("X Check") idle cycle in the header doesn't hide what actually happened.
