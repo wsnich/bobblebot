@@ -352,7 +352,9 @@ local function rescanNearbyPlayers()
             if name and not mq.TLO.Group.Member(name).Index() then
                 local dist = (sp.Distance3D and sp.Distance3D()) or (sp.Distance and sp.Distance()) or 0
                 local cls = (sp.Class and sp.Class.ShortName()) or '?'
-                out[#out + 1] = { name = name, dist = dist, class = cls }
+                local lvl = (sp.Level and tonumber(sp.Level())) or 0
+                local guild = (sp.Guild and sp.Guild()) or ''
+                out[#out + 1] = { name = name, dist = dist, class = cls, level = lvl, guild = guild }
                 if #out >= NEARBY_MAX then break end
             end
         end
@@ -372,7 +374,8 @@ local function drawNearbyPlayersSection()
         return
     end
     for _, p in ipairs(_nearbyPlayers) do
-        ImGui.TextColored(LIGHT_GREY, '  %5.0f  %s (%s)', p.dist or 0, p.name, p.class or '?')
+        local guildStr = (p.guild and p.guild ~= '') and ('  <' .. p.guild .. '>') or ''
+        ImGui.TextColored(LIGHT_GREY, '  %5.0f  %s (%s %d)%s', p.dist or 0, p.name, p.class or '?', p.level or 0, guildStr)
     end
 end
 
