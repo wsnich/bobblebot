@@ -311,15 +311,14 @@ local function debuffGetTargetsForPhase(phase, context)
                 end
             end
         end
-        if #out > 0 then
+        if #out > 0 and spellutils.IsMezDebug() then
             local parts = {}
             for i, t in ipairs(out) do
                 local sp = mq.TLO.Spawn(t.id)
                 local name = (sp and sp.CleanName and sp.CleanName()) or tostring(t.id)
                 parts[i] = string.format('%s(%s)', name, t.id)
             end
-            printf('\aybobblebot:\ax [Mez t=%s] notmatar targets this tick: %s', tostring(mq.gettime()),
-                table.concat(parts, ', '))
+            spellutils.MezLog('notmatar targets this tick: %s', table.concat(parts, ', '))
         end
         return out
     end

@@ -1318,8 +1318,15 @@ end
 local _mezDbgNextTime = 0
 local MEZ_DBG_INTERVAL_MS = 2000
 
---- Mez diagnostic with session ms timestamp (unthrottled).
+-- Mez/debuff diagnostic logging is OFF by default -- it floods the MQ console every tick during
+-- normal play. Toggle with /cz mezdebug on|off only when troubleshooting mez/notmatar targeting.
+local _mezDebug = false
+function spellutils.SetMezDebug(on) _mezDebug = (on == true) end
+function spellutils.IsMezDebug() return _mezDebug end
+
+--- Mez diagnostic with session ms timestamp (gated by mezdebug; unthrottled).
 function spellutils.MezLog(fmt, ...)
+    if not _mezDebug then return end
     printf('\aybobblebot:\ax [Mez t=%s] ' .. fmt, tostring(mq.gettime()), ...)
 end
 
