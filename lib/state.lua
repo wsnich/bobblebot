@@ -28,6 +28,7 @@
 ---@field dopull boolean|nil
 ---@field dosongs boolean|nil session-only bard twist; default on at start, not saved to config
 ---@field bardNotmatarWait table|nil BRD notmatar twist-once wait (mez/add debuff flow)
+---@field burnUntil number|nil mq.gettime() end of the burn window; nil = not burning. Gates debuff bands with a burn targetphase.
 ---@field pulledmob number|nil
 ---@field pullreturntimer number|nil
 ---@field pulledmobLastDistSq number|nil cached distance-squared from puller to pulled mob when last saw it closer
@@ -449,6 +450,48 @@ function M.isCombatContextForBuff(rc)
     if M.getRunState() == M.STATES.melee then return true end
     if mq.TLO.Me.Combat() then return true end
     return false
+end
+
+local DEFAULT_BURN_SEC = 30
+
+---Start a burn window of `seconds` (default 30). <= 0 stops it. Returns the seconds applied.
+---Spells/abilities on debuff bands with a burn targetphase cast while the window is active.
+---@param seconds number|nil
+---@return number secondsApplied
+function M.SetBurn(seconds)
+    local rc = M.getRunconfig()
+    local sec = tonumber(seconds) or DEFAULT_BURN_SEC
+    if sec <= 0 then
+        rc.burnUntil = nil
+        return 0
+    end
+    local mq = require('mq')
+    rc.burnUntil = mq.gettime() + sec * 1000
+    return sec
+end
+
+---Stop any active burn window.
+function M.ClearBurn()
+    M.getRunconfig().burnUntil = nil
+end
+
+---True while a burn window is active.
+---@return boolean
+function M.IsBurnActive()
+    local rc = M.getRunconfig()
+    if not rc.burnUntil then return false end
+    local mq = require('mq')
+    return mq.gettime() < rc.burnUntil
+end
+
+---Milliseconds left in the burn window (0 if none).
+---@return number
+function M.BurnRemainingMs()
+    local rc = M.getRunconfig()
+    if not rc.burnUntil then return 0 end
+    local mq = require('mq')
+    local rem = rc.burnUntil - mq.gettime()
+    return rem > 0 and rem or 0
 end
 
 ---Toggle or set global MasterPause (pause CZBot). Used by status tab Pause button and /czp.

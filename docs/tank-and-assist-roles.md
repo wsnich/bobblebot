@@ -56,6 +56,21 @@ Applies only when **MT and MA are different bots**:
 
 Ignored when the same bot is both MA and MT.
 
+### Role presets
+
+Quick-setup for multibox crews: **`/cz role <tank|ma|dps|healer>`** or the **Roles** tab buttons apply a saved preset from **`config.roles`**.
+
+Each preset sets behavior flags (**domelee**, **doheal**, **dodebuff**, etc.), **melee.mtSticky** / **offtank**, and **engageXTargetOnly**. When **`setTank`** or **`setAssist`** is true on the preset, this character's name is written to **TankName** or **AssistName**. Presets with **`setTank` false** or **`setAssist` false** do **not** clear manually saved tank/assist names — use **`/cz tank automatic`** or **`/cz assist automatic`** explicitly if you want to reset.
+
+Default presets (editable in config / Roles tab):
+
+| Preset | Typical use |
+| ------ | ----------- |
+| **tank** | Melee on, self as MT, mtSticky on |
+| **ma** | Melee + debuff on, self as MA |
+| **dps** | Melee + debuff on, tank/assist unchanged |
+| **healer** | Heal on, melee off |
+
 ---
 
 ## Who Does What (Mermaid)

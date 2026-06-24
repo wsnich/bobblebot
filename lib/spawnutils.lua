@@ -630,6 +630,50 @@ function spawnutils.mergeEngageTargetIntoMobList(rc)
     if sp and sp.ID() then table.insert(rc.MobList, sp) end
 end
 
+--- NPCs on XTarget Auto-Hater slots within camp that pass engage safety filters (LoS not required).
+function spawnutils.getXTargetAutoHaterEngageables(rc)
+    rc = rc or state.getRunconfig()
+    local out = {}
+    local n = mq.TLO.Me.XTarget() or 0
+    if n == 0 then return out end
+    local myconfig = botconfig.config
+    local zradius = myconfig.settings.zradius or 75
+    local acleash = tonumber(myconfig.settings.acleash) or 75
+    local acleashSq = myconfig.settings.acleashSq or (acleash * acleash)
+    local cx, cy, cz = spawnutils.getMobListAnchor(rc)
+    local seen = {}
+    for i = 1, n do
+        local xt = mq.TLO.Me.XTarget(i)
+        local xtid = xt and xt.ID() or nil
+        if xtid and xtid > 0 and not seen[xtid] and spawnutils.isAutoHaterXTarget(xt) then
+            seen[xtid] = true
+            local spawn = mq.TLO.Spawn(xtid)
+            if spawnutils.isNpcEngageTarget(spawn)
+                and spawnInArea(spawn, cx, cy, cz, acleashSq, zradius)
+                and spawnutils.filterSpawnProtected(spawn)
+                and spawnutils.filterSpawnExcludeAndFTE(spawn, rc)
+                and not utils.isCharmSkipped(xtid, rc)
+                and not (spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(xtid, rc)) then
+                out[#out + 1] = spawn
+            end
+        end
+    end
+    return out
+end
+
+--- True if spawnId currently occupies an XTarget Auto-Hater slot.
+function spawnutils.isOnXTargetAutoHater(spawnId)
+    if not spawnId or spawnId <= 0 then return false end
+    local n = mq.TLO.Me.XTarget() or 0
+    for i = 1, n do
+        local xt = mq.TLO.Me.XTarget(i)
+        if xt and xt.ID() == spawnId and spawnutils.isAutoHaterXTarget(xt) then
+            return true
+        end
+    end
+    return false
+end
+
 local function mobListContainsId(mobList, spawnId)
     for _, v in ipairs(mobList or {}) do
         if v.ID() == spawnId then return true end

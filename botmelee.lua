@@ -272,6 +272,7 @@ local function isEngageableMobListSpawn(spawn)
     return spawn.LineOfSight()
 end
 
+
 local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     if not mainTankName or mainTankName == '' then return nil end
     local rc = state.getRunconfig()
@@ -461,6 +462,54 @@ local function disengageCombat()
     if state.getRunState() == state.STATES.melee then state.clearRunState() end
 end
 
+-- Stand, attack, and stick to the engage target for final melee positioning. Stops nav first.
+-- Idempotent: only re-issues /stick when the active stick target or command differs.
+local function applyEngageStick(engageTargetId)
+    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+    if mq.TLO.Me.Sitting() then mq.cmd('/stand on') end
+    if not mq.TLO.Me.Combat() then mq.cmd('/squelch /attack on') end
+    local stickCmd = getEngageStickCmd()
+    local needRestick = false
+    if mq.TLO.Stick.Active() and mq.TLO.Stick.StickTarget() == engageTargetId then
+        if _lastEngageStickCmd ~= stickCmd then
+            mq.cmd('/squelch /stick off')
+            needRestick = true
+        end
+    else
+        needRestick = true
+    end
+    if needRestick then
+        mq.cmdf('/squelch /multiline ; /attack on ; /stick %s', stickCmd)
+        _lastEngageStickCmd = stickCmd
+    end
+end
+
+-- When the engage target is out of line of sight, approach it WITHOUT straight-line /stick (which
+-- runs into walls/floors). If the navmesh has a route, pathfind (/nav) around the obstruction and let
+-- /stick take over on arrival; if there is NO route, stop and hold so we don't grind into the wall,
+-- waiting for LoS or a path to open (the mob or group moving). Returns true when LoS is blocked (the
+-- caller must not /stick); false when LoS is clear (caller sticks normally).
+-- Note: we intentionally do NOT gate on aggro here. Proactive no-LoS targeting is prevented upstream
+-- (the MT only auto-selects mobs it can see; no-LoS picks come from the XTarget Auto-Hater path), and
+-- an assist target is the group's committed mob — both are legitimate things to path to.
+local function navToEngageTargetIfBlocked(engageTargetId)
+    if mq.TLO.Target.LineOfSight() then return false end
+    if mq.TLO.Navigation.PathExists('id ' .. engageTargetId)() then
+        if mq.TLO.Stick.Active() then mq.cmd('/squelch /stick off') end
+        _lastEngageStickCmd = nil
+        if mq.TLO.Me.Sitting() then mq.cmd('/stand on') end
+        if not mq.TLO.Navigation.Active() then
+            mq.cmdf('/squelch /nav id %s log=off', engageTargetId)
+        end
+    else
+        -- Unreachable from here: stop moving so we don't /stick straight into the wall.
+        if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+        if mq.TLO.Stick.Active() then mq.cmd('/squelch /stick off') end
+        _lastEngageStickCmd = nil
+    end
+    return true
+end
+
 -- When engageTargetId is set: pet attack, target (blocking TargetAndWait), stand, attack on, stick. Uses melee phase moving_closer.
 local function engageTarget()
     local engageTargetId = state.getRunconfig().engageTargetId
@@ -488,6 +537,7 @@ local function engageTarget()
             local targetDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Target.X(), mq.TLO.Target.Y())
             local maxMeleeTo = mq.TLO.Target.MaxMeleeTo()
             if targetDistSq and maxMeleeTo and targetDistSq < (maxMeleeTo * maxMeleeTo) then
+                applyEngageStick(engageTargetId)
                 if state.canStartBusyState(state.STATES.melee) then
                     state.setRunState(state.STATES.melee, { phase = 'idle', priority = bothooks.getPriority('doMelee') })
                 end
@@ -498,6 +548,10 @@ local function engageTarget()
                     state.setRunState(state.STATES.melee, { phase = 'idle', priority = bothooks.getPriority('doMelee') })
                 end
                 return
+            end
+            -- Still out of range: if blocked by LoS, keep pathing around the obstruction.
+            if myconfig.settings.domelee and mq.TLO.Target.ID() == engageTargetId then
+                navToEngageTargetIfBlocked(engageTargetId)
             end
             return
         end
@@ -515,23 +569,17 @@ local function engageTarget()
 
     if mq.TLO.Target.ID() ~= engageTargetId then return end
 
-    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop') end
-    if mq.TLO.Me.Sitting() then mq.cmd('/stand on') end
-    if not mq.TLO.Me.Combat() then mq.cmd('/squelch /attack on') end
-    local stickCmd = getEngageStickCmd()
-    local needRestick = false
-    if mq.TLO.Stick.Active() and mq.TLO.Stick.StickTarget() == engageTargetId then
-        if _lastEngageStickCmd ~= stickCmd then
-            mq.cmd('/squelch /stick off')
-            needRestick = true
+    -- Blocked by LoS but reachable: pathfind around the obstruction; stick takes over on arrival.
+    if navToEngageTargetIfBlocked(engageTargetId) then
+        if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
+            if state.canStartBusyState(state.STATES.melee) then
+                state.setRunState(state.STATES.melee, { phase = 'moving_closer', deadline = mq.gettime() + 8000, priority = bothooks.getPriority('doMelee') })
+            end
         end
-    else
-        needRestick = true
+        return
     end
-    if needRestick then
-        mq.cmdf('/squelch /multiline ; /attack on ; /stick %s', stickCmd)
-        _lastEngageStickCmd = stickCmd
-    end
+
+    applyEngageStick(engageTargetId)
 
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
         if state.canStartBusyState(state.STATES.melee) then
@@ -540,12 +588,106 @@ local function engageTarget()
     end
 end
 
+-- Reactive engage selection (settings.engageXTargetOnly): pick the engage target ONLY from mobs on our
+-- XTarget Auto-Hater list (aggro'd on the group). Closest-first, prefers the current engage target;
+-- mez handling via selectEngageTargetFromLosList. Deliberately skips the /assist-based role resolution
+-- so we don't spam /assist (and the "Auto attack on assist" game message) or proactively grab MobList NPCs.
+local function selectXTargetEngageTarget(rc)
+    local cands = spawnutils.getXTargetAutoHaterEngageables(rc)
+    if #cands == 0 then return nil end
+    local engageId = rc.engageTargetId
+    if engageId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then engageId = nil end
+    local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
+    table.sort(cands, function(a, b)
+        local aId, bId = a.ID(), b.ID()
+        if engageId and aId == engageId and bId ~= engageId then return true end
+        if engageId and aId ~= engageId and bId == engageId then return false end
+        local da = utils.getDistanceSquared2D(meX, meY, a.X(), a.Y())
+        local db = utils.getDistanceSquared2D(meX, meY, b.X(), b.Y())
+        return (da or 0) < (db or 0)
+    end)
+    return selectEngageTargetFromLosList(cands, engageId)
+end
+
+-- AE-tank (settings.tankAllMobs, default off): when enabled and this bot is the MT with NO mezzer
+-- (ENC/BRD) in group, actively grab aggro on XTarget Auto-Hater mobs near camp that aren't currently
+-- on us by taunting them in turn. Auto-suppresses when a mezzer is present unless aeTankIgnoreMezzer.
+local _aeTauntNextTime = 0
+local _aeDebug = false
+local _aeDebugNextTime = 0
+
+function botmelee.SetAeTankDebug(on) _aeDebug = on and true or false end
+function botmelee.IsAeTankDebug() return _aeDebug end
+
+local function aeDbg(fmt, ...)
+    if not _aeDebug then return end
+    if mq.gettime() < _aeDebugNextTime then return end
+    _aeDebugNextTime = mq.gettime() + 2000
+    printf('\ay[aetank]\ax ' .. fmt, ...)
+end
+
+local function mezzerInGroup()
+    local n = tonumber(mq.TLO.Group.Members()) or 0
+    for i = 0, n do
+        local m = mq.TLO.Group.Member(i)
+        local cls = m and m.Class and m.Class.ShortName()
+        if cls == 'ENC' or cls == 'BRD' then return true end
+    end
+    return false
+end
+
+local AE_HATE_ABILITIES = { 'Taunt', 'Bash', 'Kick' }
+
+-- Returns the id of a loose auto-hater mob for melee to engage until it's on us, or nil when inactive.
+local function aeTankGrab(rc)
+    if myconfig.settings.tankAllMobs ~= true then return nil end
+    if rc.attackCommandEngage then aeDbg('idle: /cz attack engage is active'); return nil end
+    if not tankrole.AmIMainTank() then
+        aeDbg('idle: not Main Tank (TankName=%s, me=%s)', tostring(tankrole.GetMainTankName()), tostring(mq.TLO.Me.Name()))
+        return nil
+    end
+    if mezzerInGroup() and myconfig.settings.aeTankIgnoreMezzer ~= true then
+        aeDbg('idle: Enchanter/Bard in group -> AE-tank auto-suppressed (enable "Ignore mezzer" to override)')
+        return nil
+    end
+    local meId = mq.TLO.Me.ID()
+    local engageables = spawnutils.getXTargetAutoHaterEngageables(rc)
+    local target = nil
+    for _, spawn in ipairs(engageables) do
+        local sid = spawn.ID()
+        if sid and ((spawn.Target and spawn.Target.ID()) or 0) ~= meId then target = spawn; break end
+    end
+    if not target then
+        aeDbg('idle: %d engageable XTarget mob(s), all already on me', #engageables)
+        return nil
+    end
+    local sid = target.ID()
+    if mq.gettime() >= _aeTauntNextTime then
+        local cmds, names = {}, {}
+        for _, ab in ipairs(AE_HATE_ABILITIES) do
+            if mq.TLO.Me.AbilityReady(ab)() then
+                cmds[#cmds + 1] = '/squelch /doability ' .. ab
+                names[#names + 1] = ab
+            end
+        end
+        if #cmds > 0 then
+            mq.cmdf('/multiline ; /squelch /target id %s ; %s', sid, table.concat(cmds, ' ; '))
+            aeDbg('grabbing %s (%s): %s + auto-attack', tostring((target.CleanName and target.CleanName()) or sid), tostring(sid), table.concat(names, '+'))
+        else
+            aeDbg('grabbing %s (%s): auto-attack (Taunt/Bash/Kick on cooldown)', tostring((target.CleanName and target.CleanName()) or sid), tostring(sid))
+        end
+        _aeTauntNextTime = mq.gettime() + 1000
+    end
+    return sid
+end
+
 -- Resolve engageTargetId from role (MA picker / MT follower / OT / DPS), then engage or disengage.
 function botmelee.AdvCombat()
     local assistName = tankrole.GetAssistTargetName()
     local mainTankName = tankrole.GetMainTankName()
     local assistpct = myconfig.melee.assistpct or 99
     local rc = state.getRunconfig()
+    local aeLooseId = aeTankGrab(rc)
 
     if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Type() == 'PC' then
         clearTankCombatState()
@@ -562,6 +704,8 @@ function botmelee.AdvCombat()
     local id = nil
     if rc.attackCommandEngage and rc.engageTargetId then
         id = rc.engageTargetId
+    elseif myconfig.settings.engageXTargetOnly == true and not rc.attackCommandEngage then
+        id = selectXTargetEngageTarget(rc)
     elseif tankrole.AmIMainAssist() then
         id = resolveMaBotTarget(rc)
     elseif myconfig.melee.offtank and assistName and mainTankName then
@@ -571,6 +715,7 @@ function botmelee.AdvCombat()
     elseif assistName then
         id = resolveMeleeAssistTarget(assistName, assistpct)
     end
+    if aeLooseId then id = aeLooseId end
     if id and charm.isCharmSkipped(id, rc) then id = nil end
     if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
     rc.engageTargetId = id

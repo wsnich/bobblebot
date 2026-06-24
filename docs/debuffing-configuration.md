@@ -6,7 +6,7 @@ This document explains how to configure the bot’s **debuffing** behavior: whic
 
 - **Master switch:** Debuffing runs only when **`settings.dodebuff`** is `true`. Default is `false`.
 - **Mob list:** The bot builds a list of valid mobs (within **acleash** and **zradius** of camp, filtered by **TargetFilter**). Debuffs are only cast on mobs in this list. **Soulbinders** and **translocators** are never debuffed. Debuffs are skipped in **no-combat zones** and near the **primary bind point** (bind stealth). See [Safety and stealth](safety-and-stealth.md).
-- **Evaluation order:** The bot evaluates **phases** in order: charm (if the zone has a **Charm list** and a charm spell is configured) → **notmatar** (other mobs / adds) → **matar** (MA/tank’s current target) → **named** (named mobs that are the tank target). For each phase it considers each mob target and checks **all** debuff spells that have that phase in their bands before moving on. For a detailed explanation of spell targeting logic and how band tags interact, see [Spell targeting and bands](spell-targeting-and-bands.md).
+- **Evaluation order:** The bot evaluates **phases** in order: **charm** (if the zone has a **Charm list** and a charm spell is configured) → **burn** (only while a burn window is active — see [Burn window](#burn-window)) → **notmatar** (other mobs / adds) → **matar** (MA/tank’s current target) → **named** (named mobs that are the tank target). For each phase it considers each mob target and checks **all** debuff spells that have that phase in their bands before moving on. For a detailed explanation of spell targeting logic and how band tags interact, see [Spell targeting and bands](spell-targeting-and-bands.md).
 - **Melee combat abilities** (disciplines, kick/bash-style abilities) use this same debuff system with **gem** `'disc'` or `'ability'`; see [Melee combat abilities](melee-combat-abilities.md).
 
 ---
@@ -54,7 +54,9 @@ Charmed, Crippled, Feared, Maloed, Mezzed, Rooted, Slowed, Snared, Tashed
 
 Bands define **which mobs** and **at what HP %** the debuff is allowed. Debuff uses **targetphase** only (no validtargets; target is always mobs). Each band has:
 
-- **targetphase:** One or more of: **matar**, **notmatar**, **named**.
+- **targetphase:** One or more of: **charm**, **burn**, **matar**, **notmatar**, **named**.
+  - **charm** — Mobs on the zone **Charm list** (when a charm spell is configured).
+  - **burn** — Only evaluated while a burn window is active (**`/cz burn [seconds]`** or Status **Burn**). Combine with **matar**, **notmatar**, or **named** to pick which mobs; burn-only (no other phase) defaults to the MA target.
   - **matar** — The Main Assist’s current target. If a debuff band has `onlyMT=true`, then `matar` casts on the Main Tank’s target instead (only when this bot is the Main Tank).
   - **notmatar** — Any other mob in the list (adds).
   - **named** — Named mobs. With `matar`, the chosen `matar` target is required to be named (MA by default, MT when `onlyMT=true`).
@@ -114,6 +116,7 @@ For debuff spells, `lib/casting.lua` retries once (`maxTries = 2`) on retryable 
 ## Runtime control
 
 - **Toggle debuffing:** `/cz dodebuff on` or `/cz dodebuff off` (or `/cz dodebuff` to toggle).
+- **Burn window:** `/cz burn [seconds]` opens a timed window; `/cz burn off` closes it. Debuffs with a **burn** band phase cast only during the window. Use for burn disciplines, epic clicks, or high-cost nukes you do not want in steady state.
 - **Cast by alias:** `/cz cast <alias> [target]` — cast a debuff by alias. Use `/cz cast <alias> on` or `off` to enable or disable that spell (**enabled**).
 - **Add a spell slot:** `/cz addspell debuff <position>` — insert a new debuff entry at the given position.
 
@@ -127,6 +130,24 @@ For debuff spells, `lib/casting.lua` retries once (`maxTries = 2`) on retryable 
 - **Level:** For some spell types (e.g. Enthrall/mez), the spell’s **MaxLevel** is checked against the mob’s level; over-level mobs are skipped.
 - **dontStack:** If a debuff entry has **dontStack** set, the bot will not cast it when the current target already has that category (e.g. already Snared), and will interrupt the cast if that category appears on the target while casting (e.g. another toon's snare lands). The bot records the other spell's duration so it does not re-attempt the same debuff on that mob every tick. **Bard matar** gems in the combat twist honor **dontStack** (and **stopWhen**) the same way.
 - **stopWhen:** Skip when the target already has the listed category (e.g. **Slowed** after a resist-setup debuff like Occlusion of Sound has done its job). Applies to casts and bard **matar** combat twist.
+
+### Burn window
+
+A burn window is a **runtime timer** (not saved in config). While active, the debuff loop runs the **burn** phase before **notmatar**. Spells with **burn** in their band **targetphase** are excluded from normal **matar** / **notmatar** / **named** passes so they do not fire outside the window.
+
+**Example: epic/click only during burn on MA target**
+
+```lua
+{
+  gem = 'item',
+  spell = 'My Epic Click',
+  bands = {
+    { targetphase = { 'burn', 'matar' }, min = 5, max = 100 }
+  }
+}
+```
+
+Open the window with **`/cz burn 30`** (30 seconds) or the Status tab **Burn** button. **`/cz burn off`** ends it early.
 
 ---
 

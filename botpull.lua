@@ -138,7 +138,9 @@ function botpull.syncPullMapFilter(force)
     end
 end
 
---- Builds a set (id -> true) of current Auto Hater NPC XTarget spawn IDs.
+--- Builds a set (id -> true) of NPCs in an XTarget "Auto Hater" slot (things with aggro on us).
+--- Filtering to Auto-Hater NPCs avoids counting benign slots (pet/group/current-target) as hostiles,
+--- which would otherwise trigger false add-aborts and false pull-aggro confirmations.
 local function getCurrentXTargetIdSet()
     local set = {}
     local n = mq.TLO.Me.XTarget() or 0
@@ -1022,8 +1024,11 @@ local function tickNavigating(rc, spawn)
         end
     end
 
-    -- Add-abort: HP dropped (we took damage)
-    if rc.pullNavStartHP and mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() < rc.pullNavStartHP then
+    -- Add-abort: HP dropped (we took damage) — unless our own pull target is already on XTarget, in
+    -- which case the damage is from the tagged pull target. Let the XTarget transition block above
+    -- turn that into a return-to-camp instead of misclassifying our successful tag as an add.
+    if rc.pullNavStartHP and mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() < rc.pullNavStartHP
+        and not isSpawnOnXTarget(rc.pullAPTargetID) then
         abortNavDuringPull(myconfig.pull.hunter and 'Add aggro / took damage, aborting hunt.' or 'Add aggro / took damage, returning to camp.')
         return
     end

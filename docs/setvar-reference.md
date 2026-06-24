@@ -36,6 +36,18 @@ After a successful setvar, config loaders run so the new value takes effect imme
 | **settings.campRestDistance** | number | 15 | Distance (units) to consider "at camp" for leash and return. |
 | **settings.maCampAnchor** | boolean | `true` | When on, non-MA bots center MobList on the resolved MA within **maAnchorLeash**. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md#maanchorleash). |
 | **settings.maAnchorLeash** | number | (falls back to **acleash**, then 75) | Max MA distance for mob bubble anchor, combat inject, and **ma_list** / **mt_list** fallback. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md#maanchorleash). |
+| **settings.engageXTargetOnly** | boolean | `false` | Reactive engage: only fight XTarget Auto-Hater mobs. See [Tanking configuration](tanking-configuration.md#reactive-engage). |
+| **settings.tankAllMobs** | boolean | `false` | AE-tank: MT taunt-cycles loose XTarget adds. See [Tanking configuration](tanking-configuration.md#ae-tank). |
+| **settings.aeTankIgnoreMezzer** | boolean | `false` | Allow AE-tank with Enchanter/Bard in group. |
+| **settings.premem** | boolean | `true` | Pre-memorize uniquely assigned gems during downtime. See [Spell maintenance](spell-maintenance.md). |
+| **settings.autoScribe** | boolean | `true` | Scribe new scrolls after level-up when safe. |
+| **settings.upgradeCheck** | boolean | `true` | Background spell-upgrade detection. See [Spell maintenance](spell-maintenance.md). |
+| **settings.charmPetAutoSetup** | boolean | `true` | Auto-configure charm pets after charm lands. |
+| **settings.campAcleash** | boolean | (varies) | Chase beyond camp **acleash** when on. |
+| **settings.doRezAccept** | boolean | `true` | Auto-accept resurrection offers. |
+| **settings.rezAcceptMinPct** | number | 0 | Min corpse HP % to auto-accept rez (0 = any). |
+| **settings.mezMinLevel** | number | 0 | Global mez min level override (0 = use spell data). |
+| **settings.mezMaxLevel** | number | 0 | Global mez max level override (0 = use spell data). |
 | **settings.spelldb** | string | `'spells.db'` | Spell database file. |
 
 ---

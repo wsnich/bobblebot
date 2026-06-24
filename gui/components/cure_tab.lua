@@ -109,6 +109,8 @@ function M.draw()
     if not cure then return end
     if not cure.spells then cure.spells = {} end
     local spells = cure.spells
+    spell_entry.drawTabIntro({ flagKey = 'docure', flagNoun = 'Curing', isEmpty = #spells == 0,
+        emptyHint = 'No cures configured. Click "Add cure" below to create one (poison/disease/curse/corruption).' })
     for i, entry in ipairs(spells) do
         spell_entry.draw(entry, {
             id = 'cure_' .. i,

@@ -56,6 +56,7 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | [Nuking configuration](nuking-configuration.md)   | How to set up nuking: configure nukes as debuffs (matar, notmatar).                 |
 | [Mezzing configuration](mezzing-configuration.md) | How to set up mezzing: configure mez as debuffs (notmatar, Charm list), level limits. |
 | [Melee combat abilities](melee-combat-abilities.md) | How to set up melee combat abilities: configure disciplines and /doability as debuffs (gem disc/ability); domelee + dodebuff. |
+| [Spell maintenance](spell-maintenance.md) | Pre-memorize gembar, auto-scribe on ding, spell-upgrade detection and apply. |
 
 
 ## Pets

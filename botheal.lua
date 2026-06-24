@@ -58,15 +58,10 @@ local function HPEvalContext(index)
     local tank, tankid = spellutils.GetTankInfo(false)
     local botcount = charinfo.GetPeerCnt()
     local bots = spellutils.GetBotListOrdered()
-    local tanknbid = false
-    if tank then
-        for _, peer in ipairs(charinfo.GetPeers()) do
-            if peer == tank then
-                tanknbid = true
-                break
-            end
-        end
-    end
+    local botstr = table.concat(charinfo.GetPeers(), " ")
+    -- Whole-token match: botstr is space-joined peer names, so wrap both sides in spaces and search
+    -- plain (4th arg true). Prevents tank "Bob" from matching peer "Bobby" and mis-routing the heal.
+    local tanknbid = tank and string.find(' ' .. botstr .. ' ', ' ' .. tank .. ' ', 1, true)
     local spell, spellrange = spellutils.GetSpellInfo(entry)
     if not spell then return nil end
     local spellEntity = spellutils.GetSpellEntity(entry)

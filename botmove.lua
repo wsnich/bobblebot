@@ -38,7 +38,7 @@ local function followSpawnMatchesName(spawnId, followname)
     local sp = mq.TLO.Spawn('id ' .. spawnId)
     if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
     local stype = sp.Type() or ''
-    if stype == 'Corpse' or stype == 'CORPSE' then return false end
+    if stype == 'Corpse' then return false end
     local clean = sp.CleanName()
     if not clean or clean == '' then return false end
     return string.lower(clean) == string.lower(followname)
@@ -107,7 +107,7 @@ local function isValidFollowTarget(followid)
     local sid = mq.TLO.Spawn('id ' .. followid).ID() or 0
     if sid == 0 then return false end
     local stype = mq.TLO.Spawn('id ' .. followid).Type() or ''
-    return stype ~= 'Corpse' and stype ~= 'CORPSE'
+    return stype ~= 'Corpse'
 end
 
 local function clearUnstuckIfFollowInactive(rc)

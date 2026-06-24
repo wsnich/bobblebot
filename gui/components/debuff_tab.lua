@@ -55,6 +55,7 @@ local TARGETPHASE_OPTIONS_DEBUFF = {
     { key = 'matar',   label = "Assist's Target",     tooltip = "Use on the Main Assist's current target. If `onlyMT=true`, cast on the Main Tank's target instead (only when this bot is the MT)." },
     { key = 'notmatar', label = "Not Assist's Target", tooltip = 'Use on camp mobs that are NOT the Main Assist target (adds). `mez` debuffs exclude both MA target and MT target.' },
     { key = 'named',     label = 'Named',               tooltip = 'Use on named mobs only (applies to the selected target for this phase).' },
+    { key = 'burn',      label = 'Burn window',         tooltip = 'Only cast while a burn window is active (/cz burn or Status Burn button). Combine with Assist\'s Target, Not Assist\'s Target, or Named to pick which mobs. Burn-only defaults to Assist\'s Target.' },
 }
 
 local function entryHasMatarOrNamed(entry)
@@ -73,7 +74,7 @@ end
 --- Custom section for debuff entries: recast, delay, dontStack (passed to spell_entry as customSection).
 local function debuffCustomSection(entry, idPrefix, onChanged)
     -- First line: Recast and Delay (SameLine)
-    ImGui.Text('Recast')
+    ImGui.Text('Resist limit')
     if ImGui.IsItemHovered() then ImGui.SetTooltip(
         'After this many resists on the same spawn, disable this spell for that spawn. 0 = no limit.') end
     ImGui.SameLine()
@@ -92,6 +93,47 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
     local newDelay, delayCh = inputs.boundedInt(idPrefix .. '_delay', delay, 0, 60000, 100, '##' .. idPrefix .. '_delay')
     if delayCh then
         entry.delay = newDelay; if onChanged then onChanged() end
+    end
+
+    -- Slow/Snare/Root/Fear only: keep recasting on an already-affected mob instead of auto-skipping it.
+    local ccCat, ccLabel = spellutils.GetCCDebuffCategory(entry)
+    if ccCat then
+        ImGui.Text('Recast when active')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(string.format(
+                'Default OFF: an already-%s mob is skipped so the bot moves on to other adds.\nEnable for THREAT: keep recasting %s even while it is already on the mob -- overrides a matching Don\'t-stack/Stop-when and the still-active gating. Still respects HP/range/level bands and Delay, so for a Shadow Knight threat-snare set HP Max to 100.',
+                ccCat:lower(), (ccLabel or 'it'):lower()))
+        end
+        ImGui.SameLine()
+        local raChecked = entry.recastActive == true
+        local raVal, raPressed = ImGui.Checkbox('##' .. idPrefix .. '_recastActive', raChecked)
+        if raPressed then
+            entry.recastActive = raVal
+            if onChanged then onChanged() end
+        end
+    end
+
+    -- Mez only: optional target level filter (0 = unbounded). For AE mez, set a Min targets band below.
+    if spellutils.IsMezSpell(entry) then
+        ImGui.Text('Mez level')
+        if ImGui.IsItemHovered() then ImGui.SetTooltip(
+            'Per-spell override of the Default mez level. 0 on a side = use the Default mez level (top of tab) for that bound. e.g. 45 to 0 mezzes level 45+ for this spell.') end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local minL = tonumber(entry.mezMinLevel) or 0
+        local minNew, minCh = inputs.boundedInt(idPrefix .. '_mezminlvl', minL, 0, 130, 1, '##' .. idPrefix .. '_mezminlvl')
+        if minCh then
+            entry.mezMinLevel = minNew; if onChanged then onChanged() end
+        end
+        ImGui.SameLine()
+        ImGui.Text('to')
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local maxL = tonumber(entry.mezMaxLevel) or 0
+        local maxNew, maxCh = inputs.boundedInt(idPrefix .. '_mezmaxlvl', maxL, 0, 130, 1, '##' .. idPrefix .. '_mezmaxlvl')
+        if maxCh then
+            entry.mezMaxLevel = maxNew; if onChanged then onChanged() end
+        end
     end
 
     -- Don't stack: labeled grid (4 options per row)
@@ -120,7 +162,7 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
         end,
     })
 
-    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+    if mq.TLO.Me.Class.ShortName() == 'BRD' or (entry.stopWhen and #entry.stopWhen > 0) then
         labeled_grid.checkboxGrid({
             id = idPrefix .. '_stopwhen',
             label = 'Stop when:',
@@ -168,6 +210,36 @@ function M.draw()
     if not debuff then return end
     if not debuff.spells then debuff.spells = {} end
     local spells = debuff.spells
+    spell_entry.drawTabIntro({ flagKey = 'dodebuff', flagNoun = 'Debuff / Mez / Nuke', isEmpty = #spells == 0,
+        emptyHint = 'No entries configured. Click "Add debuff" below — this tab also holds mez, nukes, DoTs, and combat abilities.' })
+    -- Character-wide mez level default (MuleAssist-style one-knob), applied to any mez spell left at
+    -- 0/0 below. Shown only when a mez spell is configured so it doesn't clutter non-mez characters.
+    local hasMez = false
+    for _, e in ipairs(spells) do
+        if spellutils.IsMezSpell(e) then hasMez = true; break end
+    end
+    if hasMez then
+        ImGui.Text('Default mez level')
+        if ImGui.IsItemHovered() then ImGui.SetTooltip(
+            'Applies to mez spells left at 0 below. Only mez mobs within this level range (0 = no limit on that side).') end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local gmin = tonumber(botconfig.config.settings.mezMinLevel) or 0
+        local gminNew, gminCh = inputs.boundedInt('debuff_global_mezmin', gmin, 0, 130, 1, '##debuff_global_mezmin')
+        if gminCh then
+            botconfig.config.settings.mezMinLevel = gminNew; runConfigLoaders()
+        end
+        ImGui.SameLine()
+        ImGui.Text('to')
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local gmax = tonumber(botconfig.config.settings.mezMaxLevel) or 0
+        local gmaxNew, gmaxCh = inputs.boundedInt('debuff_global_mezmax', gmax, 0, 130, 1, '##debuff_global_mezmax')
+        if gmaxCh then
+            botconfig.config.settings.mezMaxLevel = gmaxNew; runConfigLoaders()
+        end
+        ImGui.Separator()
+    end
     for i, entry in ipairs(spells) do
         -- Normalize legacy tokens so the UI reflects canonical matar/notmatar.
         if entry.bands and type(entry.bands) == 'table' then
@@ -189,8 +261,12 @@ function M.draw()
         if spellutils.IsNukeSpell(entry) then
             local flavor = spellutils.GetNukeFlavor(entry)
             detectedTypeLabel = flavor and (flavor:gsub('^%l', string.upper) .. ' nuke') or 'Nuke'
+        elseif spellutils.IsMezSpell(entry) then
+            detectedTypeLabel = 'Mez'
         else
-            detectedTypeLabel = spellutils.IsMezSpell(entry) and 'Mez' or nil
+            -- Slow / Snare / Root / Fear: recognized type; the engine auto-skips already-affected mobs.
+            local _, ccLabel = spellutils.GetCCDebuffCategory(entry)
+            detectedTypeLabel = ccLabel
         end
         local detectedTypeLabel2 = spellutils.IsTargetedAESpell(entry) and 'Targeted AE' or nil
         spell_entry.draw(entry, {

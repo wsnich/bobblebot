@@ -106,6 +106,29 @@ function charm.EvalTarget(index, ctx)
     return nil, nil
 end
 
+--- One-time setup when a NEW charm pet is acquired: taunt OFF (so the charm pet doesn't pull aggro off
+--- the tank) and kick it onto the current engage target (else the MA's target). Runs once per pet id;
+--- pet buffs/heals are handled by the normal buff/heal loops. No-op unless settings.charmPetAutoSetup.
+function charm.AutoSetupNewCharmPet(rc)
+    rc = rc or state.getRunconfig()
+    local botconfig = require('lib.config')
+    if botconfig.config.settings.charmPetAutoSetup == false then return end
+    local petId = mq.TLO.Me.Pet.ID()
+    if not petId or petId == 0 then return end
+    if rc.charmAutoSetupDoneId == petId then return end
+    rc.charmAutoSetupDoneId = petId
+    mq.cmd('/squelch /pet taunt off')
+    local targetId = rc.engageTargetId
+    if not targetId or targetId == 0 then
+        local _, _, maTargetId = spellutils.GetAssistInfo(true)
+        if maTargetId and maTargetId > 0 then targetId = maTargetId end
+    end
+    if targetId and targetId > 0 then
+        mq.cmdf('/squelch /pet attack %s', targetId)
+    end
+    printf('\ayCZBot:\axCharm pet acquired: taunt off, assisting.')
+end
+
 function charm.BeforeCast(EvalID, targethit)
     if targethit == 'charmtar' and mq.TLO.Me.Pet.IsSummoned() then
         mq.cmd('/pet leave')

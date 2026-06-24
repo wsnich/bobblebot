@@ -18,6 +18,8 @@ This document explains how to configure the bot when it is the **Main Tank (MT)*
 | **TankName** | `"manual"` | Main Tank name or `"automatic"` / `"manual"`. See [Tank and Assist Roles](tank-and-assist-roles.md) and [Automatic MA/MT Selection](automatic-ma-mt-selection.md). |
 | **acleash** | 75 | Max horizontal distance (X,Y) from camp for valid targets and mob list. Also used for corpse rez range and **bind-point stealth** radius (distance from primary bind coordinates). See [Safety and stealth](safety-and-stealth.md). |
 | **zradius** | 75 | Max vertical (Z) difference from camp; mobs outside this are ignored for the mob list. |
+| **tankAllMobs** | `false` | AE-tank: MT cycles taunt on loose XTarget adds. Opt-in. See [AE-tank](#ae-tank). |
+| **engageXTargetOnly** | `false` | Reactive engage: only fight XTarget Auto-Hater mobs. Opt-in. See [Reactive engage](#reactive-engage). |
 
 ### Melee section
 
@@ -54,7 +56,27 @@ Under **`config.melee`**:
 
 ## Using disciplines and combat abilities
 
-To use **disciplines** or **combat abilities** (e.g. kick, bash, backstab), enable **`settings.dodebuff`** and add debuff entries under **`config.debuff.spells`** with **gem** `'disc'` (disciplines) or `'ability'` (combat abilities) and the desired **bands** (e.g. **matar** for the MA's target). See [Melee combat abilities](melee-combat-abilities.md) for details and examples.
+To use **disciplines** or **combat abilities** (e.g. kick, bash, backstab), enable **`settings.dodebuff`** and add debuff entries under **`config.debuff.spells`** with **gem** `'disc'` (disciplines) or `'ability'` (combat abilities) and the desired **bands** (e.g. **matar** for the MA's target). Use a **burn** band phase for disciplines you only want during burn windows. See [Melee combat abilities](melee-combat-abilities.md) and [Debuffing configuration](debuffing-configuration.md#burn-window).
+
+---
+
+## Reactive engage
+
+When **`settings.engageXTargetOnly`** is `true` (Combat tab or **`/cz engagextargetonly on`**), this bot only **engages**, **melees**, and **debuffs** mobs that appear on its **XTarget** list with the **Auto-Hater** flag. Use this when a separate character pulls and adds land on your XTarget before camp logic picks them up.
+
+- Default is **`false`** (normal camp mob list behavior).
+- **`/cz attack`** bypasses the gate for that engagement until the target dies or you abort.
+- Role presets can set this per role; see [Role presets](tank-and-assist-roles.md#role-presets).
+
+---
+
+## AE-tank
+
+When **`settings.tankAllMobs`** is `true` and this bot is the **Main Tank**, it **taunt-cycles** loose **XTarget** adds near camp instead of only holding the MA target. Default is **`false`**.
+
+- Suppressed when an **Enchanter** or **Bard** is in group (assumed mezzer) unless **`settings.aeTankIgnoreMezzer`** is `true` (**`/cz aetankmezzer on`**).
+- Toggle: **`/cz aetank on|off`** or Combat tab **AE-tank**.
+- Debug: **`/cz aetankdebug on`**.
 
 ---
 

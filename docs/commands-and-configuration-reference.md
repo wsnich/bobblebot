@@ -81,6 +81,18 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **offtank**      | `on` / `off` or toggle  | Enable/disable offtank behavior.                                                                                  |
 | **stickcmd**     | `<string>`              | Set stick command (e.g. `hold uw 7`).                                                                             |
 | **targetfilter** | `0` / `1` / `2`         | Filter for mob list: 0 = NPC + aggressive + LOS (pull only aggressive), 1 = NPC + LOS, 2 = exclude PCs/mercs/etc. |
+| **role**         | `tank` / `ma` / `dps` / `healer` | Apply a role preset (behavior flags, optional self tank/assist). Does not clear manually set TankName/AssistName unless the preset sets that role. See [Tank and Assist Roles](tank-and-assist-roles.md#role-presets). |
+| **engagextargetonly** / **xtargetonly** | `on` / `off` or toggle | **Reactive engage** (opt-in, default off): only engage, melee, and debuff mobs on your XTarget Auto-Hater list. Bypass with **`/cz attack`**. Combat tab checkbox or **`settings.engageXTargetOnly`**. |
+| **aetank**       | `on` / `off` or toggle  | **AE-tank** (opt-in, default off): as MT, taunt-cycle loose XTarget adds near camp. Suppressed when an Enchanter or mezzing Bard is in group unless **`/cz aetankmezzer on`**. |
+| **aetankmezzer** | `on` / `off` or toggle  | Allow AE-tank even with Enchanter/Bard in group.                                                                  |
+| **burn**         | `[seconds]` / `off`     | Open or close a burn window. Debuffs with a **burn** band phase cast only while the window is active. Status tab **Burn** button does the same. Default window length if seconds omitted. |
+| **premem**       | `on` / `off` or toggle  | Pre-memorize uniquely assigned gems during downtime. See [Spell maintenance](spell-maintenance.md).               |
+| **autoscribe**   | `on` / `off` or toggle  | After a level-up, scribe new scrolls from bags when out of combat (one scroll per misc tick).                     |
+| **scribe**       | —                       | Scribe all usable scrolls in bags now (blocking; downtime only).                                                  |
+| **upgrades**     | —                       | List configured spells with a higher rank in your spellbook.                                                      |
+| **applyupgrade** | `<n>` or `all`          | Apply one pending upgrade by list number, or **`all`**. See [Spell maintenance](spell-maintenance.md).            |
+| **rezaccept**    | `on` / `off` or toggle  | Auto-accept incoming resurrection offers.                                                                         |
+| **charmpetsetup** | `on` / `off` or toggle | Auto-setup charm pets (taunt off, assist on) after charm lands.                                                   |
 
 ### Spells and config
 
@@ -112,6 +124,18 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **saytarget**     | `[group\|raid] <message>`                     | Leader: target an NPC, broadcast to group/raid bots, and say locally. Default scope: raid if in raid, else group. Example: `/cz saytarget travel to butcherblock`. |
 | **syt**           | `<spawnId> <message>`                         | Worker: target spawn by ID, wait for target to switch, then wait a random 1–5 s (100 ms steps) before `/say` (staggers group translocator requests). Used internally via `/rc`; legacy `/rc group /cz saytarget <spawnId> <message>` still works on remote bots. |
 
+### Debug logging
+
+These toggle verbose printf tracing for specific subsystems (session-only; not saved to config).
+
+| Command | Purpose |
+| ------- | ------- |
+| **mezdebug** | Mez target pick/skip reasons. |
+| **buffdebug** | Buff cast/skip reasons. |
+| **prememdebug** | Pre-mem gem load/skip reasons. |
+| **upgradedebug** | Spell-upgrade SpellGroup scan details. |
+| **aetankdebug** | AE-tank idle reasons (not MT, mezzer suppress, cooldown, no loose adds). |
+
 ### Master pause
 
 - **`/czp`** or **`/czpause [on|off]`** — Pause or resume the entire bot. No arguments toggles pause.
@@ -122,7 +146,7 @@ These affect runtime only (not saved to the config file). They reset when the bo
 
 The config file is a Lua script that returns a table. Path: **`cz_<CharName>.lua`** in your MacroQuest config directory (e.g. `config/cz_Yourname.lua`).
 
-**Top-level keys:** `settings`, `pull`, `melee`, `heal`, `buff`, `debuff`, `cure`, `bard`, `script`. Each section is a table; `heal`, `buff`, `debuff`, and `cure` contain a **spells** array of spell entries. **bard** holds class-specific options (e.g. `mez_remez_sec`). See [Bard configuration](bard-configuration.md).
+**Top-level keys:** `settings`, `pull`, `melee`, `heal`, `buff`, `debuff`, `cure`, `bard`, `script`, `roles`. Each section is a table; `heal`, `buff`, `debuff`, and `cure` contain a **spells** array of spell entries. **bard** holds class-specific options (e.g. `mez_remez_sec`). **roles** holds editable role presets for **`/cz role`** (tank, ma, dps, healer). See [Tank and Assist Roles](tank-and-assist-roles.md#role-presets). See [Bard configuration](bard-configuration.md).
 
 **Example: overall shape and settings**
 
@@ -189,6 +213,16 @@ return StoredConfig
 | **followdistance** | 35            | Follow distance: beyond this the bot runs follow and defers combat, buffs, heals, debuffs, cures, mount, and forage until within range; within it, sit is allowed when mana below sitmana; stand when above sitmana + 3 (hysteresis). |
 | **zradius**        | 75            | Vertical range from camp for mob list.                                                                                  |
 | **campRestDistance** | 15          | Distance (units) to consider "at camp" for leash and return.                                                            |
+| **engageXTargetOnly** | `false`    | Reactive engage: when `true`, only engage/debuff mobs on your XTarget Auto-Hater list. Opt-in; use with a separate puller. **`/cz attack`** bypasses until target dies. |
+| **tankAllMobs**  | `false`       | AE-tank: MT taunt-cycles loose XTarget adds. Opt-in. See [Tanking configuration](tanking-configuration.md#ae-tank). |
+| **aeTankIgnoreMezzer** | `false` | When `true`, AE-tank runs even if an Enchanter or Bard is in group. |
+| **premem**       | `true`        | Pre-memorize uniquely assigned spell gems during downtime. See [Spell maintenance](spell-maintenance.md). |
+| **autoScribe**   | `true`        | Scribe new scrolls after level-up when safe (incremental). |
+| **upgradeCheck** | `true`        | Background scan for higher spell ranks in book; announces on Status tab / **`/cz upgrades`**. |
+| **charmPetAutoSetup** | `true`   | After charm lands, configure pet (taunt off, assist). |
+| **campAcleash**  | (varies)      | When on, chase mobs beyond camp **acleash** radius. Toggle via Combat tab or **`/cz togglecampacleash`**. |
+| **maCampAnchor** | `true`        | Anchor mob bubble on resolved MA within **maAnchorLeash**. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md). |
+| **maAnchorLeash** | (falls back to **acleash**) | Max MA distance for anchor and ma/mt list fallback. |
 | **spelldb**        | `'spells.db'` | Spell database file.                                                                                                    |
 
 Travel mode has no config option; it is enabled by the **/cz travel** command. See [Travel mode](travel-mode.md). CHChain is also runtime-only; see [CHChain configuration](chchain-configuration.md).
@@ -215,7 +249,7 @@ Combat abilities (disciplines, /doability) are configured as **debuff** entries 
 
 - **heal:** Top-level: **rezoffset**, **interruptlevel**, **xttargets**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **minmanapct**, **maxmanapct**, **enabled**, **tarcnt** (optional; group heals only), **bands**, **healResource** (optional; `'hp'` or `'mana'`; when `'mana'`, bands use mana % not HP), **inCombat** (optional; when true and band has corpse, allow rez in combat), **precondition** (optional; default true; boolean or Lua script when set). See [Healing configuration](healing-configuration.md).
 - **buff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **tarcnt** (optional; groupbuff min count), **bands**, **spellicon**, **inCombat**, **inIdle** (Bard twist; when spell can run), **combatOnly** (optional; non-bard; auto buff loop only when mobs in camp), **precondition** (optional; default true; boolean or Lua script when set). See [Buffing configuration](buffing-configuration.md). Bards: see [Bard configuration](bard-configuration.md).
-- **debuff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **bands** (band options include **mintar**/**maxtar** for camp mob-count gate), **recast**, **delay**, **dontStack** (optional; list of categories—skip or interrupt if target has; bard matar twist honors this; see [Debuffing configuration](debuffing-configuration.md)), **stopWhen** (optional; skip / omit from bard matar twist when target has category—e.g. Slowed for Occlusion of Sound), **precondition** (optional; default true; boolean or Lua script when set). Charm and targeted AE spells are auto-detected from spell data. Charm targets use the per-zone **Charm list** (Mob Lists tab or **/cz charm**). For **concussion** (aggro-reduce, SPA 92) debuffs, **recast** means “cast every N other debuffs” on the tank target (e.g. recast 2 → two nukes/debuffs, then concussion, repeat); autodetected when the spell has SPA 92 and recast &gt; 0. See [Debuffing configuration](debuffing-configuration.md) and [Spell targeting and bands](spell-targeting-and-bands.md).
+- **debuff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **bands** (band **targetphase** tokens: **charm**, **burn**, **matar**, **notmatar**, **named**; **mintar**/**maxtar** for camp mob-count gate), **recast**, **delay**, **recastActive** (optional; bypass disc-duration gate when re-casting), **dontStack** (optional; list of categories—skip or interrupt if target has; bard matar twist honors this; see [Debuffing configuration](debuffing-configuration.md)), **stopWhen** (optional; skip / omit from bard matar twist when target has category—e.g. Slowed for Occlusion of Sound), **precondition** (optional; default true; boolean or Lua script when set). **burn** phase spells run only during an active burn window (**`/cz burn`** or Status **Burn**). Charm and targeted AE spells are auto-detected from spell data. Charm targets use the per-zone **Charm list** (Mob Lists tab or **/cz charm**). For **concussion** (aggro-reduce, SPA 92) debuffs, **recast** means “cast every N other debuffs” on the tank target (e.g. recast 2 → two nukes/debuffs, then concussion, repeat); autodetected when the spell has SPA 92 and recast &gt; 0. See [Debuffing configuration](debuffing-configuration.md) and [Spell targeting and bands](spell-targeting-and-bands.md).
 - **cure:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **curetype** (table of strings; default **{ 'all' }**), **enabled**, **bands** (add **priority** to band **targetphase** to run in the priority cure pass; no top-level setting), **precondition** (optional; default true; boolean or Lua script when set). See [Curing configuration](curing-configuration.md).
 
 **Example: one heal spell entry**

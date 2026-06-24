@@ -149,7 +149,10 @@ function botdebuff.MatarDebuffNeededForTwist(index)
     if not entry or entry.enabled == false then return false end
     if spellutils.IsMezSpell(entry) then return false end
     local db = DebuffBands[index]
-    if not db or not db.matar then return false end
+    if not db or not db.matar then
+        if not (db and db.burn and not db.notmatar and not db.named) then return false end
+    end
+    if db.burn then return false end
     if entry.onlyMT and not tankrole.AmIMainTank() then return false end
     local ctx = DebuffEvalBuildContext(index)
     if not ctx then return false end
@@ -167,7 +170,9 @@ end
 local function DebuffEvalMatar(index, ctx)
     local entry = ctx.entry
     local db = DebuffBands[index]
-    if not db or not db.matar then return nil, nil end
+    if not db or not db.matar then
+        if not (db.burn and not db.notmatar and not db.named) then return nil, nil end
+    end
     if spellutils.IsMezSpell(entry) then return nil, nil end
 
     -- `matar` phase provides both MA and MT candidate targets.
@@ -257,7 +262,7 @@ local function DebuffEval(index)
     return nil, nil
 end
 
-local DEBUFF_PHASE_ORDER = { 'charm', 'notmatar', 'matar', 'named' }
+local DEBUFF_PHASE_ORDER = { 'charm', 'burn', 'notmatar', 'matar', 'named' }
 
 local function debuffGetTargetsForPhase(phase, context)
     local out = {}
@@ -276,6 +281,56 @@ local function debuffGetTargetsForPhase(phase, context)
                 if dctx then
                     local id, hit = charm.EvalTarget(i, dctx)
                     if id then out[#out + 1] = { id = id, targethit = hit or 'charmtar' } end
+                end
+            end
+        end
+        return out
+    end
+    if phase == 'burn' then
+        if not state.IsBurnActive() then return out end
+        local spellCount = context.debuffCount or botconfig.getSpellCount('debuff')
+        local maTargetId = context.maTargetId
+        local mtTargetId = context.mtTargetId
+        local wantMatar, wantNotmatar, wantNamed = false, false, false
+        for si = 1, spellCount do
+            local db = DebuffBands[si]
+            if db and db.burn then
+                if db.matar or db.named or (not db.notmatar and not db.named) then wantMatar = true end
+                if db.notmatar then wantNotmatar = true end
+                if db.named then wantNamed = true end
+            end
+        end
+        if wantMatar or wantNamed then
+            if maTargetId and maTargetId > 0 then
+                if wantNamed then
+                    local sp = mq.TLO.Spawn(maTargetId)
+                    if sp and sp.Named() then out[#out + 1] = { id = maTargetId, targethit = 'named' } end
+                else
+                    out[#out + 1] = { id = maTargetId, targethit = 'matar' }
+                end
+                if mtTargetId and mtTargetId > 0 and mtTargetId ~= maTargetId then
+                    if wantNamed then
+                        local sp = mq.TLO.Spawn(mtTargetId)
+                        if sp and sp.Named() then out[#out + 1] = { id = mtTargetId, targethit = 'named' } end
+                    else
+                        out[#out + 1] = { id = mtTargetId, targethit = 'matar' }
+                    end
+                end
+            end
+        end
+        if wantNotmatar then
+            local seen = {}
+            for si = 1, spellCount do
+                local db = DebuffBands[si]
+                if db and db.burn and db.notmatar then
+                    local ctx = DebuffEvalBuildContext(si)
+                    if ctx then
+                        local id, hit = DebuffEvalNotmatar(si, ctx)
+                        if id and not seen[id] then
+                            seen[id] = true
+                            out[#out + 1] = { id = id, targethit = hit or 'notmatar' }
+                        end
+                    end
                 end
             end
         end
@@ -311,15 +366,14 @@ local function debuffGetTargetsForPhase(phase, context)
                 end
             end
         end
-        if #out > 0 then
+        if #out > 0 and spellutils.IsMezDebug() then
             local parts = {}
             for i, t in ipairs(out) do
                 local sp = mq.TLO.Spawn(t.id)
                 local name = (sp and sp.CleanName and sp.CleanName()) or tostring(t.id)
                 parts[i] = string.format('%s(%s)', name, t.id)
             end
-            printf('\ayCZBot:\ax [Mez t=%s] notmatar targets this tick: %s', tostring(mq.gettime()),
-                table.concat(parts, ', '))
+            spellutils.MezLog('notmatar targets this tick: %s', table.concat(parts, ', '))
         end
         return out
     end
@@ -378,6 +432,18 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
             if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
             return id, hit
         end
+        -- Burn-only on MA target (no matar flag on band).
+        local db = DebuffBands[spellIndex]
+        if db and db.burn and not db.matar and not db.notmatar and not db.named and state.IsBurnActive() then
+            local chosenTargetId = entry.onlyMT and ctx.mtTargetId or ctx.maTargetId
+            if chosenTargetId == targetId and castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax }) then
+                for _, v in ipairs(ctx.mobList) do
+                    if v.ID() == targetId and DebuffSpawnNeedsSpell(entry, ctx, v, 'matar') then
+                        return targetId, 'matar'
+                    end
+                end
+            end
+        end
         return nil, nil
     end
     if targethit == 'named' then
@@ -410,6 +476,13 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     local entry = botconfig.getSpellEntry('debuff', i)
     if not entry then return false end
     if EvalID and utils.isProtectedSpawn(mq.TLO.Spawn(EvalID)) then return false end
+    -- Reactive mode (settings.engageXTargetOnly, opt-in): only debuff/mez/nuke mobs on our XTarget
+    -- Auto-Hater list (aggro'd on the group). Stops the bot casting on -- and thereby aggroing -- unwanted
+    -- MobList NPCs (e.g. an enchanter slowing/mezzing a mob nobody is fighting). /cz attack bypasses it.
+    if myconfig.settings.engageXTargetOnly == true and not state.getRunconfig().attackCommandEngage
+        and EvalID and EvalID > 0 and not require('lib.spawnutils').isOnXTargetAutoHater(EvalID) then
+        return false
+    end
     if not spellutils.CheckGemReadiness('debuff', i, entry) then return false end
     if not spellutils.IsConcussionSpell(entry) and entry.recast ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
         return false
@@ -480,12 +553,15 @@ local function DebuffCheckHandleBardNotmatarWait(rc)
         return false
     end
     local now = mq.gettime()
+    local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
+    if stillSinging then w.singingStarted = true end
     if w.deadline and now < w.deadline then
-        local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
-        if stillSinging then
-            w.singingStarted = true
+        -- Keep waiting while the song is in progress, or before it has begun (mq2twist queues a tick
+        -- before casting actually starts). Otherwise we'd phantom-complete and record a mez that never
+        -- landed, leaving the add un-mezzed but treated as handled.
+        if stillSinging or not w.singingStarted then
+            return true
         end
-        return true
     end
     if not w.singingStarted then
         rc.bardNotmatarWait = nil
@@ -496,7 +572,11 @@ local function DebuffCheckHandleBardNotmatarWait(rc)
     end
     rc.bardNotmatarWait = nil
     state.clearRunState()
-    updateBardNotmatarDebuffState(w.entry, w.EvalID)
+    -- Only record the mez if we actually sang it. A deadline that expires without ever singing is a
+    -- failed cast: clean up and resume, but do not mark the debuff as landed.
+    if w.singingStarted then
+        updateBardNotmatarDebuffState(w.entry, w.EvalID)
+    end
     retargetMaTargetAfterBardMez()
     bardtwist.RestoreCombatTwistAfterNotmatar()
     return true
@@ -631,6 +711,15 @@ local function debuffGetSpellIndices(phase, count, ctx, target)
         return out
     end
     local base = spellutils.getSpellIndicesForPhase(count, phase, DebuffBands)
+    if base and #base > 0 and phase ~= 'burn' then
+        local filtered = {}
+        for _, i in ipairs(base) do
+            if not (DebuffBands[i] and DebuffBands[i].burn) then
+                filtered[#filtered + 1] = i
+            end
+        end
+        base = filtered
+    end
     if not base or #base == 0 then return base end
     local rc = state.getRunconfig()
     local nonNuke, nukeIndices = {}, {}
@@ -659,7 +748,7 @@ local function debuffGetSpellIndices(phase, count, ctx, target)
     end
     for _, i in ipairs(rotated) do nonNuke[#nonNuke + 1] = i end
     local fullBase = nonNuke
-    if (phase == 'matar' or phase == 'named') and target and target.id then
+    if (phase == 'matar' or phase == 'named' or phase == 'burn') and target and target.id then
         local concussionIndex, concussionRecast = nil, nil
         for _, i in ipairs(fullBase) do
             local entry = botconfig.getSpellEntry('debuff', i)

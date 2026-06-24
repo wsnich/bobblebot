@@ -24,7 +24,7 @@ function spellbands.applyBands(section, entry, index)
     if not bands or type(bands) ~= 'table' then
         if section == 'heal' then return {} end
         if section == 'buff' or section == 'cure' then return {} end
-        if section == 'debuff' then return { mobMin = 0, mobMax = 100, aggroMin = 0, aggroMax = 100, matar = false, notmatar = false, named = false } end
+        if section == 'debuff' then return { mobMin = 0, mobMax = 100, aggroMin = 0, aggroMax = 100, matar = false, notmatar = false, named = false, burn = false } end
         return {}
     end
 
@@ -136,7 +136,7 @@ function spellbands.applyBands(section, entry, index)
         local mobMin, mobMax = nil, nil
         local aggroMin, aggroMax = nil, nil
         local mintar, maxtar = nil, nil
-        local matar, notmatar, named = false, false, false
+        local matar, notmatar, named, burn = false, false, false, false
         for _, band in ipairs(bands) do
             local targetPhase = band.targetphase
             if type(targetPhase) == 'table' then
@@ -163,6 +163,7 @@ function spellbands.applyBands(section, entry, index)
                     if c == 'matar' then matar = true
                     elseif c == 'notmatar' then notmatar = true
                     elseif c == 'named' then named = true
+                    elseif c == 'burn' then burn = true
                     end
                 end
             end
@@ -171,8 +172,8 @@ function spellbands.applyBands(section, entry, index)
         if mobMax == nil then mobMax = 100 end
         if aggroMin == nil then aggroMin = 0 end
         if aggroMax == nil then aggroMax = 100 end
-        if not matar and not notmatar and not named and mintar == nil and maxtar == nil then mintar = 2 end
-        return { mobMin = mobMin, mobMax = mobMax, aggroMin = aggroMin, aggroMax = aggroMax, mintar = mintar, maxtar = maxtar, matar = matar, notmatar = notmatar, named = named }
+        if not matar and not notmatar and not named and not burn and mintar == nil and maxtar == nil then mintar = 2 end
+        return { mobMin = mobMin, mobMax = mobMax, aggroMin = aggroMin, aggroMax = aggroMax, mintar = mintar, maxtar = maxtar, matar = matar, notmatar = notmatar, named = named, burn = burn }
     end
 
     return {}
