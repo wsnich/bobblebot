@@ -649,22 +649,24 @@ local function mezzerInGroup()
 end
 
 -- Instant hate abilities the tank cycles onto loose mobs, best-first. Taunt = instant top-of-hate (no
--- facing needed, longer range); Bash/Kick add hate during Taunt's recast (need melee range + facing, so
--- they land when mobs are stacked on the tank). Every ability that's ready fires each pass.
+-- facing needed, longer range); Bash/Kick add hate during Taunt's recast (need melee range + facing).
 local AE_HATE_ABILITIES = { 'Taunt', 'Bash', 'Kick' }
 
+-- AE-tank: returns the id of a loose auto-hater mob (one not already on me) for melee to engage -- so the
+-- tank sticks + auto-attacks it until it's on us, then the next tick moves to the next loose add (and back
+-- to the normal target once everything is on us). Also fires ready hate abilities at it (throttled), to
+-- grab/secure aggro faster than auto-attack alone. Returns nil when AE-tank is inactive or nothing's loose.
 local function aeTankGrab(rc)
-    if myconfig.settings.tankAllMobs ~= true then return end -- feature off; stay silent
-    if rc.attackCommandEngage then aeDbg('idle: /cz attack engage is active'); return end
+    if myconfig.settings.tankAllMobs ~= true then return nil end -- feature off; stay silent
+    if rc.attackCommandEngage then aeDbg('idle: /cz attack engage is active'); return nil end
     if not tankrole.AmIMainTank() then
         aeDbg('idle: not Main Tank (TankName=%s, me=%s)', tostring(tankrole.GetMainTankName()), tostring(mq.TLO.Me.Name()))
-        return
+        return nil
     end
     if mezzerInGroup() and myconfig.settings.aeTankIgnoreMezzer ~= true then
         aeDbg('idle: Enchanter/Bard in group -> AE-tank auto-suppressed (enable "Ignore mezzer" to override)')
-        return
+        return nil
     end
-    if mq.gettime() < _aeTauntNextTime then return end -- brief cycle throttle
     -- Find a loose auto-hater mob near camp that isn't already on me.
     local meId = mq.TLO.Me.ID()
     local engageables = spawnutils.getXTargetAutoHaterEngageables(rc)
@@ -674,31 +676,28 @@ local function aeTankGrab(rc)
         if sid and ((spawn.Target and spawn.Target.ID()) or 0) ~= meId then target = spawn; break end
     end
     if not target then
-        aeDbg('nothing to grab: %d engageable XTarget mob(s), all already on me', #engageables)
-        return
+        aeDbg('idle: %d engageable XTarget mob(s), all already on me', #engageables)
+        return nil
     end
-    -- Fire every ready hate ability this pass; Taunt grabs, Bash/Kick fill the Taunt recast gaps.
-    local cmds, names = {}, {}
-    for _, ab in ipairs(AE_HATE_ABILITIES) do
-        if mq.TLO.Me.AbilityReady(ab)() then
-            cmds[#cmds + 1] = '/squelch /doability ' .. ab
-            names[#names + 1] = ab
+    local sid = target.ID()
+    -- Fire ready hate abilities at it (throttled). Targeting it here also lines up the engage below.
+    if mq.gettime() >= _aeTauntNextTime then
+        local cmds, names = {}, {}
+        for _, ab in ipairs(AE_HATE_ABILITIES) do
+            if mq.TLO.Me.AbilityReady(ab)() then
+                cmds[#cmds + 1] = '/squelch /doability ' .. ab
+                names[#names + 1] = ab
+            end
         end
-    end
-    if #cmds == 0 then
-        aeDbg('waiting: Taunt/Bash/Kick all on cooldown')
-        return
-    end
-    do
-        local sid = target.ID()
-        if sid then
+        if #cmds > 0 then
             mq.cmdf('/multiline ; /squelch /target id %s ; %s', sid, table.concat(cmds, ' ; '))
-            _aeTauntNextTime = mq.gettime() + 1000
-            aeDbg('grabbing %s (%s): %s', tostring((target.CleanName and target.CleanName()) or sid), tostring(sid), table.concat(names, '+'))
-            return
+            aeDbg('grabbing %s (%s): %s + auto-attack', tostring((target.CleanName and target.CleanName()) or sid), tostring(sid), table.concat(names, '+'))
+        else
+            aeDbg('grabbing %s (%s): auto-attack (Taunt/Bash/Kick on cooldown)', tostring((target.CleanName and target.CleanName()) or sid), tostring(sid))
         end
+        _aeTauntNextTime = mq.gettime() + 1000
     end
-    aeDbg('nothing to grab: %d engageable XTarget mob(s), all already on me', #engageables)
+    return sid -- steer melee onto this loose mob until it's on us
 end
 
 -- Resolve engageTargetId from role (MT/MA/OT/DPS), then engage or disengage. Only sets melee busy state via canStartBusyState.
@@ -707,7 +706,7 @@ function botmelee.AdvCombat()
     local mainTankName = tankrole.GetMainTankName()
     local assistpct = myconfig.melee.assistpct or 99
     local rc = state.getRunconfig()
-    aeTankGrab(rc)
+    local aeLooseId = aeTankGrab(rc)
 
     if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Type() == 'PC' then
         clearTankCombatState()
@@ -781,6 +780,9 @@ function botmelee.AdvCombat()
             id = resolveMeleeAssistTarget(assistName, assistpct)
         end
     end
+    -- AE-tank override: while a loose add isn't on us, steer melee onto it (stick + auto-attack until it
+    -- has aggro), then revert to the normal target once everything is on us. Already safety-filtered.
+    if aeLooseId then id = aeLooseId end
     if id and charm.isCharmSkipped(id, rc) then id = nil end
     if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
     rc.engageTargetId = id
