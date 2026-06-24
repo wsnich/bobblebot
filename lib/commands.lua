@@ -712,6 +712,51 @@ local function cmd_prememdebug(args)
     printf('\aybobblebot:\axPre-mem debug logging %s', premem.IsDebug() and 'on' or 'off')
 end
 
+local function cmd_scribe(args)
+    require('lib.scribe').Run()
+end
+
+local function cmd_upgrades(args)
+    local su = require('lib.spellupgrade')
+    su.scan()
+    local pending = su.getPending()
+    if #pending == 0 then
+        printf('\aybobblebot:\axNo spell upgrades available.')
+        return
+    end
+    printf('\aybobblebot:\ax%d spell upgrade(s) available:', #pending)
+    for i, u in ipairs(pending) do
+        printf('  [%d] %s: %s (L%d) -> %s (L%d)', i, u.section, u.old, u.oldLevel, u.new, u.newLevel)
+    end
+    printf('  Apply with /cz applyupgrade <n|all>')
+end
+
+local function cmd_applyupgrade(args)
+    local su = require('lib.spellupgrade')
+    local which = args[2] and string.lower(args[2]) or ''
+    if which == '' then
+        printf('\aybobblebot:\axUsage: /cz applyupgrade <n|all>  (see /cz upgrades)')
+        return
+    end
+    if which == 'all' then
+        printf('\aybobblebot:\axApplied %d upgrade(s).', su.applyAll())
+    else
+        local n = tonumber(which)
+        if not n or not su.apply(n) then
+            printf('\aybobblebot:\axNo upgrade #%s (see /cz upgrades).', tostring(args[2]))
+        end
+    end
+end
+
+local function cmd_upgradedebug(args)
+    local su = require('lib.spellupgrade')
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then su.SetDebug(true)
+    elseif mode == 'off' or mode == 'false' or mode == '0' then su.SetDebug(false)
+    else su.SetDebug(not su.IsDebug()) end
+    printf('\aybobblebot:\axUpgrade debug logging %s', su.IsDebug() and 'on' or 'off')
+end
+
 local function cmd_charmpetsetup(args)
     local mode = args[2] and string.lower(args[2]) or ''
     if mode == 'on' or mode == 'true' or mode == '1' then
@@ -1262,6 +1307,10 @@ local handlers = {
     aetank = cmd_aetank,
     premem = cmd_premem,
     prememdebug = cmd_prememdebug,
+    scribe = cmd_scribe,
+    upgrades = cmd_upgrades,
+    applyupgrade = cmd_applyupgrade,
+    upgradedebug = cmd_upgradedebug,
     burn = cmd_burn,
     maanchorleash = cmd_maanchorleash,
     offtank = cmd_offtank,

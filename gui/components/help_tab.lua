@@ -86,9 +86,13 @@ local GROUPS = {
         { "/cz mezdebug on|off", "Log why mez targets are picked or skipped." },
         { "/cz buffdebug on|off", "Log why a buff is or isn't cast on a target." },
         { "/cz prememdebug on|off", "Log which gems the pre-mem pass loads (and what it skips)." },
+        { "/cz upgradedebug on|off", "Log spell-upgrade scan results (SpellGroup matches per configured spell)." },
         { "/cz echo <text>", "Echo a message (testing)." },
     } },
     { title = "Utility", cmds = {
+        { "/cz scribe", "Scribe usable spell scrolls from your bags (auto-confirms EQ's replace dialog)." },
+        { "/cz upgrades", "List configured spells that have a better version in your spellbook." },
+        { "/cz applyupgrade <n|all>", "Apply a detected spell upgrade to your config (see /cz upgrades)." },
         { "/cz addspell <...>", "Add a spell entry to a section." },
         { "/cz saytarget   (syt)", "Announce your current target in chat." },
         { "/cz clickdoor", "Click the nearest door." },

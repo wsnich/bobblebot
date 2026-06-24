@@ -17,6 +17,7 @@ local follow = require('lib.follow')
 local spawnutils = require('lib.spawnutils')
 local charm = require('lib.charm')
 local premem = require('lib.premem')
+local spellupgrade = require('lib.spellupgrade')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -325,6 +326,7 @@ local function _runDoMiscTimer()
     _miscInactiveClick() -- anti-afk, randomized interval
     _miscDrag()
     premem.tick() -- pre-load configured gems during downtime so combat spells don't memorize on the fly
+    spellupgrade.tick() -- detect when a better in-book version of a configured spell is available
     _miscLastRun = mq.gettime() + 1000
 end
 
