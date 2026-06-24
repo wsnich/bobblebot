@@ -242,12 +242,27 @@ local function cmd_makecamp(args, str)
     end
 end
 
--- Make GROUP camp: set my camp here and tell every group member to camp at their own spot via MQRemote
--- group broadcast (/rc group). Mirrors the Status-tab group-camp button. Peers need MQRemote loaded.
+-- Make GROUP camp toggle: set/clear my camp and broadcast makecamp on/off to the group via MQRemote
+-- group broadcast (/rc group). No arg toggles on my current camp state. Peers need MQRemote loaded.
 local function cmd_groupcamp(args, str)
-    botmove.MakeCamp('on')
-    mq.cmd('/rc group /cz makecamp on')
-    printf('\aybobblebot:\ax Group camp set (me + MQRemote group).')
+    local mode = args[2] and string.lower(args[2]) or ''
+    local turnOn
+    if mode == 'on' then
+        turnOn = true
+    elseif mode == 'off' then
+        turnOn = false
+    else
+        turnOn = (state.getRunconfig().campstatus ~= true) -- toggle based on my camp
+    end
+    if turnOn then
+        botmove.MakeCamp('on')
+        mq.cmd('/rc group /cz makecamp on')
+        printf('\aybobblebot:\ax Group camp ON (me + MQRemote group).')
+    else
+        botmove.MakeCamp('off')
+        mq.cmd('/rc group /cz makecamp off')
+        printf('\aybobblebot:\ax Group camp OFF (me + MQRemote group).')
+    end
 end
 
 local function cmd_follow(args, str)

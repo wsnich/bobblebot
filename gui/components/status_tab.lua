@@ -535,15 +535,24 @@ function M.draw()
             if campAvail > 0 then
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + campAvail - campIconW - groupCampIconW - GROUP_CAMP_GAP)
             end
-            -- Make GROUP camp: set my camp here AND tell every group member to camp at their own spot via MQRemote.
+            -- Make GROUP camp toggle (mirrors my own camp state): green = off, red = on. Clicking broadcasts
+            -- makecamp on/off to every group member via MQRemote, and sets/clears my own camp locally.
+            local groupCampColor = fixedCamp and RED or GREEN
             ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
-            ImGui.PushStyleColor(ImGuiCol.Text, WHITE)
+            ImGui.PushStyleColor(ImGuiCol.Text, groupCampColor)
             if ImGui.SmallButton(groupCampIcon .. '##group_camp') then
-                if not mobilePullMode then botmove.MakeCamp('on') end
-                mq.cmd('/rc group /cz makecamp on')
+                if fixedCamp then
+                    botmove.MakeCamp('off')
+                    mq.cmd('/rc group /cz makecamp off')
+                elseif not mobilePullMode then
+                    botmove.MakeCamp('on')
+                    mq.cmd('/rc group /cz makecamp on')
+                end
             end
             if ImGui.IsItemHovered() then
-                ImGui.SetTooltip('Make GROUP camp: set my camp here and tell every group member (via MQRemote) to camp at their own position.')
+                ImGui.SetTooltip(fixedCamp
+                    and 'Group camp is ON. Click to clear camp for you and the whole group (via MQRemote).'
+                    or 'Make GROUP camp: set camp here and for every group member (via MQRemote).')
             end
             ImGui.PopStyleColor(2)
             ImGui.SameLine(0, GROUP_CAMP_GAP)
