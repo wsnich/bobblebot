@@ -5,6 +5,7 @@ local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local spell_entry = require('gui.widgets.spell_entry')
 local inputs = require('gui.widgets.inputs')
+local name_list = require('gui.widgets.name_list')
 
 local M = {}
 
@@ -37,8 +38,8 @@ local PRIMARY_OPTIONS = {
 local TARGETPHASE_OPTIONS_BUFF = {
     { key = 'self',        label = 'Self',     tooltip = 'Buff self.' },
     { key = 'tank',        label = 'Tank',     tooltip = 'Buff tank (main assist).' },
-    { key = 'groupmember', label = 'Group',    tooltip = 'Buff group members (class filter below).' },
-    { key = 'pc',          label = 'PC',       tooltip = 'Buff other PCs/bots (class filter below).' },
+    { key = 'groupmember', label = 'Group',     tooltip = 'Buff your group members (class filter below).' },
+    { key = 'pc',          label = 'All chars', tooltip = 'Out-of-group buffing: buff ALL your networked characters in range, in any group, class-filtered below. Add specific non-network people (e.g. guildmates) under "Buff extra names".' },
     { key = 'mypet',       label = 'My Pet',   tooltip = 'Buff your pet.' },
     { key = 'pet',         label = 'Pet',      tooltip = 'Buff other group pets.' },
     { key = 'groupbuff',   label = 'Grp Buff', tooltip = 'Group AE buff.' },
@@ -177,6 +178,28 @@ local function buffCustomSection(entry, idPrefix, onChanged)
             entry.inIdle = inIdleVal
             if onChanged then onChanged() end
         end
+    end
+
+    -- Managed name list (replaces the old raw-key "byname"): always buff these specific characters,
+    -- in range, regardless of group -- works for networked toons AND non-network PCs (e.g. guildmates).
+    -- Collapsed by default so it doesn't clutter buffs that don't need it.
+    entry.buffNames = (type(entry.buffNames) == 'table') and entry.buffNames or {}
+    ImGui.Spacing()
+    local hdr = (#entry.buffNames > 0) and string.format('Buff extra names (%d)', #entry.buffNames) or 'Buff extra names'
+    if ImGui.CollapsingHeader(hdr .. '##' .. idPrefix .. '_names_hdr') then
+        name_list.draw({
+            id = idPrefix .. '_names',
+            label = 'Always buff these characters (any group / guildmates):',
+            list = entry.buffNames,
+            addNoun = 'PC name',
+            getTargetName = function()
+                if mq.TLO.Target.ID() and mq.TLO.Target.ID() > 0 and mq.TLO.Target.Type() == 'PC' then
+                    return mq.TLO.Target.CleanName()
+                end
+                return nil
+            end,
+            onChange = function() if onChanged then onChanged() end end,
+        })
     end
 end
 

@@ -204,14 +204,25 @@ local function buffGetTargetsForPhase(phase, context)
     if phase == 'byname' and context.buffCount then
         local out = {}
         local seen = {}
+        local function addByName(name)
+            local n = type(name) == 'string' and (name:match('^%s*(.-)%s*$') or '') or ''
+            if n == '' or seen[n] then return end
+            seen[n] = true
+            local botid = mq.TLO.Spawn('pc =' .. n).ID()
+            if botid and botid > 0 then out[#out + 1] = { id = botid, targethit = 'byname' } end
+        end
         for idx = 1, context.buffCount do
+            -- Managed per-buff name list (clean UI). Resolved by spawn name, so it covers PCs that are
+            -- NOT in the bot network (e.g. guildmates) as well as networked characters.
+            local entry = botconfig.getSpellEntry('buff', idx)
+            if entry and type(entry.buffNames) == 'table' then
+                for _, name in ipairs(entry.buffNames) do addByName(name) end
+            end
+            -- Legacy key-based byname (backward compat): network peers only.
             if BuffClass[idx] and BuffClass[idx].name then
                 for name, c in pairs(BuffClass[idx]) do
-                    if name ~= 'name' and name ~= 'classes' and name ~= 'classesAll' and type(name) == 'string' and charinfo.GetInfo(name) and not seen[name] then
-                        seen[name] = true
-                        local botid = mq.TLO.Spawn('pc =' .. name).ID()
-                        local botclass = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
-                        if botid and botid > 0 then out[#out + 1] = { id = botid, targethit = 'byname' } end
+                    if name ~= 'name' and name ~= 'classes' and name ~= 'classesAll' and type(name) == 'string' and charinfo.GetInfo(name) then
+                        addByName(name)
                     end
                 end
             end
@@ -221,8 +232,16 @@ local function buffGetTargetsForPhase(phase, context)
     return {}
 end
 
+local function buffHasNameList(spellIndex)
+    local entry = botconfig.getSpellEntry('buff', spellIndex)
+    return entry and type(entry.buffNames) == 'table' and #entry.buffNames > 0 or false
+end
+
 local function buffBandHasPhase(spellIndex, phase)
-    if phase == 'byname' then return BuffClass[spellIndex] and BuffClass[spellIndex].name and true or false end
+    if phase == 'byname' then
+        if buffHasNameList(spellIndex) then return true end
+        return BuffClass[spellIndex] and BuffClass[spellIndex].name and true or false
+    end
     return castutils.bandHasPhaseSimple(BuffClass, spellIndex, phase)
 end
 
@@ -264,11 +283,21 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         return nil, nil
     end
     if targethit == 'byname' then
-        if not BuffClass[spellIndex].name then return nil, nil end
         local name = mq.TLO.Spawn(targetId).CleanName()
-        if name then
+        if not name then return nil, nil end
+        if charinfo.GetInfo(name) then
+            -- Networked character: use peer buff data (no retarget needed).
             local id, hit = BuffEvalBotNeedsBuff(targetId, name, sid, rangeSq, spellIndex, 'byname')
             if id then return id, hit end
+        elseif IconCheck(spellIndex, targetId)
+            and spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, 'byname', nil, nil, nil)
+            and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
+            -- Non-network PC (e.g. guildmate): inspect via spawn; only cast when in range.
+            local sp = mq.TLO.Spawn(targetId)
+            local dSq = sp and utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), sp.X(), sp.Y())
+            if not rangeSq or (dSq and dSq <= rangeSq) then
+                return targetId, 'byname'
+            end
         end
         return nil, nil
     end

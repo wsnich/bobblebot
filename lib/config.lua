@@ -152,7 +152,7 @@ local ROLE_ALIASES = {
 
 local spellSlotOrder = {
     heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'inCombat', 'tarcnt', 'bands', 'healResource', 'precondition' },
-    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'precondition' },
+    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'precondition', 'buffNames' },
     debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack', 'stopWhen', 'recastActive', 'mezMinLevel', 'mezMaxLevel' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
     pull = { 'gem', 'spell', 'range' },
@@ -740,6 +740,18 @@ local function writeConfigToFile(config, filename)
                         file:flush()
                     end
                     -- omit when empty; readers treat as { 'all' }
+                elseif key == 'buffNames' and type(value) == "table" then
+                    if #value > 0 then
+                        local parts = {}
+                        for _, s in ipairs(value) do
+                            parts[#parts + 1] = '"' .. tostring(s):gsub('\\', '\\\\'):gsub('"', '\\"') .. '"'
+                        end
+                        file:write(indent .. formatKey('buffNames') .. " = { ")
+                        file:write(table.concat(parts, ", "))
+                        file:write(" },\n")
+                        file:flush()
+                    end
+                    -- omit when empty
                 elseif type(value) == "table" then
                     print("detected a corrupted value for:", key, " = ", value)
                     print("setting ", key, " to nil, please check your config")
