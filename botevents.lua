@@ -29,14 +29,20 @@ function botevents.AcceptRezIfOffered()
     if not (w and w.Open()) then return end
     local text
     local okText, t = pcall(function() return w.Child('CD_TextOutput').Text() end)
-    if okText then text = t end
+    if okText and t then text = tostring(t) end
     if not text or text == '' then return end
     local lower = text:lower()
-    -- Rez prompts say "be resurrected" / "restore ... experience"; require one of those to be safe.
-    if not (lower:find('resurrect') or (lower:find('restore') and lower:find('experience'))) then return end
+    -- Rez confirmation text varies by server/client: Live-style ("be resurrected ... restore N%
+    -- experience") and emu-style ("<caster> wants to cast <rez spell> (N percent) upon you. Do you wish
+    -- this?"). This only runs while dead/hovering, so a "wants to cast ... upon you" prompt is a rez.
+    local isRez = lower:find('resurrect')
+        or (lower:find('restore') and lower:find('experience'))
+        or (lower:find('wants to cast') and lower:find('upon you'))
+    if not isRez then return end
     local minPct = tonumber(botconfig.config.settings.rezAcceptMinPct) or 0
     if minPct > 0 then
-        local pct = tonumber(lower:match('(%d+)%s*%%'))
+        -- XP-restore % may be written "96%" or "96 percent".
+        local pct = tonumber(lower:match('(%d+)%s*%%')) or tonumber(lower:match('(%d+)%s*percent'))
         if pct and pct < minPct then return end -- decline-by-ignoring a low-% rez; player can accept manually
     end
     _rezAcceptNextTime = mq.gettime() + 2000
