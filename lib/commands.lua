@@ -675,6 +675,32 @@ local function cmd_aetank(args)
     printf('\aybobblebot:\axAE-tank %s', (botconfig.config.settings.tankAllMobs == true) and 'on' or 'off')
 end
 
+local function cmd_premem(args)
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        botconfig.config.settings.premem = true
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        botconfig.config.settings.premem = false
+    else
+        botconfig.config.settings.premem = not (botconfig.config.settings.premem ~= false)
+    end
+    botconfig.ApplyAndPersist()
+    printf('\aybobblebot:\axPre-memorize gembar %s', (botconfig.config.settings.premem ~= false) and 'on' or 'off')
+end
+
+local function cmd_prememdebug(args)
+    local premem = require('lib.premem')
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        premem.SetDebug(true)
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        premem.SetDebug(false)
+    else
+        premem.SetDebug(not premem.IsDebug())
+    end
+    printf('\aybobblebot:\axPre-mem debug logging %s', premem.IsDebug() and 'on' or 'off')
+end
+
 local function cmd_charmpetsetup(args)
     local mode = args[2] and string.lower(args[2]) or ''
     if mode == 'on' or mode == 'true' or mode == '1' then
@@ -1222,6 +1248,8 @@ local handlers = {
     rezaccept = cmd_rezaccept,
     charmpetsetup = cmd_charmpetsetup,
     aetank = cmd_aetank,
+    premem = cmd_premem,
+    prememdebug = cmd_prememdebug,
     burn = cmd_burn,
     maanchorleash = cmd_maanchorleash,
     offtank = cmd_offtank,

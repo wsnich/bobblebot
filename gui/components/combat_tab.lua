@@ -109,6 +109,18 @@ function M.draw()
         runConfigLoaders()
     end
 
+    ImGui.Text('Pre-memorize gembar when idle')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('During downtime (out of combat, not moving/casting), load each configured spell into its gem so combat-critical spells (slow, heals, debuffs) are ready before they are needed.\nOnly touches gems assigned to a single spell -- gems you intentionally share between spells are left alone.\nPrevents the "MEMORIZETIMEOUT" failure where a spell can never finish memorizing mid-fight.')
+    end
+    ImGui.SameLine()
+    local pmChecked = (botconfig.config.settings.premem ~= false)
+    local pmVal, pmPressed = ImGui.Checkbox('##combat_premem', pmChecked)
+    if pmPressed then
+        botconfig.config.settings.premem = pmVal
+        runConfigLoaders()
+    end
+
     -- Line 2: Stick Settings
     ImGui.Spacing()
     ImGui.Text('Stick Settings')
