@@ -404,6 +404,16 @@ local function drawSpellUpgradesSection()
         if ImGui.SmallButton('Apply all##upg_applyall') then pcall(spellupgrade.applyAll) end
     end
 
+    local asChecked = (botconfig.config.settings.autoScribe ~= false)
+    local asVal, asPressed = ImGui.Checkbox('Auto-scribe on level-up##upg_autoscribe', asChecked)
+    if asPressed then
+        botconfig.config.settings.autoScribe = asVal
+        botconfig.ApplyAndPersist()
+    end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('When you ding, scribe newly-usable spell scrolls from your bags automatically (once out of combat).')
+    end
+
     if n == 0 then
         ImGui.TextColored(LIGHT_GREY, '%s', '  (none detected -- Re-scan after leveling or scribing)')
         return

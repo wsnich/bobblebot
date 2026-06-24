@@ -716,6 +716,19 @@ local function cmd_scribe(args)
     require('lib.scribe').Run()
 end
 
+local function cmd_autoscribe(args)
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        botconfig.config.settings.autoScribe = true
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        botconfig.config.settings.autoScribe = false
+    else
+        botconfig.config.settings.autoScribe = not (botconfig.config.settings.autoScribe ~= false)
+    end
+    botconfig.ApplyAndPersist()
+    printf('\aybobblebot:\axAuto-scribe on level-up %s', (botconfig.config.settings.autoScribe ~= false) and 'on' or 'off')
+end
+
 local function cmd_upgrades(args)
     local su = require('lib.spellupgrade')
     su.scan()
@@ -1308,6 +1321,7 @@ local handlers = {
     premem = cmd_premem,
     prememdebug = cmd_prememdebug,
     scribe = cmd_scribe,
+    autoscribe = cmd_autoscribe,
     upgrades = cmd_upgrades,
     applyupgrade = cmd_applyupgrade,
     upgradedebug = cmd_upgradedebug,

@@ -91,6 +91,7 @@ local GROUPS = {
     } },
     { title = "Utility", cmds = {
         { "/cz scribe", "Scribe usable spell scrolls from your bags (auto-confirms EQ's replace dialog)." },
+        { "/cz autoscribe on|off", "Auto-scribe new spell scrolls after you level up (once out of combat)." },
         { "/cz upgrades", "List configured spells that have a better version in your spellbook." },
         { "/cz applyupgrade <n|all>", "Apply a detected spell upgrade to your config (see /cz upgrades)." },
         { "/cz addspell <...>", "Add a spell entry to a section." },

@@ -7,11 +7,14 @@
 -- Blocking routine (uses mq.delay); only run it during downtime. Gated to out-of-combat / standing / idle.
 
 local mq = require('mq')
+local botconfig = require('lib.config')
 
 local scribe = {}
 
 local NUM_PACKS = 10
 local _running = false
+local _lastLevel = 0     -- baseline for level-up detection (0 = not yet established)
+local _wantScribe = false -- a ding happened; scribe as soon as it's safe
 
 local function safeToScribe()
     if mq.TLO.Me.Combat() then return false, 'in combat' end
@@ -129,6 +132,26 @@ function scribe.Run()
         end
     end
     return scribedCount
+end
+
+-- Background tick (from doMiscTimer): when settings.autoScribe is on, scribe new spells after a level-up.
+-- The ding usually lands mid-combat, so we just flag it and run the scribe once we're safely out of combat.
+function scribe.tick()
+    if botconfig.config.settings.autoScribe == false then return end
+    local lvl = tonumber(mq.TLO.Me.Level()) or 0
+    if lvl <= 0 then return end
+    if _lastLevel == 0 then _lastLevel = lvl; return end -- establish baseline; never scribe on startup
+    if lvl > _lastLevel then
+        _lastLevel = lvl
+        _wantScribe = true
+        printf('\aybobblebot:\axDinged %d -- will scribe new spells when out of combat.', lvl)
+    elseif lvl < _lastLevel then
+        _lastLevel = lvl -- resync on any de-level
+    end
+    if _wantScribe and safeToScribe() then
+        _wantScribe = false
+        scribe.Run()
+    end
 end
 
 return scribe
