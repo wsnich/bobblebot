@@ -843,6 +843,21 @@ local function isQueueEntryViable(spawnId, rc)
     return true
 end
 
+--- Active pull target, queued backups, and already-tried candidates for this outing.
+--- Proximity add-abort must ignore these; only unknown nearby aggressives are adds.
+local function isKnownPullOutingSpawn(spawnId, rc)
+    if not spawnId or spawnId <= 0 then return false end
+    if spawnId == rc.pullAPTargetID then return true end
+    local queue = rc.pullCandidateIds
+    if queue then
+        for _, qid in ipairs(queue) do
+            if qid == spawnId then return true end
+        end
+    end
+    local attempted = rawget(rc, 'pullAttemptedIds')
+    return attempted and attempted[spawnId] or false
+end
+
 local function beginPullCandidate(rc, spawn, reason)
     local spawnId = spawn.ID()
     rc.pullAPTargetID = spawnId
@@ -1012,7 +1027,7 @@ local function tickNavigating(rc, spawn)
     if ncount and ncount > 0 then
         for i = 1, ncount do
             local sid = mq.TLO.NearestSpawn(i, addFilter).ID()
-            if sid and sid ~= rc.pullAPTargetID and mq.TLO.NearestSpawn(i, addFilter).Aggressive() then
+            if sid and not isKnownPullOutingSpawn(sid, rc) and mq.TLO.NearestSpawn(i, addFilter).Aggressive() then
                 local conName = mq.TLO.NearestSpawn(i, addFilter).ConColor()
                 local conId = conName and botconfig.ConColorsNameToId[conName:upper()] or 0
                 if conId ~= 1 and mq.TLO.NearestSpawn(i, addFilter).LineOfSight() then -- not Grey, has LoS
