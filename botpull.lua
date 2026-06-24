@@ -776,7 +776,7 @@ local function abortPullAndReturnToCamp(reason)
     rc.pullAtCampSince = nil
     rawset(rc, 'pullAbortReturnDeadline', mq.gettime() + RETURNING_AFTER_ABORT_TIMEOUT_MS)
     rc.statusMessage = 'Returning to camp after abort'
-    botmove.NavToCamp({ dist = 0, echoMsg = '\\ayAdd aggro, returning to camp' })
+    botmove.NavToCamp({ dist = 0, echoMsg = 'Add aggro, returning to camp' })
     if reason then printf('\ayCZBot:\ax [Pull] abort: %s', reason) end
 end
 
@@ -958,7 +958,7 @@ local function tickNavigating(rc, spawn)
                     rc.pullRangedStoredItem = nil
                 end
                 combat.ResetCombatState({ clearTarget = false, clearPet = false })
-                botmove.NavToCamp({ dist = 0, echoMsg = '\\ayReturning to camp' })
+                botmove.NavToCamp({ dist = 0, echoMsg = 'Returning to camp' })
                 return
             else
                 abortNavDuringPull(myconfig.pull.hunter and 'Add aggro (XTarget), aborting hunt.' or 'Add aggro (XTarget), returning to camp.')
@@ -1135,7 +1135,7 @@ local function tickAggroing(rc, spawn)
             rc.pullRangedStoredItem = nil
         end
         combat.ResetCombatState({ clearTarget = false, clearPet = false })
-        botmove.NavToCamp({ dist = 0, echoMsg = '\\ayReturning to camp' })
+        botmove.NavToCamp({ dist = 0, echoMsg = 'Returning to camp' })
         return
     end
 

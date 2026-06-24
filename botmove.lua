@@ -313,7 +313,7 @@ local function doLeashResetCombat()
     combat.ResetCombatState()
 end
 
--- Navigate to camp location (makecamp.x/y/z). opts: dist (number|nil), echoMsg (string|nil).
+-- Navigate to camp location (makecamp.x/y/z). opts: dist (number|nil), echoMsg (string|nil, plain text only).
 local function doNavToCamp(opts)
     opts = opts or {}
     local rc = state.getRunconfig()

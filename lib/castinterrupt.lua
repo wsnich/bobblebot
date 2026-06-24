@@ -29,20 +29,38 @@ local function isMezInterruptSpell(entry)
     return entry and (spellutils.IsMezSpell(entry) or aliasMatches(entry, 'mez'))
 end
 
-local function normalizeArticle(name)
+local function normalizeMobNameForMatch(name)
     if not name or name == '' then return '' end
-    return name:match('^[Aa]n? (.+)$') or name:match('^[Tt]he (.+)$') or name
+    local s = name:gsub('_', ' '):gsub('%s+', ' '):lower()
+    s = trim(s)
+    s = s:match('^an? (.+)$') or s:match('^the (.+)$') or s
+    return trim(s)
+end
+
+--- True when event chat name refers to the spawn (case/article/underscore suffix tolerant).
+local function mobNamesMatch(eventName, spawnName, spawnClean)
+    local eventNorm = normalizeMobNameForMatch(eventName)
+    if eventNorm == '' then return false end
+    for _, candidate in ipairs({ spawnName, spawnClean }) do
+        if candidate and candidate ~= '' then
+            local norm = normalizeMobNameForMatch(candidate)
+            if norm ~= '' then
+                if eventNorm == norm then return true end
+                -- Spawn Name() often appends digits (e.g. an_Icepaw_prophet03 vs "An Icepaw prophet").
+                if norm:find(eventNorm, 1, true) == 1 or eventNorm:find(norm, 1, true) == 1 then
+                    return true
+                end
+            end
+        end
+    end
+    return false
 end
 
 local function eventMobNameMatchesSpawn(spawnId, eventName)
     if not spawnId or spawnId == 0 or not eventName or eventName == '' then return false end
     local sp = mq.TLO.Spawn(spawnId)
     if not spawnutils.isAliveEngageSpawn(sp) then return false end
-    local name = sp.Name() or ''
-    local clean = sp.CleanName() or ''
-    if eventName == name or eventName == clean then return true end
-    local stripped = normalizeArticle(eventName)
-    return stripped == clean or stripped == name
+    return mobNamesMatch(eventName, sp.Name() or '', sp.CleanName() or '')
 end
 
 local function diagFail(reason, mobName, extra)
