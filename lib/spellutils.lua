@@ -396,6 +396,13 @@ function spellutils.SpellCheck(Sub, ID)
         if not mq.TLO.FindItem(spell)() then return false end
         local spellForTlo = spellutils.GetResolvedSpellName(entry)
         if spellForTlo and not mq.TLO.Spell(spellForTlo)() then return false end
+    elseif gem == 'disc' then
+        if not spellutils.DisciplineExists(spell) then return false end
+        local discSp = spellutils.GetDisciplineSpellEntity(spell)
+        if discSp then
+            spellmana = discSp.Mana and discSp.Mana()
+            spellend = discSp.EnduranceCost and discSp.EnduranceCost()
+        end
     elseif gem ~= 'ability' then
         if not mq.TLO.Spell(spell)() then return false end
         spellmana = mq.TLO.Spell(spell).Mana()
@@ -408,9 +415,9 @@ function spellutils.SpellCheck(Sub, ID)
     if gem == 'alt' then
         if not mq.TLO.Me.AltAbilityReady(spell)() then return false end
     end
-    if gem == 'disc' and spellend then
+    if gem == 'disc' then
         if not mq.TLO.Me.CombatAbilityReady(spell)() then return false end
-        if (spellend and ((mq.TLO.Me.CurrentEndurance() - (mq.TLO.Me.EnduranceRegen() * 2)) < spellend) or (mq.TLO.Me.PctMana() < minmana)) then return false end
+        if spellend and ((mq.TLO.Me.CurrentEndurance() - (mq.TLO.Me.EnduranceRegen() * 2)) < spellend) then return false end
     end
     return true
 end
@@ -883,6 +890,26 @@ function spellutils.GetBotListShuffled()
     return bots
 end
 
+-- Me.CombatAbility[name] returns slot index; Me.CombatAbility[slot] returns spell datatype.
+function spellutils.GetDisciplineSlot(name)
+    if not name or name == '' then return nil end
+    local slot = tonumber(mq.TLO.Me.CombatAbility(name)())
+    if slot and slot > 0 then return slot end
+    return nil
+end
+
+function spellutils.DisciplineExists(name)
+    return spellutils.GetDisciplineSlot(name) ~= nil
+end
+
+function spellutils.GetDisciplineSpellEntity(name)
+    local slot = spellutils.GetDisciplineSlot(name)
+    if not slot then return nil end
+    local sp = mq.TLO.Me.CombatAbility(slot)
+    if sp and sp() then return sp end
+    return nil
+end
+
 -- MQ spell name for TLO lookups: book/AA/disc spell name, or FindItem.Spell.Name() for items.
 function spellutils.GetResolvedSpellName(entry)
     if not entry or not entry.spell or entry.spell == '' then return nil end
@@ -892,6 +919,16 @@ function spellutils.GetResolvedSpellName(entry)
         if name and name ~= '' then return name end
         return nil
     end
+    if entry.gem == 'disc' then
+        local sp = spellutils.GetDisciplineSpellEntity(entry.spell)
+        if sp then
+            local rankName = sp.RankName and sp.RankName()
+            if rankName and rankName ~= '' then return rankName end
+            local spellName = sp.Name and sp.Name()
+            if spellName and spellName ~= '' then return spellName end
+        end
+        return entry.spell
+    end
     return mq.TLO.Spell(entry.spell)() or entry.spell
 end
 
@@ -900,6 +937,15 @@ end
 function spellutils.GetSpellInfo(entry)
     if not entry or not entry.spell then return nil, nil, nil, nil end
     local gem = entry.gem
+    if gem == 'disc' then
+        local entity = spellutils.GetDisciplineSpellEntity(entry.spell)
+        if not entity then return nil, nil, nil, nil end
+        local spell = (entity.Name and entity.Name()) or entry.spell
+        local range = entity.MyRange and entity.MyRange()
+        local tartype = entity.TargetType and entity.TargetType()
+        local spellid = entity.ID and entity.ID()
+        return spell, range, tartype, spellid
+    end
     local spell = spellutils.GetResolvedSpellName(entry)
     if gem == 'item' and not spell then return nil, nil, nil, nil end
     if not spell then spell = entry.spell end
@@ -919,6 +965,11 @@ end
 -- Return spell ID for entry, handling gem == 'item' via FindItem.Spell.ID().
 function spellutils.GetSpellId(entry)
     if not entry or not entry.spell then return nil end
+    if entry.gem == 'disc' then
+        local sp = spellutils.GetDisciplineSpellEntity(entry.spell)
+        if sp and sp.ID then return sp.ID() end
+        return nil
+    end
     local id = mq.TLO.Spell(entry.spell).ID()
     if id then return id end
     if entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() then
@@ -940,6 +991,9 @@ function spellutils.GetSpellEntity(entry)
         local sp = aa.Spell
         if sp and sp() then return sp end
         return nil
+    end
+    if entry.gem == 'disc' then
+        return spellutils.GetDisciplineSpellEntity(entry.spell)
     end
     return mq.TLO.Spell(entry.spell)
 end
@@ -2495,7 +2549,7 @@ function spellutils.RefreshSpells()
                 local known = false
                 if entry.gem == 'disc' then
                     known = entry.spell and entry.spell ~= '' and
-                        mq.TLO.Me.CombatAbility(entry.spell)() ~= nil
+                        spellutils.GetDisciplineSlot(entry.spell) ~= nil
                 else
                     known = entry.spell and mq.TLO.Me.Book(entry.spell)()
                 end

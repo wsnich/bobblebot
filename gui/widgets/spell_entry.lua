@@ -79,22 +79,20 @@ end
 local function validateDiscipline(name)
     if not name or name:match('^%s*$') then return false, 'Enter a discipline name' end
     name = name:match('^%s*(.-)%s*$')
-    local me = mq.TLO.Me
-    local caLookup = me and me.CombatAbility
-    local disc = caLookup and caLookup(name)
-    local discId = disc and disc.ID and disc.ID()
-    if tonumber(discId) and tonumber(discId) > 0 then return true end
+    local ca = mq.TLO.Me and mq.TLO.Me.CombatAbility and mq.TLO.Me.CombatAbility(name)
+    if not ca then return false, 'Discipline not found' end
+    local ok, slot = pcall(function() return ca() end)
+    if ok and tonumber(slot) and tonumber(slot) > 0 then return true end
     return false, 'Discipline not found'
 end
 
 local function validateAbility(name)
     if not name or name:match('^%s*$') then return false, 'Enter an ability name' end
     name = name:match('^%s*(.-)%s*$')
-    local ar = mq.TLO.Me.AbilityReady(name)
-    if ar then
-        local ok, result = pcall(function() return ar() end)
-        if ok and result ~= nil then return true end
-    end
+    local ab = mq.TLO.Me and mq.TLO.Me.Ability and mq.TLO.Me.Ability(name)
+    if not ab then return false, 'Ability not found' end
+    local ok, slot = pcall(function() return ab() end)
+    if ok and tonumber(slot) and tonumber(slot) > 0 then return true end
     return false, 'Ability not found'
 end
 
