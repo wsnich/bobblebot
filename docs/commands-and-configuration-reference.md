@@ -64,11 +64,11 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **charm remove**    | `<name>` or target     | Remove a mob from the charm list.                                                                                                                        |
 | **reloadcommon**    | —                      | Reload `cz_common.lua` from disk and refresh current-zone exclude/priority/charm lists, **ma_list** / **mt_list**, and nuke flavor auto-disable state. Does not reset temporary no-combat zone enable/disable checkboxes (session-only). Use on each bot after another client edits shared lists so runtime state matches disk. Saves from any bot reload and union-merge with disk first, so concurrent edits are less likely to wipe data. |
 
-**Multi-box:** All bots sharing `cz_common.lua` should run **`/cz reloadcommon`** after one bot edits exclude/priority/charm lists or **ma_list** / **mt_list** in the GUI or via commands, so each client's runtime lists match disk. Saves automatically reload from disk and union list entries before writing.
+**Multi-box:** All bots sharing `cz_common.lua` should run **`/cz reloadcommon`** after one bot edits exclude/priority/charm lists or **ma_list** / **mt_list** in the GUI, so each client's runtime lists match disk. Saves automatically reload from disk and union list entries before writing. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md#editing-lists-and-multi-box-sync).
 
 **GUI Mob lists tab** (`/czshow` → Mob lists): edit per-zone **exclude**, **priority**, and **charm** lists for the current zone, and the global **no combat zones** list. See [Safety and stealth](safety-and-stealth.md) for no-combat zone controls (Add current zone, Enabled checkbox, Remove).
 
-**GUI Roles tab** (`/czshow` → Roles): edit global **ma_list** and **mt_list** (MA/MT automatic fallback), and per-char **MA anchor** / **MA leash** settings. See [Tank and Assist Roles](tank-and-assist-roles.md).
+**GUI Roles tab** (`/czshow` → Roles): edit global **ma_list** and **mt_list** (MA/MT automatic fallback), and per-char **MA anchor** / **MA leash** settings. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).
 
 ### Combat and roles
 
@@ -76,8 +76,8 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | ---------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | **attack**       | optional `<name>`       | Engage the Main Assist’s target **immediately** (ignores the “assist at” percentage). If `<name>` is given, engage that player’s target for this engagement only. Rejected if the target is a protected NPC (soulbinder/translocator). Blocked when near primary bind point. The engagement **persists** until the target dies or an override occurs: **`/cz abort`**, turning off **domelee**, or issuing another **`/cz attack`** (which sets a new target). Normal assist-at logic resumes after the engagement ends. |
 | **abort**        | optional `off`          | Abort: stop cast, clear target, turn off melee/debuff; return to camp. Use `abort off` to re-enable melee/debuff. |
-| **tank**         | `<name>` or `automatic` | Set Main Tank.                                                                                                    |
-| **assist**       | `<name>` or `automatic` | Set Main Assist.                                                                                                  |
+| **tank**         | `<name>` or `automatic` | Set Main Tank. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).                                                                                                    |
+| **assist**       | `<name>` or `automatic` | Set Main Assist. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).                                                                                                  |
 | **offtank**      | `on` / `off` or toggle  | Enable/disable offtank behavior.                                                                                  |
 | **stickcmd**     | `<string>`              | Set stick command (e.g. `hold uw 7`).                                                                             |
 | **targetfilter** | `0` / `1` / `2`         | Filter for mob list: 0 = NPC + aggressive + LOS (pull only aggressive), 1 = NPC + LOS, 2 = exclude PCs/mercs/etc. |
@@ -181,8 +181,8 @@ return StoredConfig
 | **sitmana**        | 90            | Sit when mana % below this; stand when above this + 3 (hysteresis).                                                      |
 | **sitendur**       | 90            | Sit when endurance % below this; stand when above this + 3 (hysteresis).                                                |
 | **sitaggro**       | 60            | When mobs are in camp and level 20+, only sit when `Me.PctAggro` is below this (no hysteresis).                          |
-| **TankName**       | `"manual"`    | Main Tank name or `"automatic"` / `"manual"`.                                                                           |
-| **AssistName**     | (unset)       | Main Assist name or `"automatic"` / `"manual"`.                                                                         |
+| **TankName**       | `"manual"`    | Main Tank name or `"automatic"` / `"manual"`. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).                                                                           |
+| **AssistName**     | (unset)       | Main Assist name or `"automatic"` / `"manual"`. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).                                                                         |
 | **TargetFilter**   | `0`           | Mob list filter (0/1/2).                                                                                                |
 | **petassist**      | `false`       | Boolean. When true, send pet on engage target; when false, pet does not engage. Default `false`.                                                                                      |
 | **acleash**        | 75            | Camp leash distance.                                                                                                    |
@@ -239,7 +239,7 @@ Combat abilities (disciplines, /doability) are configured as **debuff** entries 
 ## Where to configure
 
 - **Config file:** Edit **`cz_<CharName>.lua`** in your MQ config directory. Reload by re-running the bot or using **import** / **setvar**.
-- **Runtime only (not in config file):** **ExcludeList**, **PriorityList**, **CharmList**, **MaList**, **MtList** (pull exclude/priority, charm targets, and MA/MT fallback mirrors), **pullarc** (directional pull), bard **dosongs** (twist on/off via **/cz togglesongs** or Status **Songs**), and **no-combat zone Enabled checkboxes** (temporary disable per zone for the session) are set at runtime via **/cz exclude**, **/cz priority**, **/cz charm** (add/remove), **/cz xarc**, **/cz togglesongs**, or the GUI **Mob lists** / **Roles** tabs. Per-zone mob lists are stored in **cz_common.lua** under **zones**[*zoneShortName*] (**excludelist**, **prioritylist**, **charmlist**, **nukeFlavors**, **nukeFlavorsAutoDisabled**, **immune**). Global **noCombatZones**, **ma_list**, and **mt_list** are also in **cz_common.lua** (top-level, not under zones). Changes to lists and no-combat zones are saved automatically when you add or remove entries in the GUI or via commands.
+- **Runtime only (not in config file):** **ExcludeList**, **PriorityList**, **CharmList**, **MaList**, **MtList** (pull exclude/priority, charm targets, and [MA/MT fallback mirrors](automatic-ma-mt-selection.md#ma_list-and-mt_list)), **pullarc** (directional pull), bard **dosongs** (twist on/off via **/cz togglesongs** or Status **Songs**), and **no-combat zone Enabled checkboxes** (temporary disable per zone for the session) are set at runtime via **/cz exclude**, **/cz priority**, **/cz charm** (add/remove), **/cz xarc**, **/cz togglesongs**, or the GUI **Mob lists** / **Roles** tabs. Per-zone mob lists are stored in **cz_common.lua** under **zones**[*zoneShortName*] (**excludelist**, **prioritylist**, **charmlist**, **nukeFlavors**, **nukeFlavorsAutoDisabled**, **immune**). Global **noCombatZones**, **ma_list**, and **mt_list** are also in **cz_common.lua** (top-level, not under zones). Changes to lists and no-combat zones are saved automatically when you add or remove entries in the GUI or via commands.
 - **Both:** Most options can be set in the config file or at runtime via **/cz setvar** (e.g. **setvar settings.petassist true**), which writes back to the config file.
 
 For protected NPCs, bind-point stealth, and no-combat zone behavior, see [Safety and stealth](safety-and-stealth.md).

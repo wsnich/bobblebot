@@ -27,7 +27,7 @@ If **AssistName** is unset, it falls back to **TankName** — the MT bot becomes
 - **Values:**
   - **Character name** — Healers focus on this character. If this bot is also the effective MA (AssistName unset or same name), it selects camp targets.
   - **`"manual"`** — No default MT; set at runtime with `/cz tank SomeName`.
-  - **`"automatic"`** — Use the **group's Main Tank** role when not in a raid; fall back to **`mt_list`** when unavailable (proximity-gated). In **raid**, use **`mt_list`** only.
+  - **`"automatic"`** — Resolve from the EQ group Main Tank role (not in raid), then **`mt_list`** fallback. In raid, **`mt_list` only**. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).
 
 Healers always use the resolved MT. MT bots do **not** pick mobs unless they are also the effective MA.
 
@@ -37,7 +37,7 @@ Healers always use the resolved MT. MT bots do **not** pick mobs unless they are
 - **Values:**
   - **Character name** — DPS/offtank/separate MT follow this character's target. MA bot selects from MobList.
   - **`"manual"`** — No default MA; set at runtime with `/cz assist SomeName`.
-  - **`"automatic"`** — Raid/group Main Assist, then **`ma_list`** fallback.
+  - **`"automatic"`** — Resolve from raid/group Main Assist, then **`ma_list`** fallback. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).
 
 If **AssistName** is unset, it defaults to **TankName** (legacy "everyone assists the tank").
 
@@ -116,12 +116,19 @@ flowchart LR
 
 ### Automatic mode
 
-- **MT** = Group.MainTank → **`mt_list`** (raid: list only).
-- **MA** = Raid/Group MainAssist → **`ma_list`** fallback.
-- List fallback requires alive, in-zone, within **`maAnchorLeash`**.
+Set **`TankName`** and/or **`AssistName`** to **`"automatic"`** (the default for `TankName`). CZBot reads EQ group/raid roles and falls back to ordered lists in **`cz_common.lua`**. Full resolution order, availability rules, list editing, and **`maAnchorLeash`** are documented in [Automatic MA/MT Selection](automatic-ma-mt-selection.md).
 
 ---
 
 ## MA-anchored mob bubble
 
-When **`settings.maCampAnchor`** is on, non-MA bots center MobList on nearby MA. Combat inject adds MA's (then MT fallback) ATTACK target into MobList. See **Roles** tab for anchor/leash settings.
+When **`settings.maCampAnchor`** is on, non-MA bots center MobList on the resolved MA within **`maAnchorLeash`**. Combat inject adds the MA's (then MT fallback) ATTACK target into MobList. Configure anchor and leash on the **Roles** tab (`/czshow` → Roles). See [Automatic MA/MT Selection — maAnchorLeash](automatic-ma-mt-selection.md#maanchorleash).
+
+---
+
+## See also
+
+- [Automatic MA/MT Selection](automatic-ma-mt-selection.md) — `ma_list`, `mt_list`, automatic resolution, multi-box sync
+- [Tanking configuration](tanking-configuration.md) — stick, assistpct, camp leash
+- [Offtank configuration](offtank-configuration.md) — offtank setup
+- [Healing configuration](healing-configuration.md) — heal tank phase

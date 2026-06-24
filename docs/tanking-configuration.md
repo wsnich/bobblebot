@@ -15,7 +15,7 @@ This document explains how to configure the bot when it is the **Main Tank (MT)*
 
 | Option | Default | Purpose |
 |--------|--------|---------|
-| **TankName** | `"manual"` | Main Tank name or `"automatic"` / `"manual"`. See [Tank and Assist Roles](tank-and-assist-roles.md). |
+| **TankName** | `"manual"` | Main Tank name or `"automatic"` / `"manual"`. See [Tank and Assist Roles](tank-and-assist-roles.md) and [Automatic MA/MT Selection](automatic-ma-mt-selection.md). |
 | **acleash** | 75 | Max horizontal distance (X,Y) from camp for valid targets and mob list. Also used for corpse rez range and **bind-point stealth** radius (distance from primary bind coordinates). See [Safety and stealth](safety-and-stealth.md). |
 | **zradius** | 75 | Max vertical (Z) difference from camp; mobs outside this are ignored for the mob list. |
 

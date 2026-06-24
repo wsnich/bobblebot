@@ -59,4 +59,4 @@ Save/load is independent of **doraid**. You can use raid save/load with doraid o
 
 ## Relation to Tank and Assist
 
-In raids, the game UI has no Main Tank or Puller role; those always come from the **group**. Main Assist can come from the **raid** when in a raid. For how TankName and AssistName resolve in raids, see [Tank and Assist Roles](tank-and-assist-roles.md).
+In raids, the game UI has no Main Tank or Puller role; those always come from the **group**. Main Assist can come from the **raid** when in a raid. For how `TankName` and `AssistName` resolve in raids (including **`mt_list`-only** automatic MT), see [Automatic MA/MT Selection](automatic-ma-mt-selection.md#game-role-sources-group-vs-raid).
