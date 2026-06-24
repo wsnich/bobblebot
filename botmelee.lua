@@ -648,6 +648,11 @@ local function mezzerInGroup()
     return false
 end
 
+-- Instant hate abilities the tank cycles onto loose mobs, best-first. Taunt = instant top-of-hate (no
+-- facing needed, longer range); Bash/Kick add hate during Taunt's recast (need melee range + facing, so
+-- they land when mobs are stacked on the tank). Every ability that's ready fires each pass.
+local AE_HATE_ABILITIES = { 'Taunt', 'Bash', 'Kick' }
+
 local function aeTankGrab(rc)
     if myconfig.settings.tankAllMobs ~= true then return end -- feature off; stay silent
     if rc.attackCommandEngage then aeDbg('idle: /cz attack engage is active'); return end
@@ -659,20 +664,37 @@ local function aeTankGrab(rc)
         aeDbg('idle: Enchanter/Bard in group -> AE-tank auto-suppressed (enable "Ignore mezzer" to override)')
         return
     end
-    if not (mq.TLO.Me.AbilityReady('Taunt') and mq.TLO.Me.AbilityReady('Taunt')()) then
-        aeDbg('waiting: Taunt skill not ready'); return
-    end
-    if mq.gettime() < _aeTauntNextTime then return end -- post-taunt cooldown; stay silent
+    if mq.gettime() < _aeTauntNextTime then return end -- brief cycle throttle
+    -- Find a loose auto-hater mob near camp that isn't already on me.
     local meId = mq.TLO.Me.ID()
     local engageables = spawnutils.getXTargetAutoHaterEngageables(rc)
+    local target = nil
     for _, spawn in ipairs(engageables) do
         local sid = spawn.ID()
-        local tgt = (spawn.Target and spawn.Target.ID()) or 0
-        if sid and tgt ~= meId then
-            -- Not on me: taunt it to grab aggro (one multiline so /doability hits the mob we just targeted).
-            mq.cmdf('/multiline ; /squelch /target id %s ; /squelch /doability Taunt', sid)
-            _aeTauntNextTime = mq.gettime() + 1500
-            aeDbg('taunting %s (%s) -- it was not on me', tostring((spawn.CleanName and spawn.CleanName()) or sid), tostring(sid))
+        if sid and ((spawn.Target and spawn.Target.ID()) or 0) ~= meId then target = spawn; break end
+    end
+    if not target then
+        aeDbg('nothing to grab: %d engageable XTarget mob(s), all already on me', #engageables)
+        return
+    end
+    -- Fire every ready hate ability this pass; Taunt grabs, Bash/Kick fill the Taunt recast gaps.
+    local cmds, names = {}, {}
+    for _, ab in ipairs(AE_HATE_ABILITIES) do
+        if mq.TLO.Me.AbilityReady(ab)() then
+            cmds[#cmds + 1] = '/squelch /doability ' .. ab
+            names[#names + 1] = ab
+        end
+    end
+    if #cmds == 0 then
+        aeDbg('waiting: Taunt/Bash/Kick all on cooldown')
+        return
+    end
+    do
+        local sid = target.ID()
+        if sid then
+            mq.cmdf('/multiline ; /squelch /target id %s ; %s', sid, table.concat(cmds, ' ; '))
+            _aeTauntNextTime = mq.gettime() + 1000
+            aeDbg('grabbing %s (%s): %s', tostring((target.CleanName and target.CleanName()) or sid), tostring(sid), table.concat(names, '+'))
             return
         end
     end
