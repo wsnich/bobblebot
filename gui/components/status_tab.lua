@@ -264,6 +264,58 @@ function M.drawControls()
     end
 end
 
+-- Read-only Bard twist panel: shows the live per-mode twist lists (gem:song, in order) so what the bot
+-- will twist is visible without reverse-engineering the Buff/Debuff flags. Order = Buff/Debuff entry
+-- order; see lib/bardtwist.lua. Bard-only; collapsed by default.
+local TWIST_MODES = {
+    { mode = 'idle',   label = 'Idle' },
+    { mode = 'combat', label = 'Combat' },
+    { mode = 'travel', label = 'Travel' },
+    { mode = 'pull',   label = 'Pull' },
+}
+
+local function twistGemLabel(gem)
+    if gem >= 1 and gem <= 12 then
+        local name = mq.TLO.Me.Gem(gem)()
+        return string.format('%d:%s', gem, (name and name ~= '') and name or 'empty')
+    end
+    return string.format('%d:clicky', gem) -- 21-29 = MQ2Twist clicky slots
+end
+
+local function twistListText(gems)
+    if not gems or #gems == 0 then return '(none)' end
+    local parts = {}
+    for _, g in ipairs(gems) do parts[#parts + 1] = twistGemLabel(g) end
+    return table.concat(parts, '  ')
+end
+
+local function drawBardTwistSection()
+    if not bardtwist.IsBard() then return end
+    ImGui.Spacing()
+    if not ImGui.CollapsingHeader('Bard twist') then return end
+    local curMode = bardtwist.GetCurrentTwistMode()
+    local songsOn = bardtwist.SongsEnabled()
+    ImGui.TextColored(WHITE, '%s', 'Songs: ')
+    ImGui.SameLine(0, 2)
+    ImGui.TextColored(songsOn and GREEN or RED, '%s', songsOn and 'On' or 'Off')
+    ImGui.SameLine()
+    ImGui.TextColored(WHITE, '%s', '  Current mode: ')
+    ImGui.SameLine(0, 2)
+    ImGui.TextColored(YELLOW, '%s', curMode or '—')
+    for _, m in ipairs(TWIST_MODES) do
+        local isCur = (m.mode == curMode)
+        ImGui.TextColored(isCur and YELLOW or LIGHT_GREY, '%s%s:', isCur and '> ' or '  ', m.label)
+        ImGui.SameLine(0, 4)
+        ImGui.TextColored(isCur and WHITE or LIGHT_GREY, '%s', twistListText(bardtwist.GetTwistListForMode(m.mode)))
+    end
+    local liveRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
+    if liveRaw and tostring(liveRaw) ~= '' then
+        ImGui.TextColored(WHITE, '%s', 'Now twisting: ')
+        ImGui.SameLine(0, 2)
+        ImGui.TextColored(LIGHT_GREY, '%s', tostring(liveRaw))
+    end
+end
+
 function M.draw()
     local style = ImGui.GetStyle()
     ImGui.Spacing()
@@ -743,6 +795,9 @@ function M.draw()
         ImGui.PopStyleVar(1)
         ImGui.EndTable()
     end
+
+    -- Bard twist visibility (bard-only): live per-mode twist lists, so the twist order is readable.
+    drawBardTwistSection()
 
     -- Recent activity (newest first): the real actions the bot has taken, so the rapid subsystem-check
     -- ("X Check") idle cycle in the header doesn't hide what actually happened.
