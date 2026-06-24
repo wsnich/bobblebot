@@ -186,6 +186,22 @@ function M.drawControls()
     sampleActivity()
     ImGui.TextColored(YELLOW, '%s', getSteadyStateLabel())
     ImGui.SameLine()
+    -- Burn button: start/stop a burn window. Spells/abilities with a `burn` precondition fire during it.
+    do
+        local burnActive = state.IsBurnActive()
+        ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+        ImGui.PushStyleColor(ImGuiCol.Text, burnActive and RED or LIGHT_GREY)
+        local burnLabel = burnActive and string.format('Burn %ds', math.ceil(state.BurnRemainingMs() / 1000)) or 'Burn'
+        if ImGui.SmallButton(burnLabel .. '##burn') then
+            if burnActive then state.ClearBurn() else state.SetBurn() end
+        end
+        ImGui.PopStyleColor(2)
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(
+                'Start/stop a burn window. Spells & abilities with a `burn` precondition (e.g. precondition "return burn") fire while it is active.\nCommand: /cz burn [seconds] | off.')
+        end
+        ImGui.SameLine()
+    end
     local style = ImGui.GetStyle()
     local isPaused = (_G.MasterPause == true)
     local pauseLabel = isPaused and 'Resume' or 'Pause'

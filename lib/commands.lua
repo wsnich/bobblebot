@@ -634,6 +634,17 @@ local function cmd_rezaccept(args)
     printf('\aybobblebot:\axAuto-accept rez %s', (botconfig.config.settings.doRezAccept ~= false) and 'on' or 'off')
 end
 
+local function cmd_burn(args)
+    local arg = args[2] and string.lower(args[2]) or ''
+    if arg == 'off' or arg == 'stop' or arg == '0' then
+        state.ClearBurn()
+        printf('\aybobblebot:\axBurn window stopped.')
+        return
+    end
+    local sec = state.SetBurn(tonumber(args[2])) -- nil arg -> default window
+    printf('\aybobblebot:\axBurn window started (%ds). Spells/abilities with a `burn` precondition will fire.', sec)
+end
+
 local function cmd_charmpetsetup(args)
     local mode = args[2] and string.lower(args[2]) or ''
     if mode == 'on' or mode == 'true' or mode == '1' then
@@ -1179,6 +1190,7 @@ local handlers = {
     mezdebug = cmd_mezdebug,
     rezaccept = cmd_rezaccept,
     charmpetsetup = cmd_charmpetsetup,
+    burn = cmd_burn,
     maanchorleash = cmd_maanchorleash,
     offtank = cmd_offtank,
     cast = cmd_cast,

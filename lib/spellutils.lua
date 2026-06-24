@@ -2019,6 +2019,9 @@ function spellutils.PreCondCheck(Sub, ID, spawnID)
         EvalID = nil; return false
     end
     EvalID = spawnID
+    -- Expose the burn window to preconditions as the global `burn` (mirrors how EvalID is exposed), so
+    -- users can gate burst cooldowns with e.g. precondition = "return burn" or "return burn and ...".
+    burn = state.IsBurnActive()
     local loadprecond, loadError = load('local mq = require("mq") ' .. precond)
     if loadprecond then
         local env = { EvalID = EvalID }
