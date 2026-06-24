@@ -459,6 +459,9 @@ end
 function spellutils.ImmuneCheck(Sub, ID, EvalID)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if not entry then return true end
+    -- recastActive (e.g. SK threat-snare) keeps casting even on an immune mob: the cast still generates
+    -- aggro, so don't block it on the immune list (other spells on the same mob are still blocked).
+    if entry.recastActive then return true end
     local spell = mq.TLO.Spell(entry.spell)()
     local zone = mq.TLO.Zone.ShortName()
     local targetname = mq.TLO.Spawn(EvalID).CleanName()
