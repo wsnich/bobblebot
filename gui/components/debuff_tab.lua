@@ -94,6 +94,24 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
         entry.delay = newDelay; if onChanged then onChanged() end
     end
 
+    -- Slow/Snare/Root/Fear only: keep recasting on an already-affected mob instead of auto-skipping it.
+    local ccCat, ccLabel = spellutils.GetCCDebuffCategory(entry)
+    if ccCat then
+        ImGui.Text('Recast when active')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(string.format(
+                'Default OFF: an already-%s mob is skipped so the bot moves on to other adds.\nEnable to keep recasting %s even when it is already on the mob -- e.g. a tanking Shadow Knight mashing snare/Darkness to build and hold aggro.',
+                ccCat:lower(), (ccLabel or 'it'):lower()))
+        end
+        ImGui.SameLine()
+        local raChecked = entry.recastActive == true
+        local raVal, raPressed = ImGui.Checkbox('##' .. idPrefix .. '_recastActive', raChecked)
+        if raPressed then
+            entry.recastActive = raVal
+            if onChanged then onChanged() end
+        end
+    end
+
     -- Don't stack: labeled grid (4 options per row)
     labeled_grid.checkboxGrid({
         id = idPrefix .. '_dontstack',
@@ -191,8 +209,12 @@ function M.draw()
         if spellutils.IsNukeSpell(entry) then
             local flavor = spellutils.GetNukeFlavor(entry)
             detectedTypeLabel = flavor and (flavor:gsub('^%l', string.upper) .. ' nuke') or 'Nuke'
+        elseif spellutils.IsMezSpell(entry) then
+            detectedTypeLabel = 'Mez'
         else
-            detectedTypeLabel = spellutils.IsMezSpell(entry) and 'Mez' or nil
+            -- Slow / Snare / Root / Fear: recognized type; the engine auto-skips already-affected mobs.
+            local _, ccLabel = spellutils.GetCCDebuffCategory(entry)
+            detectedTypeLabel = ccLabel
         end
         local detectedTypeLabel2 = spellutils.IsTargetedAESpell(entry) and 'Targeted AE' or nil
         spell_entry.draw(entry, {

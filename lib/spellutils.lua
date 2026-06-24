@@ -313,6 +313,18 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         and spellutils.SpawnHasDebuffSpell(entry.spell, spawnId) then
         return mezSkip('our mez on spawn')
     end
+    -- First-class slow/snare/root/fear: auto-skip a spawn that already has the matching effect (from
+    -- anyone), even with no explicit dontStack/stopWhen entry. Combined with the matar->notmatar
+    -- evaluation order this means the engaged (MA/MT) mob is debuffed first, then the bot moves on to
+    -- camp adds instead of re-applying an already-active CC/mitigation debuff.
+    -- entry.recastActive opts out (e.g. a Shadow Knight mashing snare/Darkness on the MA target to
+    -- build and hold aggro while tanking wants to keep casting even though the mob is already snared).
+    if spawnId and not isMez and not entry.recastActive then
+        local ccCat = spellutils.GetCCDebuffCategory(entry)
+        if ccCat and spellutils.SpawnHasStopWhenCategory(spawnId, { ccCat }) then
+            return false
+        end
+    end
     local tarstacks = spellutils.SpellStacksSpawn(entry, spawn.ID())
     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks then
         if phase == 'notmatar' and isMez then
@@ -1170,6 +1182,54 @@ function spellutils.IsConcussionSpell(entry)
     if not mq.TLO.Spell(entry.spell)() then return false end
     local ok, hasConc = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(92)() end)
     return ok and hasConc
+end
+
+-- True if entry's spell has the given SPA. Handles item vs spell gem; never throws. Mirrors the
+-- IsConcussionSpell pattern for the crowd-control SPAs below.
+local function entryHasSPA(entry, spa)
+    if not entry or not entry.spell then return false end
+    if entry.gem == 'item' then
+        if not mq.TLO.FindItem(entry.spell)() then return false end
+        local ok, has = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(spa)() end)
+        return ok and has == true
+    end
+    if not mq.TLO.Spell(entry.spell)() then return false end
+    local ok, has = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(spa)() end)
+    return ok and has == true
+end
+
+-- Crowd-control / mitigation debuff type detectors (MacroQuest spelleffects.h SPAs):
+--   3 = MovementRate (snare), 11 = AttackSpeed (slow), 23 = Fear, 99 = Root.
+function spellutils.IsSnareSpell(entry) return entryHasSPA(entry, 3) end
+function spellutils.IsSlowSpell(entry) return entryHasSPA(entry, 11) end
+function spellutils.IsFearSpell(entry) return entryHasSPA(entry, 23) end
+function spellutils.IsRootSpell(entry) return entryHasSPA(entry, 99) end
+
+-- For a slow/snare/root/fear debuff, the spawn-effect category to auto-skip when already present, plus
+-- a short label for the GUI. Returns (categoryTag, label) or nil. Single primary classification (root
+-- is the most-defining), so a combo spell skips on its strongest effect. Mez/charm are handled by their
+-- own systems and excluded here. Cached per spell once resolvable (SPAs are immutable per spell).
+local _ccCatCache = {}
+function spellutils.GetCCDebuffCategory(entry)
+    if not entry or not entry.spell then return nil end
+    local key = (entry.gem == 'item' and 'item|' or 'spell|') .. entry.spell
+    local c = _ccCatCache[key]
+    if c ~= nil then
+        if c == false then return nil end
+        return c[1], c[2]
+    end
+    local resolvable = (entry.gem == 'item') and (mq.TLO.FindItem(entry.spell)() ~= nil)
+        or (mq.TLO.Spell(entry.spell)() ~= nil)
+    if not resolvable then return nil end -- don't cache a premature negative before spell data loads
+    local cat, label
+    if not (spellutils.IsMezSpell(entry) or spellutils.IsCharmSpell(entry)) then
+        if spellutils.IsRootSpell(entry) then cat, label = 'Rooted', 'Root'
+        elseif spellutils.IsSnareSpell(entry) then cat, label = 'Snared', 'Snare'
+        elseif spellutils.IsFearSpell(entry) then cat, label = 'Feared', 'Fear'
+        elseif spellutils.IsSlowSpell(entry) then cat, label = 'Slowed', 'Slow' end
+    end
+    _ccCatCache[key] = cat and { cat, label } or false
+    return cat, label
 end
 
 --- When MT/MA is self, charinfo may lag; use Target if it is in MobList.
