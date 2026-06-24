@@ -1411,6 +1411,17 @@ function spellutils.MezLog(fmt, ...)
     printf('\aybobblebot:\ax [Mez t=%s] ' .. fmt, tostring(mq.gettime()), ...)
 end
 
+-- Buff diagnostic: logs why a buff is/ isn't cast on a target. OFF by default (chatty). Toggle with
+-- /cz buffdebug on|off when troubleshooting "why won't this buff cast".
+local _buffDebug = false
+function spellutils.SetBuffDebug(on) _buffDebug = (on == true) end
+function spellutils.IsBuffDebug() return _buffDebug end
+
+function spellutils.BuffLog(fmt, ...)
+    if not _buffDebug then return end
+    printf('\aybobblebot:\ax [Buff] ' .. fmt, ...)
+end
+
 --- Throttled mez/debuff resume diagnostic (see botdebuff multi-mez debugging).
 function spellutils.DbgMezTrace(fmt, ...)
     local now = mq.gettime()

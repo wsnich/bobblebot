@@ -625,6 +625,19 @@ local function cmd_mezdebug(args)
     printf('\aybobblebot:\ax Mez debug logging %s', spellutils.IsMezDebug() and 'on' or 'off')
 end
 
+local function cmd_buffdebug(args)
+    local spellutils = require('lib.spellutils')
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        spellutils.SetBuffDebug(true)
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        spellutils.SetBuffDebug(false)
+    else
+        spellutils.SetBuffDebug(not spellutils.IsBuffDebug())
+    end
+    printf('\aybobblebot:\ax Buff debug logging %s', spellutils.IsBuffDebug() and 'on' or 'off')
+end
+
 local function cmd_rezaccept(args)
     local mode = args[2] and string.lower(args[2]) or ''
     if mode == 'on' or mode == 'true' or mode == '1' then
@@ -1192,6 +1205,7 @@ local handlers = {
     xtargetonly = cmd_engagextargetonly,
     role = cmd_role,
     mezdebug = cmd_mezdebug,
+    buffdebug = cmd_buffdebug,
     rezaccept = cmd_rezaccept,
     charmpetsetup = cmd_charmpetsetup,
     burn = cmd_burn,

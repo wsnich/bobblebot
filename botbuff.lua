@@ -50,9 +50,17 @@ local function BuffEvalBotNeedsBuff(botid, botname, spellid, rangeSq, index, tar
     local botfreebuffslots = peer.FreeBuffSlots
     local botspawn = spawnid and mq.TLO.Spawn(spawnid)
     local botdistSq = botspawn and utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), botspawn.X(), botspawn.Y())
-    if not (spawnid and botbuffstack and botfreebuffslots and botfreebuffslots > 0) then return nil, nil end
-    if not IconCheck(index, spawnid) or botbuff then return nil, nil end
+    if not (spawnid and botbuffstack and botfreebuffslots and botfreebuffslots > 0) then
+        spellutils.BuffLog('skip %s [%s]: %s', botname, targethit,
+            (not spawnid) and 'no spawn' or (not botbuffstack) and 'will not stack' or 'no free buff slots')
+        return nil, nil
+    end
+    if not IconCheck(index, spawnid) or botbuff then
+        spellutils.BuffLog('skip %s [%s]: already has it', botname, targethit)
+        return nil, nil
+    end
     if rangeSq and botdistSq and botdistSq <= rangeSq then return botid, targethit end
+    spellutils.BuffLog('skip %s [%s]: out of range', botname, targethit)
     return nil, nil
 end
 
@@ -77,7 +85,12 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
                 if IconCheck(index, myid) then
                     if tartype == 'Self' and stacks then return myid, 'self' end
                     if stacks then return myid, 'self' end
+                    spellutils.BuffLog('skip self %s: will not stack', spell)
+                else
+                    spellutils.BuffLog('skip self %s: already present (icon)', spell)
                 end
+            else
+                spellutils.BuffLog('skip self %s: still up', spell)
             end
         end
         return nil, nil
