@@ -664,7 +664,7 @@ end
 -- auto-attacks it and fires Taunt/Bash/Kick, ROTATING to the next loose add each Taunt recast so every add
 -- gets refreshed top-of-hate (instead of hammering one it can't peel). Returns nil when AE-tank is inactive
 -- or everything is already on us (melee then falls back to the normal/main target).
-local function aeTankGrab(rc)
+local function aeTankGrab(rc, killId)
     if myconfig.settings.tankAllMobs ~= true then return nil end -- feature off; stay silent
     if rc.attackCommandEngage then aeDbg('idle: /cz attack engage is active'); return nil end
     if not tankrole.AmIMainTank() then
@@ -699,24 +699,39 @@ local function aeTankGrab(rc)
         _aeCur = aeRotateNext(loose, _aeCur)
     end
     local sid = _aeCur
-    -- Fire every ready hate ability at the current add (throttled); targeting here lines up the engage.
+
+    -- When this tank is ALSO the Main Assist, the DPS assist its target -- so keep its engage/auto-attack
+    -- (and therefore the DPS) locked on the main kill mob, and just TAUNT-FLICK the add: target it, taunt,
+    -- snap the target back to the kill mob. Adds are held by rotated Taunt; DPS never leave the initial mob.
+    -- Otherwise (MT-only, separate MA) steer melee onto the add -- DPS assist the real MA, so unaffected.
+    local flick = tankrole.AmIMainAssist() and killId and killId > 0 and killId ~= sid
     if mq.gettime() >= _aeTauntNextTime then
-        local cmds, names = {}, {}
-        for _, ab in ipairs(AE_HATE_ABILITIES) do
-            if mq.TLO.Me.AbilityReady(ab)() then
-                cmds[#cmds + 1] = '/squelch /doability ' .. ab
-                names[#names + 1] = ab
-            end
-        end
-        if #cmds > 0 then
-            mq.cmdf('/multiline ; /squelch /target id %s ; %s', sid, table.concat(cmds, ' ; '))
-        end
         local nm = (mq.TLO.Spawn(sid).CleanName and mq.TLO.Spawn(sid).CleanName()) or sid
-        aeDbg('grabbing %s (%s, %d loose): %s + auto-attack', tostring(nm), tostring(sid), #loose,
-            (#cmds > 0) and table.concat(names, '+') or 'abilities on cooldown')
+        if flick then
+            if mq.TLO.Me.AbilityReady('Taunt')() then
+                mq.cmdf('/multiline ; /squelch /target id %s ; /squelch /doability Taunt ; /squelch /target id %s', sid, killId)
+                aeDbg('taunt-flick %s (%s, %d loose) -- DPS stay on %s', tostring(nm), tostring(sid), #loose, tostring(killId))
+            else
+                aeDbg('waiting: Taunt not ready (%d loose) -- DPS stay on %s', #loose, tostring(killId))
+            end
+        else
+            local cmds, names = {}, {}
+            for _, ab in ipairs(AE_HATE_ABILITIES) do
+                if mq.TLO.Me.AbilityReady(ab)() then
+                    cmds[#cmds + 1] = '/squelch /doability ' .. ab
+                    names[#names + 1] = ab
+                end
+            end
+            if #cmds > 0 then
+                mq.cmdf('/multiline ; /squelch /target id %s ; %s', sid, table.concat(cmds, ' ; '))
+            end
+            aeDbg('grabbing %s (%s, %d loose): %s + auto-attack', tostring(nm), tostring(sid), #loose,
+                (#cmds > 0) and table.concat(names, '+') or 'abilities on cooldown')
+        end
         _aeTauntNextTime = mq.gettime() + 1000
     end
-    return sid -- steer melee onto this add
+    if flick then return nil end -- engage/auto-attack stays on the kill mob; DPS stay on it
+    return sid -- MT-only: steer melee onto this add
 end
 
 -- Resolve engageTargetId from role (MT/MA/OT/DPS), then engage or disengage. Only sets melee busy state via canStartBusyState.
@@ -725,7 +740,6 @@ function botmelee.AdvCombat()
     local mainTankName = tankrole.GetMainTankName()
     local assistpct = myconfig.melee.assistpct or 99
     local rc = state.getRunconfig()
-    local aeLooseId = aeTankGrab(rc)
 
     if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Type() == 'PC' then
         clearTankCombatState()
@@ -799,9 +813,10 @@ function botmelee.AdvCombat()
             id = resolveMeleeAssistTarget(assistName, assistpct)
         end
     end
-    -- AE-tank override: while a loose add isn't on us, steer melee onto it (stick + auto-attack until it
-    -- has aggro), then revert to the normal target once everything is on us. Already safety-filtered.
-    if aeLooseId then id = aeLooseId end
+    -- AE-tank: peel loose adds. When this tank is also the MA it Taunt-flicks (returns nil; engage + DPS
+    -- stay on the kill mob `id`); when MT-only it returns an add to steer melee onto. `id` is the kill mob.
+    local aeOverride = aeTankGrab(rc, id)
+    if aeOverride then id = aeOverride end
     if id and charm.isCharmSkipped(id, rc) then id = nil end
     if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
     rc.engageTargetId = id
