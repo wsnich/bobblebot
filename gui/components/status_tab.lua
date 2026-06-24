@@ -535,15 +535,15 @@ function M.draw()
             if campAvail > 0 then
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + campAvail - campIconW - groupCampIconW - GROUP_CAMP_GAP)
             end
-            -- Make GROUP camp: set my camp here AND tell every group member to camp at their own spot via DanNet.
+            -- Make GROUP camp: set my camp here AND tell every group member to camp at their own spot via MQRemote.
             ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
             ImGui.PushStyleColor(ImGuiCol.Text, WHITE)
             if ImGui.SmallButton(groupCampIcon .. '##group_camp') then
                 if not mobilePullMode then botmove.MakeCamp('on') end
-                mq.cmd('/dgge /cz makecamp on')
+                mq.cmd('/rc group /cz makecamp on')
             end
             if ImGui.IsItemHovered() then
-                ImGui.SetTooltip('Make GROUP camp: set my camp here and tell every group member (DanNet /dgge) to camp at their own position.')
+                ImGui.SetTooltip('Make GROUP camp: set my camp here and tell every group member (via MQRemote) to camp at their own position.')
             end
             ImGui.PopStyleColor(2)
             ImGui.SameLine(0, GROUP_CAMP_GAP)

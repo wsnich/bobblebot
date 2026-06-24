@@ -242,12 +242,12 @@ local function cmd_makecamp(args, str)
     end
 end
 
--- Make GROUP camp: set my camp here and tell every group member to camp at their own spot via DanNet
--- game-group execute (/dgge). Mirrors the Status-tab group-camp button.
+-- Make GROUP camp: set my camp here and tell every group member to camp at their own spot via MQRemote
+-- group broadcast (/rc group). Mirrors the Status-tab group-camp button. Peers need MQRemote loaded.
 local function cmd_groupcamp(args, str)
     botmove.MakeCamp('on')
-    mq.cmd('/dgge /cz makecamp on')
-    printf('\aybobblebot:\ax Group camp set (me + /dgge group).')
+    mq.cmd('/rc group /cz makecamp on')
+    printf('\aybobblebot:\ax Group camp set (me + MQRemote group).')
 end
 
 local function cmd_follow(args, str)
