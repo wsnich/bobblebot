@@ -46,8 +46,7 @@ After a successful setvar, config loaders run so the new value takes effect imme
 | **settings.campAcleash** | boolean | (varies) | Chase beyond camp **acleash** when on. |
 | **settings.doRezAccept** | boolean | `true` | Auto-accept resurrection offers. |
 | **settings.rezAcceptMinPct** | number | 0 | Min corpse HP % to auto-accept rez (0 = any). |
-| **settings.mezMinLevel** | number | 0 | Global mez min level override (0 = use spell data). |
-| **settings.mezMaxLevel** | number | 0 | Global mez max level override (0 = use spell data). |
+| **settings.mezMinLevel** | number | 0 | Minimum mob level to mez (0 = disabled; spell MaxLevel still applies). |
 | **settings.spelldb** | string | `'spells.db'` | Spell database file. |
 
 ---

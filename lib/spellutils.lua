@@ -283,17 +283,11 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - target level %s exceeds spell max level %s', name, spawn.ID(), spawnLevel, ctx.spellmaxlvl)
         return false
     end
-    -- User mez level filter: only mez mobs within [min, max] (0 = unbounded on that side). Per-spell
-    -- mezMinLevel/mezMaxLevel override the character-wide settings.mezMinLevel/mezMaxLevel default per
-    -- bound. Lets an enchanter mez only the dangerous high-level adds, or skip trivial low-level ones.
+    -- User mez min level: skip trivial low-level adds (0 = disabled; spell MaxLevel still applies above).
     if isMez and spawnId then
-        local minL = tonumber(entry.mezMinLevel) or 0
-        local maxL = tonumber(entry.mezMaxLevel) or 0
-        if minL == 0 then minL = tonumber(botconfig.config.settings.mezMinLevel) or 0 end
-        if maxL == 0 then maxL = tonumber(botconfig.config.settings.mezMaxLevel) or 0 end
-        if (minL > 0 or maxL > 0) and spawnLevel then
-            if minL > 0 and spawnLevel < minL then return mezSkip('below mez min level ' .. minL) end
-            if maxL > 0 and spawnLevel > maxL then return mezSkip('above mez max level ' .. maxL) end
+        local minL = tonumber(botconfig.config.settings.mezMinLevel) or 0
+        if minL > 0 and spawnLevel and spawnLevel < minL then
+            return mezSkip('below mez min level ' .. minL)
         end
     end
     -- recastActive (e.g. SK threat-snare) re-casts even when the spell's own effect is already on the

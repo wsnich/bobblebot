@@ -6,7 +6,7 @@ This document explains how to set up **mezzing** (crowd control: mez spells on a
 
 - **Mezzing = debuffs.** There is no separate “mez” section. You add your mez spell(s) under **`config.debuff.spells`** and set **bands** to **notmatar** (adds) so the bot mezzes mobs other than the MA’s target. Optionally use **matar** or **named** for specific cases.
 - **Charm** (mez that makes the mob your pet) uses the same debuff entries; charm spells are auto-detected. Add your charm spell as a debuff and manage allowed mob names in the **Charm list** for the current zone (Mob Lists tab or `/cz charm`). When charm breaks, the bot can recast. See [Debuffing configuration](debuffing-configuration.md).
-- **Level:** The bot checks the spell’s **MaxLevel** against the mob’s level for Enthrall-type spells; mobs above that level are skipped.
+- **Level:** The bot checks the spell’s **MaxLevel** against the mob’s level for Enthrall-type spells; mobs above that level are skipped. Optionally set **Minimum mez level** on the Debuff tab (or **`settings.mezMinLevel`**) to skip trivial low-level adds; `0` disables that filter.
 - For all debuff options (recast, delay, immune check, etc.), see [Debuffing configuration](debuffing-configuration.md).
 
 ---
@@ -54,7 +54,9 @@ Add your charm spell as a debuff entry (charm spells are auto-detected). Manage 
 
 ## Level limits
 
-For Enthrall-type (mez) spells, the bot uses the spell’s **MaxLevel** and the mob’s level. If the mob is above **MaxLevel**, the spell is not cast on that mob. This is handled automatically; you do not set level in the config.
+For Enthrall-type (mez) spells, the bot uses the spell’s **MaxLevel** and the mob’s level. If the mob is above **MaxLevel**, the spell is not cast on that mob. This is handled automatically; you do not set that limit in the config.
+
+To avoid mezzing very low-level adds (e.g. trivial trash), set **Minimum mez level** at the top of the **Debuff** tab when you have a mez spell configured, or use **`/cz setvar settings.mezMinLevel <level>`**. `0` means no minimum. This is separate from spell **MaxLevel** — both checks apply.
 
 ---
 
