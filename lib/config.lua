@@ -121,7 +121,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script', 'roles' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'doRezAccept', 'rezAcceptMinPct' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'doRezAccept', 'rezAcceptMinPct', 'mezMinLevel', 'mezMaxLevel' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
@@ -153,7 +153,7 @@ local ROLE_ALIASES = {
 local spellSlotOrder = {
     heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'inCombat', 'tarcnt', 'bands', 'healResource', 'precondition' },
     buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'precondition' },
-    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack', 'stopWhen', 'recastActive' },
+    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack', 'stopWhen', 'recastActive', 'mezMinLevel', 'mezMaxLevel' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
     pull = { 'gem', 'spell', 'range' },
 }
@@ -960,6 +960,12 @@ function M.Load(path)
     if M.config.settings.doRezAccept == nil then M.config.settings.doRezAccept = true end
     if M.config.settings.rezAcceptMinPct == nil then M.config.settings.rezAcceptMinPct = 0 end
     M.config.settings.rezAcceptMinPct = tonumber(M.config.settings.rezAcceptMinPct) or 0
+    -- Character-wide mez level default (mirrors MuleAssist MezMinLevel/MezMaxLevel); per-spell
+    -- mezMinLevel/mezMaxLevel override per-bound when > 0. 0 = unbounded on that side.
+    if M.config.settings.mezMinLevel == nil then M.config.settings.mezMinLevel = 0 end
+    if M.config.settings.mezMaxLevel == nil then M.config.settings.mezMaxLevel = 0 end
+    M.config.settings.mezMinLevel = tonumber(M.config.settings.mezMinLevel) or 0
+    M.config.settings.mezMaxLevel = tonumber(M.config.settings.mezMaxLevel) or 0
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "automatic" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end
     if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings

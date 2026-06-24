@@ -112,6 +112,29 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
         end
     end
 
+    -- Mez only: optional target level filter (0 = unbounded). For AE mez, set a Min targets band below.
+    if spellutils.IsMezSpell(entry) then
+        ImGui.Text('Mez level')
+        if ImGui.IsItemHovered() then ImGui.SetTooltip(
+            'Per-spell override of the Default mez level. 0 on a side = use the Default mez level (top of tab) for that bound. e.g. 45 to 0 mezzes level 45+ for this spell.') end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local minL = tonumber(entry.mezMinLevel) or 0
+        local minNew, minCh = inputs.boundedInt(idPrefix .. '_mezminlvl', minL, 0, 130, 1, '##' .. idPrefix .. '_mezminlvl')
+        if minCh then
+            entry.mezMinLevel = minNew; if onChanged then onChanged() end
+        end
+        ImGui.SameLine()
+        ImGui.Text('to')
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local maxL = tonumber(entry.mezMaxLevel) or 0
+        local maxNew, maxCh = inputs.boundedInt(idPrefix .. '_mezmaxlvl', maxL, 0, 130, 1, '##' .. idPrefix .. '_mezmaxlvl')
+        if maxCh then
+            entry.mezMaxLevel = maxNew; if onChanged then onChanged() end
+        end
+    end
+
     -- Don't stack: labeled grid (4 options per row)
     labeled_grid.checkboxGrid({
         id = idPrefix .. '_dontstack',
@@ -188,6 +211,34 @@ function M.draw()
     local spells = debuff.spells
     spell_entry.drawTabIntro({ flagKey = 'dodebuff', flagNoun = 'Debuff / Mez / Nuke', isEmpty = #spells == 0,
         emptyHint = 'No entries configured. Click "Add debuff" below — this tab also holds mez, nukes, DoTs, and combat abilities.' })
+    -- Character-wide mez level default (MuleAssist-style one-knob), applied to any mez spell left at
+    -- 0/0 below. Shown only when a mez spell is configured so it doesn't clutter non-mez characters.
+    local hasMez = false
+    for _, e in ipairs(spells) do
+        if spellutils.IsMezSpell(e) then hasMez = true; break end
+    end
+    if hasMez then
+        ImGui.Text('Default mez level')
+        if ImGui.IsItemHovered() then ImGui.SetTooltip(
+            'Applies to mez spells left at 0 below. Only mez mobs within this level range (0 = no limit on that side).') end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local gmin = tonumber(botconfig.config.settings.mezMinLevel) or 0
+        local gminNew, gminCh = inputs.boundedInt('debuff_global_mezmin', gmin, 0, 130, 1, '##debuff_global_mezmin')
+        if gminCh then
+            botconfig.config.settings.mezMinLevel = gminNew; runConfigLoaders()
+        end
+        ImGui.SameLine()
+        ImGui.Text('to')
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local gmax = tonumber(botconfig.config.settings.mezMaxLevel) or 0
+        local gmaxNew, gmaxCh = inputs.boundedInt('debuff_global_mezmax', gmax, 0, 130, 1, '##debuff_global_mezmax')
+        if gmaxCh then
+            botconfig.config.settings.mezMaxLevel = gmaxNew; runConfigLoaders()
+        end
+        ImGui.Separator()
+    end
     for i, entry in ipairs(spells) do
         -- Normalize legacy tokens so the UI reflects canonical matar/notmatar.
         if entry.bands and type(entry.bands) == 'table' then
