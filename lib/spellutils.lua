@@ -2142,6 +2142,8 @@ function spellutils.InterruptCheckDontStack(entry, target, spellname)
         end
     end
     if not tag then return end
+    -- recastActive re-casts on its own effect (threat); don't interrupt for the spell's own category.
+    if entry.recastActive and tag == select(1, spellutils.GetCCDebuffCategory(entry)) then return end
     printf('\aybobblebot:\axInterrupt %s, target already %s', spellname, tag)
     spellutils.RecordDontStackDebuffFromSpawn(target, entry.spell, tag)
     spellutils.interruptActiveCast(state.getRunconfig())
@@ -2212,7 +2214,9 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
     elseif sub == 'debuff' then
         -- For refresh casters: only interrupt if the existing debuff has MORE time left than we want.
         -- This prevents getting interrupted mid-refresh when remaining is already below the recast threshold.
-        if buffPresent then
+        -- recastActive (e.g. SK threat-snare) intentionally re-casts an active debuff for hate, so it must
+        -- never be interrupted for being already present -- otherwise it loops (start cast -> interrupt).
+        if buffPresent and not (entry and entry.recastActive) then
             local thresholdMs = spellutils.GetDebuffRefreshThresholdMs()
             if (buffdur or 0) > thresholdMs then
                 printf('\aybobblebot:\axInterrupt %s on MobID %s, debuff remaining %sms > %sms', spellname, target,
