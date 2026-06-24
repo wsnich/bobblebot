@@ -306,15 +306,19 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
             if maxL > 0 and spawnLevel > maxL then return mezSkip('above mez max level ' .. maxL) end
         end
     end
+    -- recastActive (e.g. SK threat-snare) re-casts even when the spell's own effect is already on the
+    -- mob: it overrides a dontStack/stopWhen on its OWN category (other categories still apply) plus the
+    -- won't-re-stack and debuff-still-active gates below. HP/level/range/mob-count bands still apply.
+    local recastOwnCat = entry.recastActive and spellutils.GetCCDebuffCategory(entry) or nil
     if entry.stopWhen and spawnId then
         local stopTag = spellutils.SpawnHasStopWhenCategory(spawnId, entry.stopWhen)
-        if stopTag then
+        if stopTag and stopTag ~= recastOwnCat then
             return mezSkip('stopWhen ' .. stopTag)
         end
     end
     if entry.dontStack and spawnId then
         local dontTag = spellutils.SpawnHasDebuffCategory(spawnId, entry.dontStack)
-        if dontTag then
+        if dontTag and dontTag ~= recastOwnCat then
             spellutils.RecordDontStackDebuffFromSpawn(spawnId, entry.spell, dontTag)
             if isMez and phase == 'notmatar' then
                 return mezSkip('spawn already ' .. dontTag)
@@ -345,12 +349,13 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
             printf('\aybobblebot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', name, spawn.ID())
             return false
         end
-        if phase == 'matar' and not spellutils.IsConcussionSpell(entry) then
+        if phase == 'matar' and not spellutils.IsConcussionSpell(entry) and not entry.recastActive then
             return false
         end
     end
     local debuffRefreshThresholdMs = spellutils.GetDebuffRefreshThresholdMs()
     if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and ctx.spellid
+        and not entry.recastActive
         and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, debuffRefreshThresholdMs) then
         if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId) then
             spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)

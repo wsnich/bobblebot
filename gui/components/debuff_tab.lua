@@ -100,7 +100,7 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
         ImGui.Text('Recast when active')
         if ImGui.IsItemHovered() then
             ImGui.SetTooltip(string.format(
-                'Default OFF: an already-%s mob is skipped so the bot moves on to other adds.\nEnable to keep recasting %s even when it is already on the mob -- e.g. a tanking Shadow Knight mashing snare/Darkness to build and hold aggro.',
+                'Default OFF: an already-%s mob is skipped so the bot moves on to other adds.\nEnable for THREAT: keep recasting %s even while it is already on the mob -- overrides a matching Don\'t-stack/Stop-when and the still-active gating. Still respects HP/range/level bands and Delay, so for a Shadow Knight threat-snare set HP Max to 100.',
                 ccCat:lower(), (ccLabel or 'it'):lower()))
         end
         ImGui.SameLine()
