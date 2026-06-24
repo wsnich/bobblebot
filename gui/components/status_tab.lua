@@ -641,10 +641,32 @@ function M.draw()
                 local acleashChecked, acleashToggled = ImGui.Checkbox('##camp_acleash', acleashOn)
                 if acleashToggled then
                     rc.doCampAcleash = acleashChecked
+                    botconfig.config.settings.campAcleash = acleashChecked -- persist (seeded back at startup)
+                    runConfigLoaders()
                 end
                 if ImGui.IsItemHovered() then
                     ImGui.SetTooltip(
-                        'When off, chase current target and assist MA outside Radius; new picks still use Radius. Session only.')
+                        'On: return to camp instead of chasing past Radius (recommended to keep the tank close).\nOff: chase the current target / assist MA past Radius. Persists across reloads.')
+                end
+                -- Chase-fleeing exception: even when leashed, chase a fleeing/low-HP runner to finish it.
+                ImGui.TextColored(WHITE, '%s', 'Chase fleeing: ')
+                ImGui.SameLine(0, 2)
+                local chaseOn = botconfig.config.settings.chaseFleeing ~= false
+                local chaseChecked, chaseToggled = ImGui.Checkbox('##camp_chasefleeing', chaseOn)
+                if chaseToggled then
+                    botconfig.config.settings.chaseFleeing = chaseChecked; runConfigLoaders()
+                end
+                if ImGui.IsItemHovered() then
+                    ImGui.SetTooltip('With Leash to radius on, still chase a fleeing (running-away) or low-HP mob past Radius to finish it -- but no further than the max below.')
+                end
+                if chaseOn then
+                    ImGui.TextColored(WHITE, '%s', 'Chase max: ')
+                    ImGui.SameLine(0, 2)
+                    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+                    local cfMax = botconfig.config.settings.chaseFleeingMaxDist or 250
+                    local cfNew, cfCh = inputs.boundedInt('camp_chasemax', cfMax, 10, 2000, 10, '##camp_chasemax')
+                    if cfCh then botconfig.config.settings.chaseFleeingMaxDist = cfNew; runConfigLoaders() end
+                    if ImGui.IsItemHovered() then ImGui.SetTooltip('Max distance from camp to chase a fleeing mob before giving up and returning.') end
                 end
             end
             ImGui.TextColored(WHITE, '%s', '# Mobs: ')

@@ -121,7 +121,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script', 'roles' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'doRezAccept', 'rezAcceptMinPct', 'mezMinLevel', 'mezMaxLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'premem', 'campAcleash', 'upgradeCheck', 'autoScribe', 'winTitle' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'doRezAccept', 'rezAcceptMinPct', 'mezMinLevel', 'mezMaxLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'premem', 'campAcleash', 'upgradeCheck', 'autoScribe', 'winTitle', 'chaseFleeing', 'chaseFleeingMaxDist' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
@@ -995,6 +995,10 @@ function M.Load(path)
     if M.config.settings.autoScribe == nil then M.config.settings.autoScribe = true end
     -- Rename the EQ window (taskbar) to this character's name while the bot runs (default on).
     if M.config.settings.winTitle == nil then M.config.settings.winTitle = true end
+    -- With leash-to-radius on, still chase a fleeing/low-HP runner past camp to finish it (default on),
+    -- but no further than chaseFleeingMaxDist from camp.
+    if M.config.settings.chaseFleeing == nil then M.config.settings.chaseFleeing = true end
+    if M.config.settings.chaseFleeingMaxDist == nil then M.config.settings.chaseFleeingMaxDist = 250 end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "automatic" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end
     if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings

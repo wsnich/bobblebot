@@ -821,6 +821,19 @@ local function cmd_wintitle(args)
     printf('\aybobblebot:\axWindow title rename %s', (botconfig.config.settings.winTitle ~= false) and 'on' or 'off')
 end
 
+local function cmd_chasefleeing(args)
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        botconfig.config.settings.chaseFleeing = true
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        botconfig.config.settings.chaseFleeing = false
+    else
+        botconfig.config.settings.chaseFleeing = not (botconfig.config.settings.chaseFleeing ~= false)
+    end
+    botconfig.ApplyAndPersist()
+    printf('\aybobblebot:\axChase fleeing mobs %s (leash still holds for everything else)', (botconfig.config.settings.chaseFleeing ~= false) and 'on' or 'off')
+end
+
 local function cmd_charmpetsetup(args)
     local mode = args[2] and string.lower(args[2]) or ''
     if mode == 'on' or mode == 'true' or mode == '1' then
@@ -1338,6 +1351,7 @@ local handlers = {
     show = cmd_ui,
     makecamp = cmd_makecamp,
     groupcamp = cmd_groupcamp,
+    chasefleeing = cmd_chasefleeing,
     follow = cmd_follow,
     followme = cmd_followme,
     travel = cmd_travel,

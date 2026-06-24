@@ -178,13 +178,36 @@ function spawnutils.isCampAcleashEnforced(rc)
     return rc.doCampAcleash ~= false
 end
 
---- True when an alive engageTargetId should be kept outside MobList (doCampAcleash off + camp set).
+-- True when `id` is a fleeing/low-HP runner we should chase past the leash to finish it -- but only out to
+-- settings.chaseFleeingMaxDist from camp (so we don't bolt across the zone). Sticky once started (rc.chaseFleerId)
+-- so it doesn't yo-yo when Fleeing flickers; cleared when the mob dies or runs past the cap.
+local function isChasableFleer(rc, id)
+    if botconfig.config.settings.chaseFleeing == false then return false end
+    local sp = mq.TLO.Spawn(id)
+    if not sp() or not spawnutils.isAliveEngageSpawn(sp) then rc.chaseFleerId = nil; return false end
+    local mc = rc.makecamp
+    if mc and mc.x and mc.y then
+        local maxd = tonumber(botconfig.config.settings.chaseFleeingMaxDist) or 250
+        local dx, dy = (sp.X() or 0) - mc.x, (sp.Y() or 0) - mc.y
+        if (dx * dx + dy * dy) > (maxd * maxd) then rc.chaseFleerId = nil; return false end -- too far; give up
+    end
+    if rc.chaseFleerId == id then return true end -- already committed to this runner
+    if sp.Fleeing() or ((tonumber(sp.PctHPs()) or 100) <= 25) then
+        rc.chaseFleerId = id
+        return true
+    end
+    return false
+end
+
+--- True when an alive engageTargetId should be kept outside MobList and chased: leash off (chase anything),
+--- or leash on but the target is a fleeing/low-HP runner within the chase cap.
 function spawnutils.shouldChaseOutsideCamp(rc)
-    if spawnutils.isCampAcleashEnforced(rc) then return false end
     rc = rc or state.getRunconfig()
     local id = rc.engageTargetId
     if not id or id <= 0 then return false end
-    return spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id))
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id)) then return false end
+    if not spawnutils.isCampAcleashEnforced(rc) then return true end -- leash off: chase the engaged target
+    return isChasableFleer(rc, id)                                    -- leash on: only chase a runner
 end
 
 --- True when an alive engageTargetId should not be cleared just because it left MobList.
