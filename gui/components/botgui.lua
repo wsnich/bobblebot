@@ -12,6 +12,7 @@ local moblist_tab = require('gui.components.moblist_tab')
 local rolelists_tab = require('gui.components.rolelists_tab')
 local script_tab = require('gui.components.script_tab')
 local status_tab = require('gui.components.status_tab')
+local help_tab = require('gui.components.help_tab')
 local theme = require('gui.widgets.theme')
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = 'dev' end
@@ -48,6 +49,7 @@ local TABS = {
     { label = 'Roles',           draw = rolelists_tab.draw },
     { label = 'Mob lists',       draw = moblist_tab.draw },
     { label = 'Advanced',        draw = script_tab.draw },
+    { label = 'Help',            draw = help_tab.draw },
 }
 
 local function updateImGui()
