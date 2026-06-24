@@ -315,13 +315,20 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         end
     end
     local debuffRefreshThresholdMs = spellutils.GetDebuffRefreshThresholdMs()
-    if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and ctx.spellid
-        and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, debuffRefreshThresholdMs) then
-        if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId) then
-            spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
-            spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)
-        else
-            return mezSkip('debuff still active')
+    local durationSec = tonumber(ctx.spelldur) or 0
+    if durationSec <= 0 and entry.gem == 'disc' then
+        durationSec = spellutils.GetSpellDurationSec(entry)
+    end
+    if durationSec > 0 and spawn.ID() and ctx.spellid then
+        local trackedActive = spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, debuffRefreshThresholdMs)
+        local onTargetActive = spellutils.SpawnHasDebuffSpellId(ctx.spellid, spawn.ID(), debuffRefreshThresholdMs)
+        if trackedActive or onTargetActive then
+            if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId) then
+                spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
+                spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)
+            else
+                return mezSkip('debuff still active')
+            end
         end
     end
     if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, spawn.ID(), ctx.aeRange) < ctx.mintar then
@@ -1421,10 +1428,35 @@ function spellutils.SpawnHasDebuffSpell(spellName, spawnId)
     if not spawnId or spawnId <= 0 or not spellName or spellName == '' then return false end
     local sp = mq.TLO.Spawn(spawnId)
     if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
-    local buff = sp.Buff(spellName)
-    if buff and buff() and buff.ID() and buff.ID() > 0 then
-        local ok, dur = pcall(function() return buff.Duration and buff.Duration() or 0 end)
-        return (ok and dur or 0) > MEZ_ACTIVE_MIN_MS
+    local names = { spellName }
+    local titled = titleCaseDiscName(spellName)
+    if titled and titled ~= spellName then names[#names + 1] = titled end
+    for _, name in ipairs(names) do
+        local buff = sp.Buff(name)
+        if buff and buff() and buff.ID() and buff.ID() > 0 then
+            local ok, dur = pcall(function() return buff.Duration and buff.Duration() or 0 end)
+            return (ok and dur or 0) > MEZ_ACTIVE_MIN_MS
+        end
+    end
+    return false
+end
+
+--- True when spawn has a detrimental buff matching spellId with more than minRemainingMs left.
+function spellutils.SpawnHasDebuffSpellId(spellId, spawnId, minRemainingMs)
+    if not spellId or spellId <= 0 or not spawnId or spawnId <= 0 then return false end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
+    local threshold = minRemainingMs or MEZ_ACTIVE_MIN_MS
+    local maxSlots = (sp.MaxBuffSlots and sp.MaxBuffSlots()) or 40
+    for i = 1, maxSlots do
+        local b = sp.Buff(i)
+        if b and b() then
+            local okId, bid = pcall(function() return b.ID and b.ID() or 0 end)
+            if okId and bid == spellId then
+                local okDur, dur = pcall(function() return b.Duration and b.Duration() or 0 end)
+                if (okDur and dur or 0) > threshold then return true end
+            end
+        end
     end
     return false
 end
@@ -1480,12 +1512,25 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
         end
         local durationSec = spellutils.GetSpellDurationSec(entry)
         if durationSec > 0 then
-            local buffPresent = spawnHasDebuffSpell(spell, EvalID)
+            local resolvedName = spellutils.GetResolvedSpellName(entry) or entry.spell
+            local buffPresent = false
+            if EvalID then
+                buffPresent = spawnHasDebuffSpell(resolvedName, EvalID)
+                    or spawnHasDebuffSpell(entry.spell, EvalID)
+                local sid = spellutils.GetSpellId(entry)
+                if sid and not buffPresent then
+                    buffPresent = spellutils.SpawnHasDebuffSpellId(sid, EvalID, 0)
+                end
+            end
             if not buffPresent and mq.TLO.Me.Class.ShortName() == 'BRD' and not rc.MissedNote then
                 buffPresent = true
             end
             if not buffPresent and EvalID and spellutils.IsMezSpell(entry)
                 and not spellutils.SpellStacksSpawn(entry, EvalID) then
+                buffPresent = true
+            end
+            -- Instant /disc has no cast bar; debuff may not be on spawn yet when we complete.
+            if not buffPresent and entry.gem == 'disc' and not rc.CurSpell.resisted then
                 buffPresent = true
             end
             if buffPresent then
@@ -1497,7 +1542,7 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
                     end
                 end
                 if not rc.CurSpell.resisted then
-                    spellstates.DebuffListUpdate(EvalID, entry.spell, myduration)
+                    spellstates.DebuffListUpdate(EvalID, resolvedName, myduration)
                     spellstates.ResetRecastCounter(EvalID, index)
                 end
             end
