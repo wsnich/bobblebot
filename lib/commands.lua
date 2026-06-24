@@ -133,6 +133,9 @@ local function cmd_togglecampacleash(args)
     else
         rc.doCampAcleash = not acleashOn()
     end
+    -- Persist so the choice survives reloads (seeded back into rc at startup from settings.campAcleash).
+    botconfig.config.settings.campAcleash = rc.doCampAcleash
+    botconfig.ApplyAndPersist()
     printf('\aybobblebot:\ax Camp acleash %s', rc.doCampAcleash ~= false and 'on' or 'off')
 end
 
@@ -237,6 +240,14 @@ local function cmd_makecamp(args, str)
         rc.travelMode = false
         refreshBardTwistMode()
     end
+end
+
+-- Make GROUP camp: set my camp here and tell every group member to camp at their own spot via DanNet
+-- game-group execute (/dgge). Mirrors the Status-tab group-camp button.
+local function cmd_groupcamp(args, str)
+    botmove.MakeCamp('on')
+    mq.cmd('/dgge /cz makecamp on')
+    printf('\aybobblebot:\ax Group camp set (me + /dgge group).')
 end
 
 local function cmd_follow(args, str)
@@ -1217,6 +1228,7 @@ local handlers = {
     ui = cmd_ui,
     show = cmd_ui,
     makecamp = cmd_makecamp,
+    groupcamp = cmd_groupcamp,
     follow = cmd_follow,
     followme = cmd_followme,
     travel = cmd_travel,

@@ -473,11 +473,26 @@ function M.draw()
             ImGui.Text('%s', campLabel)
             ImGui.SameLine()
             local campIcon = Icons.FA_FREE_CODE_CAMP
+            local groupCampIcon = Icons.FA_USERS
             local campIconW = (select(1, ImGui.CalcTextSize(campIcon)) or 0) + style.FramePadding.x * 2
+            local groupCampIconW = (select(1, ImGui.CalcTextSize(groupCampIcon)) or 0) + style.FramePadding.x * 2
+            local GROUP_CAMP_GAP = 4
             local campAvail = select(1, ImGui.GetContentRegionAvail())
             if campAvail > 0 then
-                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + campAvail - campIconW)
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + campAvail - campIconW - groupCampIconW - GROUP_CAMP_GAP)
             end
+            -- Make GROUP camp: set my camp here AND tell every group member to camp at their own spot via DanNet.
+            ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+            ImGui.PushStyleColor(ImGuiCol.Text, WHITE)
+            if ImGui.SmallButton(groupCampIcon .. '##group_camp') then
+                if not mobilePullMode then botmove.MakeCamp('on') end
+                mq.cmd('/dgge /cz makecamp on')
+            end
+            if ImGui.IsItemHovered() then
+                ImGui.SetTooltip('Make GROUP camp: set my camp here and tell every group member (DanNet /dgge) to camp at their own position.')
+            end
+            ImGui.PopStyleColor(2)
+            ImGui.SameLine(0, GROUP_CAMP_GAP)
             local campIconColor = GREEN
             if fixedCamp then
                 campIconColor = RED

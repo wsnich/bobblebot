@@ -383,6 +383,8 @@ function botlogic.StartUp(...)
         runconfig.TankName = botconfig.config.settings.TankName
     end
     runconfig.AssistName = botconfig.config.settings.AssistName or runconfig.TankName
+    -- Seed session leash-to-radius from the persisted setting (default on).
+    runconfig.doCampAcleash = botconfig.config.settings.campAcleash ~= false
     if args[2] == 'makecamp' then commands.MakeCamp('on') end
     if args[2] == 'follow' and args[1] then commands.Follow(args[1]) end
     if args[2] == 'travel' and args[1] then commands.Travel(args[1]) end

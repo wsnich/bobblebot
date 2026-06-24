@@ -55,6 +55,7 @@ local GROUPS = {
     } },
     { title = "Camp & movement", cmds = {
         { "/cz makecamp on|off", "Set / clear camp at your current spot." },
+        { "/cz groupcamp", "Make GROUP camp: camp here + tell every group member (DanNet /dgge) to camp at their spot." },
         { "/cz leash", "Return to camp now." },
         { "/cz acleash <n>", "Camp radius (which mobs count as in-camp)." },
         { "/cz camprestdistance <n>", "How close counts as 'at camp' for the return." },
