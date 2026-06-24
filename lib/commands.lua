@@ -514,23 +514,27 @@ local function cmd_attack(args)
     end
 end
 
--- Set MT (Main Tank).
+-- Set MT (Main Tank). Persists to config so it survives /lua run (was session-only before).
 local function cmd_tank(args)
     if not args[2] then return end
     local name = (args[2] == 'automatic') and 'automatic' or (args[2]:sub(1, 1):upper() .. args[2]:sub(2))
     state.getRunconfig().TankName = name
-    printf('\aybobblebot:\axSetting tank to %s', name)
+    botconfig.config.settings.TankName = name
+    botconfig.ApplyAndPersist()
+    printf('\aybobblebot:\axSetting tank to %s (saved)', name)
     mq.TLO.Target.TargetOfTarget()
 end
 
--- Set MA (Main Assist).
+-- Set MA (Main Assist). Persists to config so it survives /lua run (was session-only before).
 local function cmd_assist(args)
     if not args[2] then return end
     local name = (args[2] == 'automatic') and 'automatic' or (args[2]:sub(1, 1):upper() .. args[2]:sub(2))
     local rc = state.getRunconfig()
     rc.AssistName = name
     rc.lastAssistTargetId = nil
-    printf('\aybobblebot:\axSetting assist to %s', name)
+    botconfig.config.settings.AssistName = name
+    botconfig.ApplyAndPersist()
+    printf('\aybobblebot:\axSetting assist to %s (saved)', name)
 end
 
 local function cmd_stickcmd(args, str)
