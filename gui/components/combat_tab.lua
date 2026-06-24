@@ -85,6 +85,18 @@ function M.draw()
         runConfigLoaders()
     end
 
+    ImGui.Text('Charm pet setup')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('When you charm a mob, automatically set the new charm pet to taunt OFF (so it does not steal aggro from your tank) and send it to attack the current target. Pet buffs/heals still run via the normal loops.')
+    end
+    ImGui.SameLine()
+    local cpsChecked = (botconfig.config.settings.charmPetAutoSetup ~= false)
+    local cpsVal, cpsPressed = ImGui.Checkbox('##combat_charmPetAutoSetup', cpsChecked)
+    if cpsPressed then
+        botconfig.config.settings.charmPetAutoSetup = cpsVal
+        runConfigLoaders()
+    end
+
     -- Line 2: Stick Settings
     ImGui.Spacing()
     ImGui.Text('Stick Settings')

@@ -15,6 +15,7 @@ local charinfo = require('plugin.charinfo')
 local botpull = require('botpull')
 local follow = require('lib.follow')
 local spawnutils = require('lib.spawnutils')
+local charm = require('lib.charm')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -274,6 +275,10 @@ local function charState_PostDead()
         if not rc.MyPetID or rc.MyPetID ~= mq.TLO.Me.Pet.ID() then
             rc.MyPetID = mq.TLO.Me.Pet.ID()
             mq.cmd('/pet leader')
+        end
+        -- Charmed pet (not summoned): auto-configure once on acquisition (taunt off + assist).
+        if not mq.TLO.Me.Pet.IsSummoned() then
+            charm.AutoSetupNewCharmPet(rc)
         end
     end
 end
