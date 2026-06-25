@@ -1,12 +1,10 @@
--- Spell-upgrade detection (Option C). When a better version of a configured spell is available in your
--- spellbook, surface it and let you apply it with one click/command -- no dataset needed.
+-- Spell-upgrade detection (Option C). When a better version of a configured spell is in your spellbook,
+-- surface it and let you apply it with one click/command -- no dataset needed.
 --
--- How it works: MQ exposes Spell.SpellGroup -- every rank of a spell line shares one group id (so all
--- Cannibalize ranks, Togor's/Turgur's, etc. group together). We scan your spellbook once, keep the
--- highest-level scribed member of each group, and compare it to each configured spell. If your book has a
--- higher-level member of that line than what's configured, it's an upgrade suggestion.
---
--- Defensive: if this server's spell data leaves SpellGroup = 0 for a spell, we skip it (no false hits).
+-- How it works (ported from MAUI's GetSpellUpgrade): SpellGroup is 0 on many emus, so instead of spell-line
+-- ids we match by spell CHARACTERISTICS. The upgrade for a configured spell is the highest-level spell in
+-- your book that shares its TargetType, Subcategory and NumEffects and is a higher level than it. We index
+-- the whole book once per scan, so any number of configured spells is one pass.
 
 local mq = require('mq')
 local botconfig = require('lib.config')
@@ -14,10 +12,10 @@ local botconfig = require('lib.config')
 local spellupgrade = {}
 
 local SECTIONS = { 'heal', 'buff', 'debuff', 'cure' }
-local SCAN_MAX_SLOT = 512        -- spellbook slots to scan (covers emu books)
+local SCAN_MAX_SLOT = 1120       -- spellbook slots to scan (MAUI uses 1120)
 local AUTO_THROTTLE_MS = 60000   -- background downtime re-scan cadence
 local _nextAuto = 0
-local _pending = {}              -- { {section, index, old, new, oldLevel, newLevel, group}, ... }
+local _pending = {}              -- { {section, index, old, new, oldLevel, newLevel}, ... }
 local _lastLevel = 0
 local _debug = false
 
@@ -25,23 +23,51 @@ function spellupgrade.SetDebug(on) _debug = on and true or false end
 function spellupgrade.IsDebug() return _debug end
 local function dbg(fmt, ...) if _debug then printf('\ay[upgrade]\ax ' .. fmt, ...) end end
 
--- group id + level for a spell name via the MQ Spell TLO. group 0 means "no group data" (skip).
--- SpellGroup is wrapped in pcall in case a given MQ build doesn't expose that member.
-local function spellGroupLevel(name)
-    if not name or name == '' then return 0, 0 end
+-- The match-key + level for a spell NAME (the configured spell), via the MQ Spell TLO. nil if not a spell.
+local function spellMeta(name)
+    if not name or name == '' then return nil end
     local s = mq.TLO.Spell(name)
-    if not s() then return 0, 0 end
-    local okG, g = pcall(function() return s.SpellGroup() end)
-    local okL, l = pcall(function() return s.Level() end)
-    local group = (okG and tonumber(g)) or 0
-    local level = (okL and tonumber(l)) or 0
-    return group, level
+    if not s() then return nil end
+    return {
+        targetType = tostring(s.TargetType()),
+        subCat = tostring(s.Subcategory()),
+        numEffects = tonumber(s.NumEffects()) or 0,
+        level = tonumber(s.Level()) or 0,
+    }
 end
 
--- Collect the SpellGroups referenced by configured spells so the book scan only cares about those lines.
--- Returns careGroups (set), and entries = { {section, index, spell, group, level}, ... }.
-local function collectConfigGroups()
-    local careGroups, entries = {}, {}
+function spellupgrade.describe(name)
+    local m = spellMeta(name)
+    if not m then return nil end
+    return string.format('TargetType=%s Subcategory=%s NumEffects=%d Level=%d',
+        m.targetType, m.subCat, m.numEffects, m.level)
+end
+
+-- Index the spellbook by characteristic key -> highest-level scribed spell you can use { name, level }.
+local function indexBookByCharacteristics()
+    local myLevel = tonumber(mq.TLO.Me.Level()) or 1
+    local index = {}
+    for i = 1, SCAN_MAX_SLOT do
+        local s = mq.TLO.Me.Book(i)
+        if s.ID() then
+            local lvl = tonumber(s.Level()) or 0
+            if lvl <= myLevel then
+                local key = tostring(s.TargetType()) .. '|' .. tostring(s.Subcategory()) .. '|' ..
+                    tostring(s.NumEffects())
+                local cur = index[key]
+                if not cur or lvl > cur.level then
+                    index[key] = { name = (s.Name() or ''):gsub(' Rk%..*', ''), level = lvl }
+                end
+            end
+        end
+    end
+    return index
+end
+
+-- Recompute the pending-upgrade list. Returns the list.
+function spellupgrade.scan()
+    _pending = {}
+    local index = indexBookByCharacteristics()
     for _, section in ipairs(SECTIONS) do
         local n = botconfig.getSpellCount(section)
         for i = 1, n do
@@ -49,55 +75,23 @@ local function collectConfigGroups()
             local spell = entry and entry.spell
             -- Only real, gem-cast spells (skip item/alt/disc/ability and blanks).
             if entry and type(spell) == 'string' and spell ~= '' and spell ~= '0' and tonumber(entry.gem) then
-                local group, level = spellGroupLevel(spell)
-                dbg('config %s[%d] "%s": SpellGroup=%d level=%d%s', section, i, spell, group, level,
-                    (group == 0) and ' -- no SpellGroup data, cannot detect upgrades for this spell' or '')
-                if group ~= 0 then
-                    careGroups[group] = true
-                    entries[#entries + 1] = { section = section, index = i, spell = spell, group = group, level = level }
+                local m = spellMeta(spell)
+                if m then
+                    local key = m.targetType .. '|' .. m.subCat .. '|' .. m.numEffects
+                    local best = index[key]
+                    if _debug then
+                        dbg('config %s[%d] "%s": %s L%d -> best same-type in book = %s', section, i, spell, key,
+                            m.level, best and string.format('"%s" L%d', best.name, best.level) or 'none')
+                    end
+                    if best and best.level > m.level and string.lower(best.name) ~= string.lower(spell) then
+                        _pending[#_pending + 1] = {
+                            section = section, index = i, old = spell, new = best.name,
+                            oldLevel = m.level, newLevel = best.level,
+                        }
+                        dbg('upgrade: %s[%d] %s (L%d) -> %s (L%d)', section, i, spell, m.level, best.name, best.level)
+                    end
                 end
             end
-        end
-    end
-    return careGroups, entries
-end
-
--- Best (highest-level, castable, scribed) spell per group, limited to groups we care about.
-local function scanBookByGroup(careGroups)
-    local myLevel = tonumber(mq.TLO.Me.Level()) or 1
-    local best = {}
-    for slot = 1, SCAN_MAX_SLOT do
-        local name = mq.TLO.Me.Book(slot)()
-        if name and name ~= '' then
-            local group, level = spellGroupLevel(name)
-            if group ~= 0 and careGroups[group] and level <= myLevel then
-                local cur = best[group]
-                if not cur or level > cur.level then best[group] = { name = name, level = level } end
-            end
-        end
-    end
-    return best
-end
-
--- Recompute the pending-upgrade list. Returns the list.
-function spellupgrade.scan()
-    _pending = {}
-    local careGroups, entries = collectConfigGroups()
-    if not next(careGroups) then return _pending end
-    local best = scanBookByGroup(careGroups)
-    for _, e in ipairs(entries) do
-        local b = best[e.group]
-        if _debug then
-            dbg('%s[%d] "%s" (group %d, L%d): best in book of that line = %s', e.section, e.index, e.spell,
-                e.group, e.level, b and string.format('"%s" L%d', b.name, b.level) or 'none')
-        end
-        if b and b.name and string.lower(b.name) ~= string.lower(e.spell) and b.level > e.level then
-            _pending[#_pending + 1] = {
-                section = e.section, index = e.index,
-                old = e.spell, new = b.name,
-                oldLevel = e.level, newLevel = b.level, group = e.group,
-            }
-            dbg('%s[%d]: %s (L%d) -> %s (L%d)', e.section, e.index, e.spell, e.level, b.name, b.level)
         end
     end
     return _pending
@@ -106,8 +100,6 @@ end
 function spellupgrade.getPending() return _pending end
 function spellupgrade.count() return #_pending end
 
--- SpellGroup + level for a spell name (for the /cz spellgroup diagnostic). group 0 = no SpellGroup data.
-function spellupgrade.groupLevel(name) return spellGroupLevel(name) end
 
 -- Apply one pending upgrade by 1-based list position: rewrite the config entry's spell + persist.
 function spellupgrade.apply(n)
