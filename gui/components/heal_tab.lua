@@ -5,10 +5,11 @@ local botconfig = require('lib.config')
 local spellutils = require('lib.spellutils')
 local spell_entry = require('gui.widgets.spell_entry')
 local inputs = require('gui.widgets.inputs')
+local theme = require('gui.widgets.theme')
 
 local M = {}
 
-local NUMERIC_INPUT_WIDTH = 80
+local NUMERIC_INPUT_WIDTH = theme.WIDTHS.numeric
 
 local PRIMARY_OPTIONS = {
     { value = 'gem',     label = 'Gem' },
@@ -164,6 +165,8 @@ function M.draw()
     if not heal.spells then heal.spells = {} end
     local spells = heal.spells
     if not spells then return end
+    spell_entry.drawTabIntro({ flagKey = 'doheal', flagNoun = 'Healing', isEmpty = #spells == 0,
+        emptyHint = 'No heals configured. Click "Add heal" below to create one (e.g. a tank heal).' })
     for i, entry in ipairs(spells) do
         local detectedTypeLabel = spellutils.IsHoTSpell(entry) and 'HoT' or nil
         spell_entry.draw(entry, {

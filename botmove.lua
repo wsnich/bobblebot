@@ -38,7 +38,7 @@ local function followSpawnMatchesName(spawnId, followname)
     local sp = mq.TLO.Spawn('id ' .. spawnId)
     if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
     local stype = sp.Type() or ''
-    if stype == 'Corpse' or stype == 'CORPSE' then return false end
+    if stype == 'Corpse' then return false end
     local clean = sp.CleanName()
     if not clean or clean == '' then return false end
     return string.lower(clean) == string.lower(followname)
@@ -89,7 +89,7 @@ local function shouldCallFollow(rc)
     local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
     local engageId = rc.engageTargetId or 0
     local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
-    return followid > 0 and followdistance > 0 and engageId == 0 and followtype ~= 'CORPSE' and
+    return followid > 0 and followdistance > 0 and engageId == 0 and followtype ~= 'Corpse' and
         followdistance >= myconfig.settings.followdistance
 end
 
@@ -107,7 +107,7 @@ local function isValidFollowTarget(followid)
     local sid = mq.TLO.Spawn('id ' .. followid).ID() or 0
     if sid == 0 then return false end
     local stype = mq.TLO.Spawn('id ' .. followid).Type() or ''
-    return stype ~= 'Corpse' and stype ~= 'CORPSE'
+    return stype ~= 'Corpse'
 end
 
 local function clearUnstuckIfFollowInactive(rc)
@@ -594,7 +594,7 @@ function botmove.StartReturnToFollowAfterEngage()
     local followid = mq.TLO.Spawn(rc.followid).ID() or 0
     local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
     local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
-    if followdistance < myconfig.settings.followdistance or not followid or followtype == 'CORPSE' then return end
+    if followdistance < myconfig.settings.followdistance or not followid or followtype == 'Corpse' then return end
     mq.cmd('/multiline ; /stick off ; /squelch /attack off ; /mqtarget self')
     botmove.FollowCall()
     if state.canStartBusyState(state.STATES.engage_return_follow) then

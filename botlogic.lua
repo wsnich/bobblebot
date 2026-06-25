@@ -15,6 +15,10 @@ local charinfo = require('plugin.charinfo')
 local botpull = require('botpull')
 local follow = require('lib.follow')
 local spawnutils = require('lib.spawnutils')
+local charm = require('lib.charm')
+local premem = require('lib.premem')
+local spellupgrade = require('lib.spellupgrade')
+local scribe = require('lib.scribe')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -194,6 +198,11 @@ local function charState_DeadOrHover()
         rc.wasDeadOrHover = true
     end
 
+    -- While hovering at our corpse, accept an incoming rez (text-gated, configurable) so a box crew
+    -- gets back up without manual clicking on each character.
+    botevents.AcceptRezIfOffered()
+    botevents.AcceptRezRespawnIfOffered() -- click through the Respawn/hover window (select the Resurrect row)
+
     state.setRunState(state.STATES.dead, nil)
     if not rc.HoverEchoTimer or rc.HoverEchoTimer == 0 then
         rc.HoverEchoTimer = mq.gettime() + 300000
@@ -271,6 +280,10 @@ local function charState_PostDead()
             rc.MyPetID = mq.TLO.Me.Pet.ID()
             mq.cmd('/pet leader')
         end
+        -- Charmed pet (not summoned): auto-configure once on acquisition (taunt off + assist).
+        if not mq.TLO.Me.Pet.IsSummoned() then
+            charm.AutoSetupNewCharmPet(rc)
+        end
     end
 end
 
@@ -310,10 +323,26 @@ local function _runDoMovementCheck()
 end
 
 -- Misc only: inactive click (anti-afk, random 60–90s interval) and drag. Runs only when priority allows (not when casting). Throttled 1s.
+-- Rename the EQ window (taskbar entry) to this character's name while the bot runs, so multiboxed
+-- instances are tellable apart. Self-healing + throttled: re-applies if EQ resets the title (e.g. on zone).
+local _winTitleNext = 0
+local function _setWinTitleIfNeeded()
+    if myconfig.settings.winTitle == false then return end
+    if _winTitleNext > mq.gettime() then return end
+    _winTitleNext = mq.gettime() + 5000
+    local name = mq.TLO.Me.CleanName()
+    if not name or name == '' then return end
+    if mq.TLO.EverQuest.WinTitle() ~= name then mq.cmdf('/setwintitle %s', name) end
+end
+
 local function _runDoMiscTimer()
     if _miscLastRun > mq.gettime() then return end
     _miscInactiveClick() -- anti-afk, randomized interval
     _miscDrag()
+    premem.tick() -- pre-load configured gems during downtime so combat spells don't memorize on the fly
+    spellupgrade.tick() -- detect when a better in-book version of a configured spell is available
+    scribe.tick() -- auto-scribe new spell scrolls after a level-up (when out of combat)
+    _setWinTitleIfNeeded() -- keep the taskbar window titled with this character's name
     _miscLastRun = mq.gettime() + 1000
 end
 
@@ -372,12 +401,15 @@ function botlogic.StartUp(...)
         runconfig.TankName = botconfig.config.settings.TankName
     end
     runconfig.AssistName = botconfig.config.settings.AssistName or runconfig.TankName
+    -- Seed session leash-to-radius from the persisted setting (default on).
+    runconfig.doCampAcleash = botconfig.config.settings.campAcleash ~= false
     if args[2] == 'makecamp' then commands.MakeCamp('on') end
     if args[2] == 'follow' and args[1] then commands.Follow(args[1]) end
     if args[2] == 'travel' and args[1] then commands.Travel(args[1]) end
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
     mobfilter.process('charm', 'zone')
+    require('lib.rolelists').loadFromCommon()
     local comkeytable = botconfig.getCommon()
     if not comkeytable.raidlist then comkeytable.raidlist = {} end
     --make sure char isnt doing anything already (stop nav, clear cursor, ect)

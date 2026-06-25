@@ -8,6 +8,7 @@ local state = require('lib.state')
 local utils = require('lib.utils')
 local bardtwist = require('lib.bardtwist')
 local charinfoutils = require('lib.charinfoutils')
+local charm = require('lib.charm')
 
 local spawnutils = {}
 
@@ -177,13 +178,36 @@ function spawnutils.isCampAcleashEnforced(rc)
     return rc.doCampAcleash ~= false
 end
 
---- True when an alive engageTargetId should be kept outside MobList (doCampAcleash off + camp set).
+-- True when `id` is a fleeing/low-HP runner we should chase past the leash to finish it -- but only out to
+-- settings.chaseFleeingMaxDist from camp (so we don't bolt across the zone). Sticky once started (rc.chaseFleerId)
+-- so it doesn't yo-yo when Fleeing flickers; cleared when the mob dies or runs past the cap.
+local function isChasableFleer(rc, id)
+    if botconfig.config.settings.chaseFleeing == false then return false end
+    local sp = mq.TLO.Spawn(id)
+    if not sp() or not spawnutils.isAliveEngageSpawn(sp) then rc.chaseFleerId = nil; return false end
+    local mc = rc.makecamp
+    if mc and mc.x and mc.y then
+        local maxd = tonumber(botconfig.config.settings.chaseFleeingMaxDist) or 250
+        local dx, dy = (sp.X() or 0) - mc.x, (sp.Y() or 0) - mc.y
+        if (dx * dx + dy * dy) > (maxd * maxd) then rc.chaseFleerId = nil; return false end -- too far; give up
+    end
+    if rc.chaseFleerId == id then return true end -- already committed to this runner
+    if sp.Fleeing() or ((tonumber(sp.PctHPs()) or 100) <= 25) then
+        rc.chaseFleerId = id
+        return true
+    end
+    return false
+end
+
+--- True when an alive engageTargetId should be kept outside MobList and chased: leash off (chase anything),
+--- or leash on but the target is a fleeing/low-HP runner within the chase cap.
 function spawnutils.shouldChaseOutsideCamp(rc)
-    if spawnutils.isCampAcleashEnforced(rc) then return false end
     rc = rc or state.getRunconfig()
     local id = rc.engageTargetId
     if not id or id <= 0 then return false end
-    return spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id))
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id)) then return false end
+    if not spawnutils.isCampAcleashEnforced(rc) then return true end -- leash off: chase the engaged target
+    return isChasableFleer(rc, id)                                    -- leash on: only chase a runner
 end
 
 --- True when an alive engageTargetId should not be cleared just because it left MobList.
@@ -414,8 +438,21 @@ function spawnutils.isNpcEngageTarget(spawn)
     return t == 'NPC' or (t == 'Pet' and spawn.Master.Type() ~= 'PC')
 end
 
+--- True when melee may engage spawn (normal NPC rules, or /cz attack override on a PC pet).
+function spawnutils.isEngageAllowedSpawn(spawn, rc)
+    rc = rc or state.getRunconfig()
+    if not spawn or not spawn.ID() or spawn.ID() == 0 then return false end
+    local sid = spawn.ID()
+    if rc.attackCommandEngage and rc.engageTargetId == sid and spawnutils.isAliveEngageSpawn(spawn) then
+        return true
+    end
+    return spawnutils.isNpcEngageTarget(spawn)
+end
+
 local function filterSpawnForCamp(spawn, rc)
     if not spawnutils.isAliveEngageSpawn(spawn) then return false end
+    local sid = spawn.ID()
+    if sid and charm.isCharmSkipped(sid, rc) then return false end
     local myconfig = botconfig.config
     local zradius = myconfig.settings.zradius or 75
     local cx, cy, cz = spawnutils.getMobListAnchor(rc)
@@ -537,10 +574,11 @@ end
 
 function spawnutils.selectNthAdd(mobList, excludeId, n)
     if not mobList or not n or n < 1 then return nil end
+    local rc = state.getRunconfig()
     local idx = 0
     for _, v in ipairs(mobList) do
         local id = v.ID and v.ID() or v
-        if id and id ~= excludeId then
+        if id and id ~= excludeId and not charm.isCharmSkipped(id, rc) then
             idx = idx + 1
             if idx == n then return v end
         end
@@ -551,7 +589,7 @@ end
 function spawnutils.validateAcmTarget(rc)
     rc = rc or state.getRunconfig()
     if rc.engageTargetId then
-        if not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(rc.engageTargetId)) then
+        if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(rc.engageTargetId), rc) then
             rc.engageTargetId = nil
             rc.attackCommandEngage = nil
             if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
@@ -590,12 +628,64 @@ function spawnutils.mergeEngageTargetIntoMobList(rc)
     rc = rc or state.getRunconfig()
     local id = rc.engageTargetId
     if not id or id <= 0 then return end
-    if not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(id)) then return end
+    if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(id), rc) then return end
     for _, v in ipairs(rc.MobList or {}) do
         if v.ID() == id then return end
     end
     local sp = mq.TLO.Spawn(id)
     if sp and sp.ID() then table.insert(rc.MobList, sp) end
+end
+
+--- NPCs occupying an XTarget "Auto Hater" slot (spawns that have us/our group on THEIR hate list),
+--- within the camp area, that pass the normal engage safety filters. Line of sight is intentionally
+--- NOT required here: this lets the tank engage nearby mobs that are blocked by a wall/corner (the
+--- MobList filter requires LoS for TargetFilter 0/1, so those mobs are otherwise invisible to the MT).
+--- The "Auto Hater" slot type excludes friendly PCs/NPCs and group/pet/mez-target slots by definition.
+--- Mirrors MuleAssist's GetHostilesOnXTarget + TankAllMobs; engageTarget navs (pathfinds) to these.
+function spawnutils.getXTargetAutoHaterEngageables(rc)
+    rc = rc or state.getRunconfig()
+    local out = {}
+    local n = mq.TLO.Me.XTarget() or 0
+    if n == 0 then return out end
+    local myconfig = botconfig.config
+    local zradius = myconfig.settings.zradius or 75
+    local acleash = tonumber(myconfig.settings.acleash) or 75
+    local acleashSq = myconfig.settings.acleashSq or (acleash * acleash)
+    local cx, cy, cz = spawnutils.getMobListAnchor(rc)
+    local seen = {}
+    for i = 1, n do
+        local xt = mq.TLO.Me.XTarget(i)
+        local xtid = xt and xt.ID() or nil
+        if xtid and xtid > 0 and not seen[xtid]
+            and xt.TargetType() == 'Auto Hater' and xt.Type() == 'NPC' then
+            seen[xtid] = true
+            local spawn = mq.TLO.Spawn(xtid)
+            if spawnutils.isNpcEngageTarget(spawn)
+                and spawnInArea(spawn, cx, cy, cz, acleashSq, zradius)
+                and spawnutils.filterSpawnProtected(spawn)
+                and spawnutils.filterSpawnExcludeAndFTE(spawn, rc)
+                and not charm.isCharmSkipped(xtid, rc)
+                and not (spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(xtid, rc)) then
+                out[#out + 1] = spawn
+            end
+        end
+    end
+    return out
+end
+
+--- True if spawnId currently occupies an XTarget "Auto Hater" slot (i.e. has aggro on us/our group).
+--- Used to gate non-LoS pathfinding so the tank only chases mobs that are actually attacking us,
+--- not unaggro'd NPCs the camp MobList may include under TargetFilter "All NPCs".
+function spawnutils.isOnXTargetAutoHater(spawnId)
+    if not spawnId or spawnId <= 0 then return false end
+    local n = mq.TLO.Me.XTarget() or 0
+    for i = 1, n do
+        local xt = mq.TLO.Me.XTarget(i)
+        if xt and xt.ID() == spawnId and xt.TargetType() == 'Auto Hater' and not xt.Dead() then
+            return true
+        end
+    end
+    return false
 end
 
 local function mobListContainsId(mobList, spawnId)
@@ -612,6 +702,8 @@ local function leaderInjectEligible(rc, ctx, targetId)
     if not ctx.sameZone or not ctx.distance or ctx.distance > leash then return false end
     local sp = mq.TLO.Spawn(targetId)
     if not spawnutils.isAliveEngageSpawn(sp) then return false end
+    if not spawnutils.isEngageAllowedSpawn(sp, rc) then return false end
+    if charm.isCharmSkipped(targetId, rc) then return false end
     if utils.isProtectedSpawn(sp) then return false end
     if not spawnutils.filterSpawnExclude(sp, rc) then return false end
     if spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(targetId, rc) then return false end
@@ -784,6 +876,7 @@ end
 
 function spawnutils.AddSpawnCheck()
     local rc = state.getRunconfig()
+    charm.pruneCharmSkipIds(rc)
     spawnutils.pruneFTEList(rc)
     if not spawnutils.validateAcmTarget(rc) then return end
     spawnutils.tickCombatFTERechecks(rc)

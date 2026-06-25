@@ -15,6 +15,85 @@ local castinterrupt = require('lib.castinterrupt')
 local botevents = {}
 
 local SIT_AFTER_HIT_MS = 3000
+local _rezAcceptNextTime = 0
+
+-- Auto-accept an incoming resurrection offer. EQ shows the rez prompt in the ConfirmationDialogBox
+-- window, which is ALSO used for other confirmations (destroy item, etc.) -- so we only click Yes when
+-- the dialog text is actually a rez, never confirming an unrelated dialog. Optionally gated by the
+-- offered experience-restore % (rezAcceptMinPct; 0 = accept any). Throttled so a slow-closing dialog
+-- isn't re-clicked every tick. Called each tick from the dead/hover handler.
+function botevents.AcceptRezIfOffered()
+    if botconfig.config.settings.doRezAccept == false then return end
+    if mq.gettime() < _rezAcceptNextTime then return end
+    local w = mq.TLO.Window('ConfirmationDialogBox')
+    if not (w and w.Open()) then return end
+    local text
+    local okText, t = pcall(function() return w.Child('CD_TextOutput').Text() end)
+    if okText and t then text = tostring(t) end
+    if not text or text == '' then return end
+    local lower = text:lower()
+    -- Rez confirmation text varies by server/client: Live-style ("be resurrected ... restore N%
+    -- experience") and emu-style ("<caster> wants to cast <rez spell> (N percent) upon you. Do you wish
+    -- this?"). This only runs while dead/hovering, so a "wants to cast ... upon you" prompt is a rez.
+    local isRez = lower:find('resurrect')
+        or (lower:find('restore') and lower:find('experience'))
+        or (lower:find('wants to cast') and lower:find('upon you'))
+    if not isRez then return end
+    local minPct = tonumber(botconfig.config.settings.rezAcceptMinPct) or 0
+    if minPct > 0 then
+        -- XP-restore % may be written "96%" or "96 percent".
+        local pct = tonumber(lower:match('(%d+)%s*%%')) or tonumber(lower:match('(%d+)%s*percent'))
+        if pct and pct < minPct then return end -- decline-by-ignoring a low-% rez; player can accept manually
+    end
+    _rezAcceptNextTime = mq.gettime() + 2000
+    mq.cmd('/notify ConfirmationDialogBox CD_Yes_Button leftmouseup')
+    printf('\ayCZBot:\axAccepted resurrection.')
+end
+
+-- After the rez ConfirmationDialogBox, EQ leaves you hovering with the RespawnWnd (the "hover window"),
+-- whose option list contains the resurrection alongside bind points. Click through it: select the row that
+-- reads "Resurrect" and press Select. Mirrors MQ2Rez (RedGuides/MQ2Rez): the rez row text contains
+-- "Resurrect" while bind rows say "Bind Location" -- so we ONLY ever select a Resurrect row, never a bind
+-- (a wrong pick = respawn at bind, losing the rez). If no Resurrect row is found we do nothing.
+local _rezRespawnNextTime = 0
+local _rezDebug = false
+function botevents.SetRezDebug(on) _rezDebug = on and true or false end
+function botevents.IsRezDebug() return _rezDebug end
+
+function botevents.AcceptRezRespawnIfOffered()
+    if botconfig.config.settings.doRezAccept == false then return end
+    if not (mq.TLO.Me.Dead() or mq.TLO.Me.Hovering()) then return end
+    if mq.gettime() < _rezRespawnNextTime then return end
+    local w = mq.TLO.Window('RespawnWnd')
+    if not (w and w.Open()) then return end
+    local list = w.Child('RW_OptionsList')
+    if not (list and list()) then
+        if _rezDebug then printf('\ay[rezdebug]\ax RespawnWnd open but no RW_OptionsList child') end
+        return
+    end
+    local rows = tonumber(list.Items()) or 0
+    local rezRow
+    for r = 1, rows do
+        local parts = {}
+        for c = 1, 3 do
+            local okc, txt = pcall(function() return list.List(r, c)() end)
+            if okc and txt and txt ~= '' then parts[#parts + 1] = tostring(txt) end
+        end
+        local joined = table.concat(parts, ' | ')
+        if _rezDebug then printf('\ay[rezdebug]\ax RespawnWnd row %d: %s', r, joined) end
+        if string.lower(joined):find('resurrect') then rezRow = r end
+    end
+    if not rezRow then
+        if _rezDebug then
+            printf('\ay[rezdebug]\ax No "Resurrect" row among %d (bind rows read "Bind Location"). Not clicking.', rows)
+        end
+        return
+    end
+    _rezRespawnNextTime = mq.gettime() + 3000
+    mq.cmdf('/multiline ; /notify RespawnWnd RW_OptionsList listselect %d ; /notify RespawnWnd RW_SelectButton leftmouseup',
+        rezRow)
+    printf('\ayCZBot:\axTook resurrection from the Respawn window.')
+end
 
 --- Clear combat session state (engage, mob list, stick/attack). Used on death, rez, and zone change.
 ---@param reason string|nil e.g. death, rez, zone
@@ -26,6 +105,7 @@ function botevents.ResetCombatSession(reason)
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
     rc.lastAssistTargetId = nil
+    rc.charmSkipIds = {}
     rc.MobList = {}
     spellstates.CleanMobList()
     if APTarget then APTarget = nil end
@@ -202,7 +282,7 @@ end
 
 function botevents.Event_MobProb(line, arg1, arg2)
     local rc = state.getRunconfig()
-    if rc.mobprobtimer <= mq.gettime() then return true end
+    if rc.mobprobtimer > mq.gettime() then return true end
     if rc.dopull and state.getRunState() == state.STATES.pulling and (rc.pullState == 'returning' or rc.pullState == 'returning_after_abort') then
         rc.mobprobtimer = mq.gettime() + 3000
         return true
@@ -233,6 +313,10 @@ function botevents.BindEvents()
     mq.event('CastTakeHold', "Your spell did not take hold#*#", function() casting.notifyTakeHold() end)
     mq.event('CastImm', "Your target cannot be#*#", botevents.Event_CastImm)
     mq.event('SlowImm', "Your target is immune to changes in its attack speed", botevents.Event_CastImm)
+    -- "Your target is immune to snare spells." / "... root spells." etc. (mez/charm/slow have their own
+    -- messages above). Records the mob as immune so the bot stops re-casting -- unless the spell is
+    -- recastActive (SK threat-snare), which ImmuneCheck lets through to keep generating hate.
+    mq.event('SpellImm', "Your target is immune to#*#spells#*#", botevents.Event_CastImm)
     mq.event('MissedNote', "You miss a note, bringing your#*#", botevents.Event_MissedNote)
     mq.event('CastStn1', "You are stunned#*#", botevents.Event_CastStn)
     mq.event('CastStn2', "You can't cast spells while stunned!#*#", botevents.Event_CastStn)

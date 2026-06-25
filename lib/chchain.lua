@@ -61,13 +61,23 @@ function chchain.OnGo(line, arg1)
     local chtimer = chchain.getDeadline(rc)
     local tankid = mq.TLO.Spawn('=' .. rc.chchainTank).ID()
     if not tankid or tankid == 0 or mq.TLO.Spawn(tankid).Type() == 'Corpse' then
-        rc.chchainCurtank = rc.chchainCurtank + 1
-        if rc.chchainTanklist[rc.chchainCurtank] and mq.TLO.Spawn('=' .. rc.chchainTanklist[rc.chchainCurtank]).Type() == 'PC' and mq.TLO.Spawn('=' .. rc.chchainTanklist[rc.chchainCurtank]).ID() then
-            mq.cmdf('/rs Tank DIED or ZONED, moving to tank %s, %s', rc.chchainCurtank, rc.chchainTanklist[rc.chchainCurtank])
-            rc.chchainTank = rc.chchainTanklist[rc.chchainCurtank]
-            tankid = mq.TLO.Spawn('=' .. rc.chchainTank).ID()
-        else
-            mq.cmdf('/rs Tank %s is not in zone or dead, skipping', rc.chchainCurtank)
+        -- Primary tank dead/zoned: walk forward through the tank list to the next live PC tank,
+        -- rather than checking only the next slot and giving up.
+        local list = rc.chchainTanklist or {}
+        local found = false
+        while rc.chchainCurtank < #list do
+            rc.chchainCurtank = rc.chchainCurtank + 1
+            local cand = list[rc.chchainCurtank]
+            if cand and mq.TLO.Spawn('=' .. cand).Type() == 'PC' and mq.TLO.Spawn('=' .. cand).ID() then
+                mq.cmdf('/rs Tank DIED or ZONED, moving to tank %s, %s', rc.chchainCurtank, cand)
+                rc.chchainTank = cand
+                tankid = mq.TLO.Spawn('=' .. rc.chchainTank).ID()
+                found = true
+                break
+            end
+        end
+        if not found then
+            mq.cmdf('/rs No live tank left in chain, skipping')
             -- Defer /rs <<Go>> until chchainpause expires; chchainTick will do it.
             state.setRunState(state.STATES.chchain, { deadline = chchain.getDeadline(rc), chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
             return
@@ -78,6 +88,10 @@ function chchain.OnGo(line, arg1)
         targeting.TargetAndWait(tankid, 500)
     end
     if rc.chchainTank and mq.TLO.Target.ID() ~= tankid then
+        -- Could not acquire the tank this tick: keep the chain alive by forwarding the Go on deadline
+        -- (mirrors the out-of-mana branch) instead of silently halting the rotation.
+        mq.cmdf('/rs SKIP ME (could not target tank %s)', rc.chchainTank)
+        state.setRunState(state.STATES.chchain, { deadline = mq.gettime() + (rc.chchainPause or 0) * 100, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
         return
     end
     if (mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < 400 then
@@ -85,9 +99,11 @@ function chchain.OnGo(line, arg1)
         state.setRunState(state.STATES.chchain, { deadline = mq.gettime() + (rc.chchainPause or 0) * 100, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
         return
     end
-    if not spellutils.DistanceCheck('complete heal', 0, tankid) then
-        mq.cmdf(
-            '/rs Tank %s is out of range of complete heal!', rc.chchainTank)
+    if not spellutils.DistanceCheckByName('Complete Heal', tankid) then
+        -- Out of CH range: casting would be wasted, so skip and forward the Go to the next cleric.
+        mq.cmdf('/rs Tank %s is out of range of Complete Heal, skipping', rc.chchainTank)
+        state.setRunState(state.STATES.chchain, { deadline = mq.gettime() + (rc.chchainPause or 0) * 100, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
+        return
     end
     spellutils.AutoinvIfCursorBlockingCast()
     mq.cmdf('/multiline ; /cast "Complete Heal" ; /rs CH >> %s << (pause:%s mana:%s)', rc.chchainTank, rc.chchainPause,
@@ -101,12 +117,11 @@ function chchain.Tick()
     if not p or not p.chnextclr then state.clearRunState() return end
     if casting.result() == 'CAST_FIZZLE' then
         spellutils.AutoinvIfCursorBlockingCast()
-        casting.start({
-            spellName = 'Complete Heal',
-            gemType = 5,
-            targetId = mq.TLO.Target.ID() or 0,
-            maxTries = 1,
-        })
+        -- Recast via a raw /cast (same path OnGo uses) instead of casting.start(): chchain never
+        -- pumps casting.tick(), so a module op would never reach 'done' and would block the next
+        -- recast. Clear the stored fizzle result so this branch fires once, not every tick.
+        casting.clear()
+        mq.cmd('/squelch /multiline ; /stand ; /cast "Complete Heal"')
         return
     end
     if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Target.Type() == 'Corpse' then
@@ -121,7 +136,7 @@ function chchain.Tick()
         state.clearRunState()
         return
     end
-    if not mq.TLO.Me.Sitting() and not mq.TLO.Me.CastTimeLeft() then
+    if not mq.TLO.Me.Sitting() and (mq.TLO.Me.CastTimeLeft() or 0) == 0 then
         mq.cmd('/sit on')
     end
 end

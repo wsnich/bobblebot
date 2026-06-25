@@ -36,7 +36,7 @@ function follow.StopFollow(reason)
 end
 
 function follow.StartFollow(name)
-    if not mq.TLO.Navigation.MeshLoaded then
+    if not mq.TLO.Navigation.MeshLoaded() then
         mq.cmd('/echo No Mesh for this zone, cannot use CZFollow+!!')
         return false
     end
