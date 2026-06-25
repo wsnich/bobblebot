@@ -62,6 +62,12 @@ local function leaderContextFromSpawn(name)
     local targetId = spawn.Target and spawn.Target.ID() or nil
     if targetId and targetId <= 0 then targetId = nil end
     local alive = not spawn.Dead() and not spawn.Hovering()
+    -- Spawn.Combat is a Character (Me)-only TLO member; on an arbitrary spawn it's nil on some clients
+    -- (e.g. the RoF2 emu) so calling it unguarded throws "attempt to call field 'Combat' (a nil value)" and
+    -- crashes the GUI draw. inAttack is only a best-effort signal here (folds the MA's target into our
+    -- moblist when the MA is nearby and attacking), so guard it and default false when unavailable -- a
+    -- non-bot PC main assist simply won't get that optimization.
+    local okCombat, inCombat = pcall(function() return spawn.Combat() == true end)
     return {
         source = 'spawn',
         name = name,
@@ -70,7 +76,7 @@ local function leaderContextFromSpawn(name)
         z = sz,
         distance = distance,
         targetId = targetId,
-        inAttack = spawn.Combat() == true,
+        inAttack = (okCombat and inCombat) or false,
         alive = alive,
         sameZone = true,
         peer = nil,
