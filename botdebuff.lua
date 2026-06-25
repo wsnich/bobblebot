@@ -414,6 +414,9 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     -- MobList NPCs (e.g. an enchanter slowing/mezzing a mob nobody is fighting). /cz attack bypasses it.
     if myconfig.settings.engageXTargetOnly ~= false and not state.getRunconfig().attackCommandEngage
         and EvalID and EvalID > 0 and not require('lib.spawnutils').isOnXTargetAutoHater(EvalID) then
+        if spellutils.IsMezDebug() then
+            spellutils.MezLog('blocked id %s: "Engage XTarget only" is on and it is not on my XTarget Auto-Hater list', tostring(EvalID))
+        end
         return false
     end
     if not spellutils.CheckGemReadiness('debuff', i, entry) then return false end
@@ -526,10 +529,7 @@ local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, r
         return true
     end
     printf('\aybobblebot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
-    -- Stop the running twist first: leaving it going lets MQ2Twist cycle a combat song over the mez and clip
-    -- it ("twist takes over"). With the twist stopped, /twist once sings the mez cleanly; the wait handler
-    -- resumes the combat twist via RestoreCombatTwistAfterNotmatar once the song lands.
-    bardtwist.StopTwist()
+    bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
     local castTimeMs = (castTime and castTime > 0) and castTime or 3000
