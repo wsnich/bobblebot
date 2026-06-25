@@ -201,6 +201,7 @@ local function charState_DeadOrHover()
     -- While hovering at our corpse, accept an incoming rez (text-gated, configurable) so a box crew
     -- gets back up without manual clicking on each character.
     botevents.AcceptRezIfOffered()
+    botevents.AcceptRezRespawnIfOffered() -- click through the Respawn/hover window (select the Resurrect row)
 
     state.setRunState(state.STATES.dead, nil)
     if not rc.HoverEchoTimer or rc.HoverEchoTimer == 0 then

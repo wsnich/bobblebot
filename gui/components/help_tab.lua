@@ -81,7 +81,8 @@ local GROUPS = {
         { "/cz xarc <...>", "Advanced XTarget configuration." },
     } },
     { title = "CC / pets / rez / cleric chain", cmds = {
-        { "/cz rezaccept on|off", "Toggle auto-accept of incoming resurrection." },
+        { "/cz rezaccept on|off", "Toggle auto-accept of incoming resurrection (confirmation + Respawn window)." },
+        { "/cz rezdebug on|off", "Log the RespawnWnd option rows while dead/hovering (to verify the Resurrect row)." },
         { "/cz charmpetsetup on|off", "Toggle charm-pet auto-setup (taunt off + assist)." },
         { "/cz chchain <...>", "Set up the cleric Complete Heal chain." },
     } },

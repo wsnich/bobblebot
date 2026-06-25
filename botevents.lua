@@ -50,6 +50,51 @@ function botevents.AcceptRezIfOffered()
     printf('\aybobblebot:\axAccepted resurrection.')
 end
 
+-- After the rez ConfirmationDialogBox, EQ leaves you hovering with the RespawnWnd (the "hover window"),
+-- whose option list contains the resurrection alongside bind points. Click through it: select the row that
+-- reads "Resurrect" and press Select. Mirrors MQ2Rez (RedGuides/MQ2Rez): the rez row text contains
+-- "Resurrect" while bind rows say "Bind Location" -- so we ONLY ever select a Resurrect row, never a bind
+-- (a wrong pick = respawn at bind, losing the rez). If no Resurrect row is found we do nothing.
+local _rezRespawnNextTime = 0
+local _rezDebug = false
+function botevents.SetRezDebug(on) _rezDebug = on and true or false end
+function botevents.IsRezDebug() return _rezDebug end
+
+function botevents.AcceptRezRespawnIfOffered()
+    if botconfig.config.settings.doRezAccept == false then return end
+    if not (mq.TLO.Me.Dead() or mq.TLO.Me.Hovering()) then return end
+    if mq.gettime() < _rezRespawnNextTime then return end
+    local w = mq.TLO.Window('RespawnWnd')
+    if not (w and w.Open()) then return end
+    local list = w.Child('RW_OptionsList')
+    if not (list and list()) then
+        if _rezDebug then printf('\ay[rezdebug]\ax RespawnWnd open but no RW_OptionsList child') end
+        return
+    end
+    local rows = tonumber(list.Items()) or 0
+    local rezRow
+    for r = 1, rows do
+        local parts = {}
+        for c = 1, 3 do
+            local okc, txt = pcall(function() return list.List(r, c)() end)
+            if okc and txt and txt ~= '' then parts[#parts + 1] = tostring(txt) end
+        end
+        local joined = table.concat(parts, ' | ')
+        if _rezDebug then printf('\ay[rezdebug]\ax RespawnWnd row %d: %s', r, joined) end
+        if string.lower(joined):find('resurrect') then rezRow = r end
+    end
+    if not rezRow then
+        if _rezDebug then
+            printf('\ay[rezdebug]\ax No "Resurrect" row among %d (bind rows read "Bind Location"). Not clicking.', rows)
+        end
+        return
+    end
+    _rezRespawnNextTime = mq.gettime() + 3000
+    mq.cmdf('/multiline ; /notify RespawnWnd RW_OptionsList listselect %d ; /notify RespawnWnd RW_SelectButton leftmouseup',
+        rezRow)
+    printf('\aybobblebot:\axTook resurrection from the Respawn window.')
+end
+
 --- Clear combat session state (engage, mob list, stick/attack). Used on death, rez, and zone change.
 ---@param reason string|nil e.g. death, rez, zone
 function botevents.ResetCombatSession(reason)
