@@ -91,7 +91,6 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **scribe**       | —                       | Scribe all usable scrolls in bags now (blocking; downtime only).                                                  |
 | **upgrades**     | —                       | List configured spells with a higher rank in your spellbook.                                                      |
 | **applyupgrade** | `<n>` or `all`          | Apply one pending upgrade by list number, or **`all`**. See [Spell maintenance](spell-maintenance.md).            |
-| **rezaccept**    | `on` / `off` or toggle  | Auto-accept incoming resurrection offers.                                                                         |
 | **charmpetsetup** | `on` / `off` or toggle | Auto-setup charm pets (taunt off, assist on) after charm lands.                                                   |
 
 ### Spells and config

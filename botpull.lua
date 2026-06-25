@@ -1358,7 +1358,7 @@ function botpull.PullTick()
     end
     if rc.pullState == 'navigating' or rc.pullState == 'aggroing' then
         if spellutils.MeHasNonCurableDebuff() then
-            abortNavDuringPull('Non-curable debuff')
+            abortNavDuringPull('Rez sickness or snare')
             return
         end
     end

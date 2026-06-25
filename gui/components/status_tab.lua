@@ -132,7 +132,7 @@ local function getSteadyStateLabel()
         return string.format("Waiting on %s's mana (must be > %d%%)", w.name, w.pct)
     end
     if rc.pullDebuffWait and rc.pullDebuffWait.name then
-        return string.format('Waiting: impairing debuff (%s)', rc.pullDebuffWait.name)
+        return string.format('Waiting: rez sickness or snare (%s)', rc.pullDebuffWait.name)
     end
     local runState = state.getRunState()
     if runState == state.STATES.casting then return 'Casting' end
@@ -167,7 +167,7 @@ local function currentDetail()
         return string.format("Waiting on %s's mana (must be > %d%%)", w.name, w.pct)
     end
     if rc.pullDebuffWait and rc.pullDebuffWait.name then
-        return string.format('Waiting: non-curable debuff (%s)', rc.pullDebuffWait.name)
+        return string.format('Waiting: rez sickness or snare (%s)', rc.pullDebuffWait.name)
     end
     local m = rc.statusMessage
     if m and not IDLE_NOISE[m] then return m end
@@ -242,9 +242,13 @@ function M.drawControls()
     ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
     ImGui.PushStyleColor(ImGuiCol.Text, RED)
     if ImGui.SmallButton(Icons.FA_POWER_OFF .. '##exit') then
-        _exitConfirm.open = true
-        _exitConfirm.pendingClose = nil
-        modals.openConfirmModal(EXIT_MODAL_ID)
+        if botconfig.config.settings.confirmExit ~= false then
+            _exitConfirm.open = true
+            _exitConfirm.pendingClose = nil
+            modals.openConfirmModal(EXIT_MODAL_ID)
+        else
+            state.getRunconfig().terminate = true
+        end
     end
     if ImGui.IsItemHovered() then ImGui.SetTooltip('%s', 'Exit: stop CZBot (ends the Lua script).') end
     ImGui.PopStyleColor(2)
@@ -747,25 +751,6 @@ function M.draw()
             end
             if ImGui.IsItemHovered() then ImGui.SetTooltip(
                 'If Sit is on, only sit when your aggro %% is below this value. Applies when mobs are in camp and you are level 20+.') end
-        end
-        if ImGui.CollapsingHeader('Death & recovery') then
-            local raOn = botconfig.config.settings.doRezAccept ~= false
-            local raVal, raPressed = ImGui.Checkbox('##rezaccept', raOn)
-            if raPressed then
-                botconfig.config.settings.doRezAccept = raVal; runConfigLoaders()
-            end
-            ImGui.SameLine(0, 2)
-            ImGui.TextColored(WHITE, '%s', 'Auto-accept rez')
-            if ImGui.IsItemHovered() then ImGui.SetTooltip(
-                'Automatically accept incoming resurrection offers while hovering at your corpse (whole box crew gets back up without manual clicking).') end
-            field_label.draw('Min XP restore %: ', { width = NUMERIC_INPUT_WIDTH })
-            local rmVal = tonumber(botconfig.config.settings.rezAcceptMinPct) or 0
-            local rmNew, rmCh = inputs.boundedInt('rez_minpct', rmVal, 0, 100, 5, '##rez_minpct')
-            if rmCh then
-                botconfig.config.settings.rezAcceptMinPct = rmNew; runConfigLoaders()
-            end
-            if ImGui.IsItemHovered() then ImGui.SetTooltip(
-                'Only accept rezzes that restore at least this %% experience (0 = accept any).') end
         end
         -- Mount: type dropdown + click-to-edit name (spellbook/item validation). Mount vars are computed
         -- outside the header so the edit modal (rendered below) persists regardless of header state.

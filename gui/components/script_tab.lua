@@ -104,6 +104,17 @@ local function drawScriptTree(tbl)
 end
 
 function M.draw()
+    local confirmOn = (botconfig.config.settings.confirmExit ~= false)
+    local confirmVal, confirmPressed = ImGui.Checkbox('Confirm before Exit##confirm_exit', confirmOn)
+    if confirmPressed then
+        botconfig.config.settings.confirmExit = confirmVal
+        botconfig.ApplyAndPersist()
+    end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('When enabled, the Exit button asks for confirmation before stopping CZBot.')
+    end
+    ImGui.Spacing()
+
     local tbl = botconfig.config.script
     if not tbl then
         ImGui.TextColored(LIGHT_GREY, '%s', 'No script config loaded.')

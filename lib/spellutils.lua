@@ -838,12 +838,6 @@ local ME_REZ_SICKNESS_SET = {
     ['Resurrection Sickness'] = true,
     ['Revival Sickness'] = true,
 }
-local ME_CATEGORY_DEBUFFS = { 'Snared', 'Rooted', 'Mezzed', 'Slowed', 'Feared', 'Silenced', 'Charmed', 'Crippled' }
--- Subcategories that impair movement/control; excludes stat debuffs (Malaise, Malo, Tash, etc.).
-local ME_PULL_BLOCKING_SUBCATEGORIES = {
-    Snare = true, Root = true, Enthrall = true, Slow = true,
-    Fear = true, Charm = true, Silence = true, Cripple = true,
-}
 
 local function meRezSicknessFromSlots()
     local maxBuff = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
@@ -865,33 +859,55 @@ local function meRezSicknessFromSlots()
     return false
 end
 
-local function meBlockingDebuffNameFromBuff(b)
+local function buffHasSnareSPA(b)
+    local ok, has = pcall(function()
+        local sp = b.Spell and b.Spell()
+        return sp and sp.HasSPA and sp.HasSPA(3) and sp.HasSPA(3)()
+    end)
+    return ok and has == true
+end
+
+local function meSnaredFromTLO()
+    local ok, b = pcall(function()
+        local m = mq.TLO.Me.Snared
+        return m and m()
+    end)
+    if not ok or not b then return false end
+    if type(b) == 'string' and b ~= '' then return true, b end
+    if buffSlotHasSpell(b) then
+        local okName, name = pcall(function() return b.Name and b.Name() or nil end)
+        return true, (okName and name) or 'Snared'
+    end
+    return true, 'Snared'
+end
+
+local function meSnareDebuffNameFromBuff(b)
     if not buffSlotHasSpell(b) then return nil end
     if not isBuffDetrimental(b) then return nil end
     local okSub, sub = pcall(function() return b.Subcategory and b.Subcategory() end)
-    if not okSub or not sub or not ME_PULL_BLOCKING_SUBCATEGORIES[sub] then return nil end
+    if not ((okSub and sub == 'Snare') or buffHasSnareSPA(b)) then return nil end
     local okName, name = pcall(function() return b.Name and b.Name() or nil end)
-    return (okName and name) or sub
+    return (okName and name) or 'Snare'
 end
 
---- Slot fallback when Me.Snared / Me.Slowed etc. do not fire (mirrors SpawnSlowActive pattern).
-local function meBlockingDebuffFromSlots()
+--- Slot fallback when Me.Snared does not fire (mirrors SpawnSlowActive pattern).
+local function meSnareDebuffFromSlots()
     if not mq.TLO.Me.BuffsPopulated or not mq.TLO.Me.BuffsPopulated() then return false end
     local maxBuff = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
     for i = 1, maxBuff do
-        local name = meBlockingDebuffNameFromBuff(mq.TLO.Me.Buff(i))
+        local name = meSnareDebuffNameFromBuff(mq.TLO.Me.Buff(i))
         if name then return true, name end
     end
     local maxSong = (mq.TLO.Me.MaxSongSlots and mq.TLO.Me.MaxSongSlots()) or 20
     for i = 1, maxSong do
-        local name = meBlockingDebuffNameFromBuff(mq.TLO.Me.Song(i))
+        local name = meSnareDebuffNameFromBuff(mq.TLO.Me.Song(i))
         if name then return true, name end
     end
     return false
 end
 
---- True when the puller has a movement/CC-impairing debuff (snare, root, mez, slow, fear, etc.).
---- Stat debuffs (Malaise, Malo, Tash) and curable debuffs (poison/disease/curse/corruption) return false.
+--- True when the puller has rez sickness or a movement snare debuff.
+--- Root, mez, slow, fear, stat debuffs, and curable debuffs return false.
 ---@return boolean hasDebuff
 ---@return string|nil debuffName
 function spellutils.MeHasNonCurableDebuff()
@@ -899,22 +915,10 @@ function spellutils.MeHasNonCurableDebuff()
     local hasRez, rezName = meRezSicknessFromSlots()
     if hasRez then return true, rezName end
 
-    for _, cat in ipairs(ME_CATEGORY_DEBUFFS) do
-        local ok, b = pcall(function()
-            local m = mq.TLO.Me[cat]
-            return m and m()
-        end)
-        if ok and b then
-            if type(b) == 'string' and b ~= '' then return true, b end
-            if buffSlotHasSpell(b) then
-                local okName, name = pcall(function() return b.Name and b.Name() or nil end)
-                return true, (okName and name) or cat
-            end
-            return true, cat
-        end
-    end
+    local hasSnare, snareName = meSnaredFromTLO()
+    if hasSnare then return true, snareName end
 
-    return meBlockingDebuffFromSlots()
+    return meSnareDebuffFromSlots()
 end
 
 -- Default class order for bot list: healers, tanks, casters, DPS. Used when config does not override.

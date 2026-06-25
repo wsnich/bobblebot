@@ -44,8 +44,6 @@ After a successful setvar, config loaders run so the new value takes effect imme
 | **settings.upgradeCheck** | boolean | `true` | Background spell-upgrade detection. See [Spell maintenance](spell-maintenance.md). |
 | **settings.charmPetAutoSetup** | boolean | `true` | Auto-configure charm pets after charm lands. |
 | **settings.campAcleash** | boolean | (varies) | Chase beyond camp **acleash** when on. |
-| **settings.doRezAccept** | boolean | `true` | Auto-accept resurrection offers. |
-| **settings.rezAcceptMinPct** | number | 0 | Min corpse HP % to auto-accept rez (0 = any). |
 | **settings.mezMinLevel** | number | 0 | Minimum mob level to mez (0 = disabled; spell MaxLevel still applies). |
 | **settings.spelldb** | string | `'spells.db'` | Spell database file. |
 

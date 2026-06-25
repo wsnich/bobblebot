@@ -27,6 +27,7 @@
 ---@field maCampAnchor boolean|nil when true, MobList anchor follows nearby MA; inject ATTACK targets
 ---@field maAnchorLeash number|nil max MA distance for anchor/inject; defaults to acleash
 ---@field spelldb string|nil
+---@field confirmExit boolean|nil when true, GUI Exit button shows a confirmation dialog (default on)
 
 ---@class ConfigPullSpell
 ---@field gem number|string|nil 1-12, 'item', 'alt', 'disc', 'ability', 'script', 'melee', or 'ranged'
@@ -121,7 +122,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script', 'roles' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'doRezAccept', 'rezAcceptMinPct', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'premem', 'campAcleash', 'upgradeCheck', 'autoScribe' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'premem', 'campAcleash', 'upgradeCheck', 'autoScribe', 'confirmExit' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
@@ -969,11 +970,6 @@ function M.Load(path)
     M.config.settings.campRestDistanceSq = (M.config.settings.campRestDistance or 0) * (M.config.settings.campRestDistance or 0)
     if M.config.settings.maCampAnchor == nil then M.config.settings.maCampAnchor = true end
     if M.config.settings.engageXTargetOnly == nil then M.config.settings.engageXTargetOnly = false end
-    -- Auto-accept incoming resurrection offers while hovering at corpse (rezAcceptMinPct = min %
-    -- experience-restore to accept; 0 = accept any rez).
-    if M.config.settings.doRezAccept == nil then M.config.settings.doRezAccept = true end
-    if M.config.settings.rezAcceptMinPct == nil then M.config.settings.rezAcceptMinPct = 0 end
-    M.config.settings.rezAcceptMinPct = tonumber(M.config.settings.rezAcceptMinPct) or 0
     -- Character-wide minimum mez level (0 = disabled; spell MaxLevel still applies above).
     if M.config.settings.mezMinLevel == nil then M.config.settings.mezMinLevel = 0 end
     M.config.settings.mezMinLevel = tonumber(M.config.settings.mezMinLevel) or 0
@@ -992,6 +988,8 @@ function M.Load(path)
     if M.config.settings.upgradeCheck == nil then M.config.settings.upgradeCheck = true end
     -- Auto-scribe new spell scrolls from bags after a level-up, once out of combat (default on).
     if M.config.settings.autoScribe == nil then M.config.settings.autoScribe = true end
+    -- GUI Exit button: show confirmation dialog before terminating (default on).
+    if M.config.settings.confirmExit == nil then M.config.settings.confirmExit = true end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "automatic" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end
     if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings

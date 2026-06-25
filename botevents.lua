@@ -15,40 +15,6 @@ local castinterrupt = require('lib.castinterrupt')
 local botevents = {}
 
 local SIT_AFTER_HIT_MS = 3000
-local _rezAcceptNextTime = 0
-
--- Auto-accept an incoming resurrection offer. EQ shows the rez prompt in the ConfirmationDialogBox
--- window, which is ALSO used for other confirmations (destroy item, etc.) -- so we only click Yes when
--- the dialog text is actually a rez, never confirming an unrelated dialog. Optionally gated by the
--- offered experience-restore % (rezAcceptMinPct; 0 = accept any). Throttled so a slow-closing dialog
--- isn't re-clicked every tick. Called each tick from the dead/hover handler.
-function botevents.AcceptRezIfOffered()
-    if botconfig.config.settings.doRezAccept == false then return end
-    if mq.gettime() < _rezAcceptNextTime then return end
-    local w = mq.TLO.Window('ConfirmationDialogBox')
-    if not (w and w.Open()) then return end
-    local text
-    local okText, t = pcall(function() return w.Child('CD_TextOutput').Text() end)
-    if okText and t then text = tostring(t) end
-    if not text or text == '' then return end
-    local lower = text:lower()
-    -- Rez confirmation text varies by server/client: Live-style ("be resurrected ... restore N%
-    -- experience") and emu-style ("<caster> wants to cast <rez spell> (N percent) upon you. Do you wish
-    -- this?"). This only runs while dead/hovering, so a "wants to cast ... upon you" prompt is a rez.
-    local isRez = lower:find('resurrect')
-        or (lower:find('restore') and lower:find('experience'))
-        or (lower:find('wants to cast') and lower:find('upon you'))
-    if not isRez then return end
-    local minPct = tonumber(botconfig.config.settings.rezAcceptMinPct) or 0
-    if minPct > 0 then
-        -- XP-restore % may be written "96%" or "96 percent".
-        local pct = tonumber(lower:match('(%d+)%s*%%')) or tonumber(lower:match('(%d+)%s*percent'))
-        if pct and pct < minPct then return end -- decline-by-ignoring a low-% rez; player can accept manually
-    end
-    _rezAcceptNextTime = mq.gettime() + 2000
-    mq.cmd('/notify ConfirmationDialogBox CD_Yes_Button leftmouseup')
-    printf('\ayCZBot:\axAccepted resurrection.')
-end
 
 --- Clear combat session state (engage, mob list, stick/attack). Used on death, rez, and zone change.
 ---@param reason string|nil e.g. death, rez, zone
