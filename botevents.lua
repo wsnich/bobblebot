@@ -148,7 +148,15 @@ function botevents.Event_Slain()
 end
 
 function botevents.Event_CastRst()
-    if state.getRunconfig().CurSpell and (state.getRunconfig().CurSpell.viaMQ2Cast or state.getRunconfig().CurSpell.viaCastingLib) then
+    -- Bard notmatar mez rides MQ2Twist (it never sets CurSpell), so the via-flag path below never fires for it
+    -- and a resist would otherwise be invisible. Flag the live mez wait so DebuffCheckHandleBardNotmatarWait
+    -- treats this as a non-landing (retry) instead of recording a fake landed mez.
+    local rc = state.getRunconfig()
+    if rc.bardNotmatarWait then
+        rc.bardNotmatarWait.resisted = true
+        spellutils.MezLog('resist event during bard mez on id=%s', tostring(rc.bardNotmatarWait.EvalID))
+    end
+    if rc.CurSpell and (rc.CurSpell.viaMQ2Cast or rc.CurSpell.viaCastingLib) then
         casting.notifyResist()
         return
     end
@@ -156,7 +164,12 @@ function botevents.Event_CastRst()
 end
 
 function botevents.Event_CastImm(line)
-    if state.getRunconfig().CurSpell and (state.getRunconfig().CurSpell.viaMQ2Cast or state.getRunconfig().CurSpell.viaCastingLib) then
+    local rc = state.getRunconfig()
+    if rc.bardNotmatarWait then
+        rc.bardNotmatarWait.resisted = true
+        spellutils.MezLog('immune event during bard mez on id=%s', tostring(rc.bardNotmatarWait.EvalID))
+    end
+    if rc.CurSpell and (rc.CurSpell.viaMQ2Cast or rc.CurSpell.viaCastingLib) then
         casting.notifyImmune()
         return
     end
@@ -310,7 +323,11 @@ function botevents.BindEvents()
     mq.event('CastRst3', "#*#avoided your#*#!#*#", botevents.Event_CastRst)
     mq.event('CastFizzle', "Your spell fizzles#*#", function() casting.notifyResult('CAST_FIZZLE') end)
     mq.event('CastInterrupted', "Your casting has been interrupted#*#", function() casting.notifyResult('CAST_INTERRUPTED') end)
-    mq.event('CastTakeHold', "Your spell did not take hold#*#", function() casting.notifyTakeHold() end)
+    mq.event('CastTakeHold', "Your spell did not take hold#*#", function()
+        local rc = state.getRunconfig()
+        if rc.bardNotmatarWait then rc.bardNotmatarWait.resisted = true end
+        casting.notifyTakeHold()
+    end)
     mq.event('CastImm', "Your target cannot be#*#", botevents.Event_CastImm)
     mq.event('SlowImm', "Your target is immune to changes in its attack speed", botevents.Event_CastImm)
     -- "Your target is immune to snare spells." / "... root spells." etc. (mez/charm/slow have their own

@@ -507,12 +507,42 @@ local function DebuffCheckHandleBardNotmatarWait(rc)
     if not w.singingStarted and now < (w.startDeadline or 0) then
         return true
     end
+    -- The song's cast bar just cleared. Hold ONE short grace tick before reading mez state / retargeting so the
+    -- server commits the Enthrall (and so our own retarget + /twist-restore can't /stopsong over it at the apply
+    -- frame). We are still targeted on EvalID here -- retarget happens only after this block.
+    if w.singingStarted then
+        w.completedAt = w.completedAt or now
+        if now < w.completedAt + 250 then return true end
+    end
     rc.bardNotmatarWait = nil
     state.clearRunState()
-    -- Only record the mez if we actually sang it. A deadline that expires without ever singing is a
-    -- failed cast: clean up and resume, but do not mark the debuff as landed.
+    -- Verify the mez actually LANDED instead of trusting that we merely sang something (the old behavior wrote a
+    -- synthetic 8-12s timer on singingStarted alone, so a resisted/clipped mez was recorded as mezzed and the
+    -- next tick falsely "skip ... debuff still active" on an un-mezzed mob). Target.Mezzed() is the only readable
+    -- mez channel on this emu (Spawn(id).Mezzed()/SpawnEnthrallRemainingMs read 0); we are still on EvalID here.
+    -- A resist/immune/take-hold event during the wait flips w.resisted; a missed note flips rc.MissedNote.
+    -- Record ONLY on a positive landing AND no negative signal; otherwise count a resist + retry, and shelve the
+    -- spawn after entry.recast failures so a truly-immune mob doesn't loop forever.
     if w.singingStarted then
-        updateBardNotmatarDebuffState(w.entry, w.EvalID)
+        local onTarget = mq.TLO.Target.ID() == w.EvalID
+        local okMz, mezzed = pcall(function() return mq.TLO.Target.Mezzed() end)
+        local landed = onTarget and okMz and (mezzed == true)
+        local resisted = (w.resisted == true) or (rc.MissedNote == true)
+        if landed and not resisted then
+            updateBardNotmatarDebuffState(w.entry, w.EvalID)
+            spellstates.ResetRecastCounter(w.EvalID, w.spellIndex)
+            spellutils.MezLog('mez LANDED on id=%s (Target.Mezzed) -- recording', tostring(w.EvalID))
+        else
+            local newCount = spellstates.IncrementRecastCounter(w.EvalID, w.spellIndex)
+            spellutils.MezLog('mez did NOT land on id=%s (mezzed=%s resisted=%s) -- NOT recording, retry %d',
+                tostring(w.EvalID), tostring(mezzed), tostring(resisted), newCount)
+            local cap = tonumber(w.entry.recast)
+            if not cap or cap < 1 then cap = 3 end
+            if newCount >= cap then
+                spellutils.MezLog('id=%s resisted/failed mez %d times -- shelving for this spawn', tostring(w.EvalID), newCount)
+                spellstates.DebuffListUpdate(w.EvalID, w.entry.spell, mq.gettime() + 600000)
+            end
+        end
     end
     retargetMaTargetAfterBardMez()
     bardtwist.RestoreCombatTwistAfterNotmatar()
@@ -542,6 +572,10 @@ local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, r
     -- one-shot queues behind those songs, starts late, and the wait resumes the twist over it -- so the mez
     -- never lands. Stopped, Casting() also reflects only the mez, so the wait can detect it finishing.
     bardtwist.StopTwist()
+    -- Clear stale negative signals so a resist/missed-note from a PRIOR song can't be read as this cast's
+    -- result. w.resisted is flipped by Event_CastRst/Event_CastImm/CastTakeHold while bardNotmatarWait is live
+    -- (see botevents.lua); rc.MissedNote is the bard "you miss a note" (song interrupted) flag.
+    rc.MissedNote = false
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
     local castTimeMs = (castTime and castTime > 0) and castTime or 3000
@@ -551,6 +585,7 @@ local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, r
         EvalID = EvalID,
         entry = entry,
         singingStarted = false,
+        resisted = false,                       -- set true by resist/immune/take-hold events during the wait
         startDeadline = now + 2500,             -- mq2twist must START the song within 2.5s, else treat as failed
         hardDeadline = now + castTimeMs + 5000, -- absolute safety cap so we never wait forever
     }
