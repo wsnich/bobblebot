@@ -1,10 +1,12 @@
 -- Spell-upgrade detection (Option C). When a better version of a configured spell is in your spellbook,
 -- surface it and let you apply it with one click/command -- no dataset needed.
 --
--- How it works (ported from MAUI's GetSpellUpgrade): SpellGroup is 0 on many emus, so instead of spell-line
+-- How it works (inspired by MAUI's GetSpellUpgrade): SpellGroup is 0 on many emus, so instead of spell-line
 -- ids we match by spell CHARACTERISTICS. The upgrade for a configured spell is the highest-level spell in
--- your book that shares its TargetType, Subcategory and NumEffects and is a higher level than it. We index
--- the whole book once per scan, so any number of configured spells is one pass.
+-- your book that shares its TargetType + Subcategory. We deliberately DON'T require equal NumEffects (MAUI
+-- does) -- upgrade lines add effects as they climb (e.g. the druid Skin line: Skin like Rock has 3 effects,
+-- Natureskin has 5), so matching on NumEffects would miss exactly those. Subcategory ("HP type one", etc.)
+-- is tight enough to keep distinct lines apart. The whole book is indexed once per scan.
 
 local mq = require('mq')
 local botconfig = require('lib.config')
@@ -52,8 +54,7 @@ local function indexBookByCharacteristics()
         if s.ID() then
             local lvl = tonumber(s.Level()) or 0
             if lvl <= myLevel then
-                local key = tostring(s.TargetType()) .. '|' .. tostring(s.Subcategory()) .. '|' ..
-                    tostring(s.NumEffects())
+                local key = tostring(s.TargetType()) .. '|' .. tostring(s.Subcategory())
                 local cur = index[key]
                 if not cur or lvl > cur.level then
                     index[key] = { name = (s.Name() or ''):gsub(' Rk%..*', ''), level = lvl }
@@ -77,7 +78,7 @@ function spellupgrade.scan()
             if entry and type(spell) == 'string' and spell ~= '' and spell ~= '0' and tonumber(entry.gem) then
                 local m = spellMeta(spell)
                 if m then
-                    local key = m.targetType .. '|' .. m.subCat .. '|' .. m.numEffects
+                    local key = m.targetType .. '|' .. m.subCat
                     local best = index[key]
                     if _debug then
                         dbg('config %s[%d] "%s": %s L%d -> best same-type in book = %s', section, i, spell, key,
