@@ -51,9 +51,12 @@ local function scribable(item)
 end
 
 -- Scribe one scroll given its /itemnotify target string; drive the cursor/dialog to completion.
-local function scribeOne(notifyTarget, spellName)
+-- ctrl+right-click grabs an ENTIRE stack to the cursor (scribing nothing), so on a stacked scroll use a
+-- plain right-click (scribes a single); singles keep the proven ctrl path.
+local function scribeOne(notifyTarget, spellName, stacked)
     printf('\aybobblebot:\axScribing %s', spellName or notifyTarget)
-    mq.cmdf('/nomodkey /ctrlkey /itemnotify %s rightmouseup', notifyTarget)
+    local mod = stacked and '/nomodkey' or '/nomodkey /ctrlkey'
+    mq.cmdf('%s /itemnotify %s rightmouseup', mod, notifyTarget)
     mq.delay(1000, function() return mq.TLO.Cursor.ID() ~= nil end)
     local deadline = mq.gettime() + 25000
     while mq.TLO.Cursor.ID() and mq.gettime() < deadline do
@@ -97,7 +100,7 @@ function scribe.Run()
             for slot = 1, container do
                 local item = mq.TLO.InvSlot(pack).Item.Item(slot)
                 if scribable(item) then
-                    scribeOne(string.format('in %s %d', pack, slot), item.Spell.Name())
+                    scribeOne(string.format('in %s %d', pack, slot), item.Spell.Name(), (tonumber(item.Stack()) or 1) > 1)
                     scribedCount = scribedCount + 1
                     mq.delay(200)
                 end
@@ -107,7 +110,7 @@ function scribe.Run()
             -- Top-level inventory slot holding an item directly.
             local item = mq.TLO.InvSlot(pack).Item
             if scribable(item) then
-                scribeOne(pack, item.Spell.Name())
+                scribeOne(pack, item.Spell.Name(), (tonumber(item.Stack()) or 1) > 1)
                 scribedCount = scribedCount + 1
                 mq.delay(200)
             end
