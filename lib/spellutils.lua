@@ -357,9 +357,17 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
     if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and ctx.spellid
         and not entry.recastActive
         and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, debuffRefreshThresholdMs) then
-        if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId) then
+        -- "Active" must scale with the mez's own duration. The fixed 18s refresh threshold is right for a
+        -- long enchanter mez, but a bard mez SONG is often shorter than 18s, so a freshly-landed short mez
+        -- reads as "needs refresh" forever and re-casts every cycle. Refresh only under min(default, dur-4s).
+        local mezDurMs = (spellutils.GetSpellDurationSec(entry) or 0) * 1000
+        local mezThrMs = (mezDurMs > 0)
+            and math.max(2000, math.min(getMezActiveThresholdMs(), mezDurMs - 4000))
+            or getMezActiveThresholdMs()
+        if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId, mezThrMs) then
             spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
-            spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)
+            spellutils.DbgMezTrace('cleared expired mez tracking on id %s (enthrall %dms left, refresh under %dms)',
+                spawnId, spellutils.SpawnEnthrallRemainingMs(spawnId), mezThrMs)
         else
             return mezSkip('debuff still active')
         end
