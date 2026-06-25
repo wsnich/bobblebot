@@ -36,7 +36,9 @@ end
 local function validateFindItem(name)
     if not name or name:match('^%s*$') then return false, 'Enter an item name' end
     name = name:match('^%s*(.-)%s*$')
-    if mq.TLO.FindItem(name)() and mq.TLO.FindItem(name)() > 0 then return true end
+    -- FindItem(name)() returns the item NAME (a string), so compare the ID (a number) instead.
+    local ok, id = pcall(function() return mq.TLO.FindItem(name).ID() end)
+    if ok and id and id > 0 then return true end
     return false, 'Item not found in inventory'
 end
 
