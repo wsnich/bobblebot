@@ -364,10 +364,16 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         local mezThrMs = (mezDurMs > 0)
             and math.max(2000, math.min(getMezActiveThresholdMs(), mezDurMs - 4000))
             or getMezActiveThresholdMs()
-        if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId, mezThrMs) then
+        -- Many servers don't expose NPC buffs, so the Enthrall scan reads 0 even on a mezzed mob -> endless
+        -- re-cast. Trust Spawn.Mezzed() too: only re-cast if the mob is BOTH under the Enthrall threshold
+        -- AND not flagged mezzed. The recorded tracking (gated above) handles refresh timing in that case.
+        local okMez, liveMezzed = pcall(function() return mq.TLO.Spawn(spawnId).Mezzed() end)
+        liveMezzed = (okMez and liveMezzed) or false
+        if isMez and phase == 'notmatar' and spawnId
+            and not spellutils.SpawnMezActive(spawnId, mezThrMs) and not liveMezzed then
             spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
-            spellutils.DbgMezTrace('cleared expired mez tracking on id %s (enthrall %dms left, refresh under %dms)',
-                spawnId, spellutils.SpawnEnthrallRemainingMs(spawnId), mezThrMs)
+            spellutils.DbgMezTrace('cleared expired mez tracking on id %s (enthrall %dms left, Mezzed=%s, refresh under %dms)',
+                spawnId, spellutils.SpawnEnthrallRemainingMs(spawnId), tostring(liveMezzed), mezThrMs)
         else
             return mezSkip('debuff still active')
         end
