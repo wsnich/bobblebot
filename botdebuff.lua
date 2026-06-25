@@ -526,7 +526,10 @@ local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, r
         return true
     end
     printf('\aybobblebot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
-    bardtwist.EnsureTwistForMode('combat')
+    -- Stop the running twist first: leaving it going lets MQ2Twist cycle a combat song over the mez and clip
+    -- it ("twist takes over"). With the twist stopped, /twist once sings the mez cleanly; the wait handler
+    -- resumes the combat twist via RestoreCombatTwistAfterNotmatar once the song lands.
+    bardtwist.StopTwist()
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
     local castTimeMs = (castTime and castTime > 0) and castTime or 3000
