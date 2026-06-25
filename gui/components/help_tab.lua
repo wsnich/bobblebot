@@ -80,9 +80,7 @@ local GROUPS = {
         { "/cz fte", "First-to-engage (FTE) lock handling." },
         { "/cz xarc <...>", "Advanced XTarget configuration." },
     } },
-    { title = "CC / pets / rez / cleric chain", cmds = {
-        { "/cz rezaccept on|off", "Toggle auto-accept of incoming resurrection (confirmation + Respawn window)." },
-        { "/cz rezdebug on|off", "Log the RespawnWnd option rows while dead/hovering (to verify the Resurrect row)." },
+    { title = "CC / pets / cleric chain", cmds = {
         { "/cz charmpetsetup on|off", "Toggle charm-pet auto-setup (taunt off + assist)." },
         { "/cz chchain <...>", "Set up the cleric Complete Heal chain." },
     } },

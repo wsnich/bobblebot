@@ -682,27 +682,6 @@ local function cmd_buffdebug(args)
     printf('\aybobblebot:\ax Buff debug logging %s', spellutils.IsBuffDebug() and 'on' or 'off')
 end
 
-local function cmd_rezaccept(args)
-    local mode = args[2] and string.lower(args[2]) or ''
-    if mode == 'on' or mode == 'true' or mode == '1' then
-        botconfig.config.settings.doRezAccept = true
-    elseif mode == 'off' or mode == 'false' or mode == '0' then
-        botconfig.config.settings.doRezAccept = false
-    else
-        botconfig.config.settings.doRezAccept = not (botconfig.config.settings.doRezAccept ~= false)
-    end
-    botconfig.ApplyAndPersist()
-    printf('\aybobblebot:\axAuto-accept rez %s', (botconfig.config.settings.doRezAccept ~= false) and 'on' or 'off')
-end
-
-local function cmd_rezdebug(args)
-    local mode = args[2] and string.lower(args[2]) or ''
-    if mode == 'on' or mode == 'true' or mode == '1' then botevents.SetRezDebug(true)
-    elseif mode == 'off' or mode == 'false' or mode == '0' then botevents.SetRezDebug(false)
-    else botevents.SetRezDebug(not botevents.IsRezDebug()) end
-    printf('\aybobblebot:\axRez debug logging %s (dumps RespawnWnd rows while dead/hovering)', botevents.IsRezDebug() and 'on' or 'off')
-end
-
 local function cmd_burn(args)
     local arg = args[2] and string.lower(args[2]) or ''
     if arg == 'off' or arg == 'stop' or arg == '0' then
@@ -1423,8 +1402,6 @@ local handlers = {
     role = cmd_role,
     mezdebug = cmd_mezdebug,
     buffdebug = cmd_buffdebug,
-    rezaccept = cmd_rezaccept,
-    rezdebug = cmd_rezdebug,
     charmpetsetup = cmd_charmpetsetup,
     aetank = cmd_aetank,
     aetankmezzer = cmd_aetankmezzer,

@@ -790,25 +790,6 @@ function M.draw()
             if ImGui.IsItemHovered() then ImGui.SetTooltip(
                 'If Sit is on, only sit when your aggro %% is below this value. Applies when mobs are in camp and you are level 20+.') end
         end
-        if ImGui.CollapsingHeader('Death & recovery') then
-            local raOn = botconfig.config.settings.doRezAccept ~= false
-            local raVal, raPressed = ImGui.Checkbox('##rezaccept', raOn)
-            if raPressed then
-                botconfig.config.settings.doRezAccept = raVal; runConfigLoaders()
-            end
-            ImGui.SameLine(0, 2)
-            ImGui.TextColored(WHITE, '%s', 'Auto-accept rez')
-            if ImGui.IsItemHovered() then ImGui.SetTooltip(
-                'Automatically accept incoming resurrection offers while hovering at your corpse (whole box crew gets back up without manual clicking).') end
-            field_label.draw('Min XP restore %: ', { width = NUMERIC_INPUT_WIDTH })
-            local rmVal = tonumber(botconfig.config.settings.rezAcceptMinPct) or 0
-            local rmNew, rmCh = inputs.boundedInt('rez_minpct', rmVal, 0, 100, 5, '##rez_minpct')
-            if rmCh then
-                botconfig.config.settings.rezAcceptMinPct = rmNew; runConfigLoaders()
-            end
-            if ImGui.IsItemHovered() then ImGui.SetTooltip(
-                'Only accept rezzes that restore at least this %% experience (0 = accept any).') end
-        end
         -- Mount: type dropdown + click-to-edit name (spellbook/item validation). Mount vars are computed
         -- outside the header so the edit modal (rendered below) persists regardless of header state.
         local mountcast = botconfig.config.settings.mountcast or 'none'
