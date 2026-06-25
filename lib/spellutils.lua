@@ -364,16 +364,17 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         local mezThrMs = (mezDurMs > 0)
             and math.max(2000, math.min(getMezActiveThresholdMs(), mezDurMs - 4000))
             or getMezActiveThresholdMs()
-        -- Many servers don't expose NPC buffs, so the Enthrall scan reads 0 even on a mezzed mob -> endless
-        -- re-cast. Trust Spawn.Mezzed() too: only re-cast if the mob is BOTH under the Enthrall threshold
-        -- AND not flagged mezzed. The recorded tracking (gated above) handles refresh timing in that case.
-        local okMez, liveMezzed = pcall(function() return mq.TLO.Spawn(spawnId).Mezzed() end)
-        liveMezzed = (okMez and liveMezzed) or false
-        if isMez and phase == 'notmatar' and spawnId
-            and not spellutils.SpawnMezActive(spawnId, mezThrMs) and not liveMezzed then
+        -- Only clear tracking + recast on POSITIVE evidence the mez is decaying: Enthrall VISIBLE (>0) and
+        -- at/under the refresh threshold (enchanters / servers that expose NPC buffs). When Enthrall reads 0
+        -- (this emu doesn't expose NPC buffs) we have NO proof the mez dropped, so we TRUST the recorded
+        -- tracking (kept valid by updateBardNotmatarDebuffState) and skip -- otherwise we re-cast forever on a
+        -- mob that is actually mezzed. The recording itself triggers a genuine refresh once it nears expiry
+        -- (HasDebuffLongerThan above goes false and we fall through to the normal recast).
+        local enthrallMs = spellutils.SpawnEnthrallRemainingMs(spawnId)
+        if isMez and phase == 'notmatar' and spawnId and enthrallMs > 0 and enthrallMs <= mezThrMs then
             spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
-            spellutils.DbgMezTrace('cleared expired mez tracking on id %s (enthrall %dms left, Mezzed=%s, refresh under %dms)',
-                spawnId, spellutils.SpawnEnthrallRemainingMs(spawnId), tostring(liveMezzed), mezThrMs)
+            spellutils.DbgMezTrace('cleared mez tracking on id %s (enthrall %dms left <= %dms)',
+                spawnId, enthrallMs, mezThrMs)
         else
             return mezSkip('debuff still active')
         end

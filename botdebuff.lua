@@ -467,7 +467,15 @@ local function updateBardNotmatarDebuffState(entry, evalId)
         if spellutils.IsMezSpell(entry) then
             local remMs = spellutils.SpawnEnthrallRemainingMs(evalId)
             if remMs > 0 then
+                -- Enthrall visible (enchanter / exposing server): trust the live remaining.
                 myduration = mq.gettime() + remMs
+            else
+                -- Enthrall NOT exposed (this emu reads 0 on NPC buffs): trust the song's own duration, but
+                -- record at LEAST the refresh threshold + a margin, otherwise the HasDebuffLongerThan gate in
+                -- SpawnNeedsDebuff goes false on the very next tick and we fall through into an endless recast
+                -- loop on a mob that is actually mezzed. We refresh near true expiry instead.
+                local thrMs = spellutils.GetDebuffRefreshThresholdMs()
+                myduration = mq.gettime() + math.max(durationSec * 1000, thrMs + 3000)
             end
         end
         spellstates.DebuffListUpdate(evalId, entry.spell, myduration)
