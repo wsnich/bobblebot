@@ -50,6 +50,8 @@ local function collectConfigGroups()
             -- Only real, gem-cast spells (skip item/alt/disc/ability and blanks).
             if entry and type(spell) == 'string' and spell ~= '' and spell ~= '0' and tonumber(entry.gem) then
                 local group, level = spellGroupLevel(spell)
+                dbg('config %s[%d] "%s": SpellGroup=%d level=%d%s', section, i, spell, group, level,
+                    (group == 0) and ' -- no SpellGroup data, cannot detect upgrades for this spell' or '')
                 if group ~= 0 then
                     careGroups[group] = true
                     entries[#entries + 1] = { section = section, index = i, spell = spell, group = group, level = level }
@@ -85,6 +87,10 @@ function spellupgrade.scan()
     local best = scanBookByGroup(careGroups)
     for _, e in ipairs(entries) do
         local b = best[e.group]
+        if _debug then
+            dbg('%s[%d] "%s" (group %d, L%d): best in book of that line = %s', e.section, e.index, e.spell,
+                e.group, e.level, b and string.format('"%s" L%d', b.name, b.level) or 'none')
+        end
         if b and b.name and string.lower(b.name) ~= string.lower(e.spell) and b.level > e.level then
             _pending[#_pending + 1] = {
                 section = e.section, index = e.index,
@@ -99,6 +105,9 @@ end
 
 function spellupgrade.getPending() return _pending end
 function spellupgrade.count() return #_pending end
+
+-- SpellGroup + level for a spell name (for the /cz spellgroup diagnostic). group 0 = no SpellGroup data.
+function spellupgrade.groupLevel(name) return spellGroupLevel(name) end
 
 -- Apply one pending upgrade by 1-based list position: rewrite the config entry's spell + persist.
 function spellupgrade.apply(n)

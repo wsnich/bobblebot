@@ -99,6 +99,7 @@ local GROUPS = {
         { "/cz autoscribe on|off", "Auto-scribe new spell scrolls after you level up (once out of combat)." },
         { "/cz upgrades", "List configured spells that have a better version in your spellbook." },
         { "/cz applyupgrade <n|all>", "Apply a detected spell upgrade to your config (see /cz upgrades)." },
+        { "/cz spellgroup <name>", "Show a spell's SpellGroup + level (diagnose why an upgrade is/isn't detected)." },
         { "/cz addspell <...>", "Add a spell entry to a section." },
         { "/cz saytarget   (syt)", "Announce your current target in chat." },
         { "/cz clickdoor", "Click the nearest door." },

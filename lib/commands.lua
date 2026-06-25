@@ -802,6 +802,21 @@ local function cmd_applyupgrade(args)
     end
 end
 
+local function cmd_spellgroup(args, str)
+    -- Everything after the command word is the spell name (names contain spaces).
+    local name = ((str or ''):gsub('^%S+%s*', '')):match('^%s*(.-)%s*$') or ''
+    if name == '' then
+        printf('\aybobblebot:\ax Usage: /cz spellgroup <spell name>  -- compares two spells lines (e.g. WR vs its upgrade)')
+        return
+    end
+    local g, l = require('lib.spellupgrade').groupLevel(name)
+    local inBook = (mq.TLO.Me.Book(name)() and 'yes') or 'no'
+    printf('\aybobblebot:\ax"%s": SpellGroup=%s Level=%s InBook=%s', name, tostring(g), tostring(l), inBook)
+    if tonumber(g) == 0 then
+        printf('\aybobblebot:\ax  (SpellGroup 0 = this server/MQ exposes no spell-line data for it -> upgrade detection cannot work)')
+    end
+end
+
 local function cmd_upgradedebug(args)
     local su = require('lib.spellupgrade')
     local mode = args[2] and string.lower(args[2]) or ''
@@ -1419,6 +1434,7 @@ local handlers = {
     wintitle = cmd_wintitle,
     upgrades = cmd_upgrades,
     applyupgrade = cmd_applyupgrade,
+    spellgroup = cmd_spellgroup,
     upgradedebug = cmd_upgradedebug,
     burn = cmd_burn,
     maanchorleash = cmd_maanchorleash,
