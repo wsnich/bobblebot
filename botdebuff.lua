@@ -490,13 +490,14 @@ local function DebuffCheckHandleBardNotmatarWait(rc)
     local now = mq.gettime()
     local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
     if stillSinging then w.singingStarted = true end
-    if w.deadline and now < w.deadline then
-        -- Keep waiting while the song is in progress, or before it has begun (mq2twist queues a tick
-        -- before casting actually starts). Otherwise we'd phantom-complete and record a mez that never
-        -- landed, leaving the add un-mezzed but treated as handled.
-        if stillSinging or not w.singingStarted then
-            return true
-        end
+    -- The twist is stopped during the mez, so Casting() reflects only the mez song. NEVER resume the twist
+    -- mid-song (that was cutting the mez before it landed): wait through the whole song (safety-capped),
+    -- and before it has begun give mq2twist time to start it (the one-shot starts a pulse or two later).
+    if stillSinging and now < (w.hardDeadline or 0) then
+        return true
+    end
+    if not w.singingStarted and now < (w.startDeadline or 0) then
+        return true
     end
     rc.bardNotmatarWait = nil
     state.clearRunState()
@@ -529,16 +530,21 @@ local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, r
         return true
     end
     printf('\aybobblebot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
-    bardtwist.EnsureTwistForMode('combat')
+    -- Stop the combat twist so MQ2Twist sings the mez IMMEDIATELY. With a busy multi-song twist running, the
+    -- one-shot queues behind those songs, starts late, and the wait resumes the twist over it -- so the mez
+    -- never lands. Stopped, Casting() also reflects only the mez, so the wait can detect it finishing.
+    bardtwist.StopTwist()
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
     local castTimeMs = (castTime and castTime > 0) and castTime or 3000
+    local now = mq.gettime()
     rc.bardNotmatarWait = {
         spellIndex = spellIndex,
         EvalID = EvalID,
         entry = entry,
         singingStarted = false,
-        deadline = mq.gettime() + castTimeMs + 100,
+        startDeadline = now + 2500,             -- mq2twist must START the song within 2.5s, else treat as failed
+        hardDeadline = now + castTimeMs + 5000, -- absolute safety cap so we never wait forever
     }
     if state.canStartBusyState(state.STATES.casting) then
         state.setRunState(state.STATES.casting, {
