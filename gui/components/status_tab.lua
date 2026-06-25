@@ -42,6 +42,10 @@ end
 
 local MOUNT_MODAL_ID = 'status_mount'
 local _mountModalState = nil
+-- Session-held mount type (Spell/Item) so the type can be chosen BEFORE a name is entered. Without this,
+-- mountcast="none" carries no type, so picking "Item" with no name was discarded (dropdown snapped back to
+-- Spell) and the name editor validated against the spellbook instead of inventory. Cleared once a name saves.
+local _mountTypeSel = nil
 
 local function getMountModalState()
     if not _mountModalState then
@@ -810,20 +814,25 @@ function M.draw()
         if not mountType or mountType == '' then mountType = 'gem' end
         if mountName and mountName:match('^%s*$') then mountName = nil end
         if mountName == 'none' then mountName = nil end
-        local mountTypeIdx = (mountType == 'item') and 2 or 1
+        -- Effective type: a session selection (lets you pick Item before naming) over the saved type.
+        local currentMountType = _mountTypeSel or mountType
+        local mountTypeIdx = (currentMountType == 'item') and 2 or 1
         local MOUNT_TYPE_COMBO_WIDTH = 80
         local mountState = getMountModalState()
-        local currentMountType = (mountTypeIdx == 1) and 'gem' or 'item'
         local mountValidator = (currentMountType == 'gem') and validateSpellInBook or validateFindItem
         if ImGui.CollapsingHeader('Mount') then
             field_label.draw('Mount: ', { width = MOUNT_TYPE_COMBO_WIDTH })
             local mountTypeOptions = { 'Spell', 'Item' }
             local mountTypeNew, mountTypeCh = combos.combo('mount_type', mountTypeIdx, mountTypeOptions, nil)
             if mountTypeCh then
-                local newType = (mountTypeNew == 1) and 'gem' or 'item'
-                botconfig.config.settings.mountcast = (mountName and mountName ~= '' and mountName ~= 'none') and
-                (mountName .. '|' .. newType) or 'none'
-                runConfigLoaders()
+                _mountTypeSel = (mountTypeNew == 1) and 'gem' or 'item'
+                currentMountType = _mountTypeSel -- so the name editor below validates against the right source
+                mountValidator = (currentMountType == 'gem') and validateSpellInBook or validateFindItem
+                -- Persist immediately only if there's already a name; otherwise the choice is held in _mountTypeSel.
+                if mountName and mountName ~= '' and mountName ~= 'none' then
+                    botconfig.config.settings.mountcast = mountName .. '|' .. _mountTypeSel
+                    runConfigLoaders()
+                end
             end
             ImGui.SameLine()
             local mountDisplayName = (mountName and mountName ~= '') and mountName or 'no mount'
@@ -844,6 +853,7 @@ function M.draw()
                 (trimmed .. '|' .. currentMountType)
                 mountState.open = false
                 mountState.buffer = ''
+                _mountTypeSel = nil -- now reflected in saved mountcast; re-derive next render
                 runConfigLoaders()
             end
             local function onMountCancel()
