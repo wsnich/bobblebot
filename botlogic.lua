@@ -51,6 +51,10 @@ end
 local function charState_Always()
     if mq.TLO.Window('LootWnd').Open() then mq.cmd('/clean') end
     if mq.TLO.Me.Ducking() then mq.cmd('/keypress duck') end
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        local botdebuff = require('botdebuff')
+        botdebuff.TickBardTwistOnceWait(state.getRunconfig())
+    end
     -- Camp return: clear when not moving or deadline passed
     if state.getRunState() == state.STATES.camp_return then
         local p = state.getRunStatePayload()

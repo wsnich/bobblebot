@@ -699,6 +699,11 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
     return true
 end
 
+--- Tick BRD twist-once wait (finish/abort). Safe to call every tick regardless of MobList.
+function botdebuff.TickBardTwistOnceWait(rc)
+    return DebuffCheckHandleBardTwistOnceWait(rc or state.getRunconfig())
+end
+
 --- Twist-once bard debuff on a single target (conditional matar, notmatar mez, CH/Gate interrupt).
 ---@param targethit string 'matar' | 'notmatar'
 ---@param reason string|nil When set, logs as interrupt (e.g. 'Complete Heal/Gate') instead of add mez.
@@ -1034,9 +1039,10 @@ function botdebuff.getHookFn(name)
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             if botmove.isBeyondFollowDistance() then return end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
+            local rc = state.getRunconfig()
+            if botdebuff.TickBardTwistOnceWait(rc) then return end
             local myconfig = botconfig.config
             if not (myconfig.settings.dodebuff or state.isTravelAttackOverriding()) or not (myconfig.debuff.spells and #myconfig.debuff.spells > 0) then return end
-            local rc = state.getRunconfig()
             if not rc.MobList[1] then
                 if state.getRunState() == state.STATES.resume_doDebuff then
                     state.clearRunState()
@@ -1046,6 +1052,9 @@ function botdebuff.getHookFn(name)
                 end
                 if state.getRunState() == state.STATES.casting and rc.CurSpell and rc.CurSpell.sub == 'debuff' then
                     spellutils.clearCastingStateOrResume()
+                    return
+                end
+                if rc.bardTwistOnceWait and botdebuff.TickBardTwistOnceWait(rc) then
                     return
                 end
                 return

@@ -339,6 +339,15 @@ function bardtwist.EnsureDefaultTwistRunning()
         local twistAction = bardtwist.EnsureTwistForMode(mode)
         if twistAction then action = twistAction end
     end
+    if not rc.bardTwistOnceWait and mode == 'idle' and state.getMobCount() == 0 then
+        local desiredGems = bardtwist.GetTwistListForMode('idle')
+        local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
+        local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
+        if mq.TLO.Twist() and mq.TLO.Twist.Twisting() and not twistListsEqual(currentGems, desiredGems) then
+            local reconcileAction = bardtwist.EnsureTwistForMode('idle')
+            if reconcileAction then action = reconcileAction end
+        end
+    end
     if _bardDebug then
         local desiredAfter = mode and bardtwist.GetTwistListForMode(mode) or {}
         local currentAfterRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
