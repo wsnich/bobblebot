@@ -137,7 +137,7 @@ local function isInterruptCastLaneBusy()
     if (mq.TLO.Me.CastTimeLeft() or 0) > 0 and mq.TLO.Me.Class.ShortName() ~= 'BRD' then return true end
     local rc = state.getRunconfig()
     if state.getRunState() == state.STATES.casting and rc.CurSpell and rc.CurSpell.sub then return true end
-    if mq.TLO.Me.Class.ShortName() == 'BRD' and rc.bardNotmatarWait then return true end
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and rc.bardTwistOnceWait then return true end
     return false
 end
 
@@ -145,7 +145,7 @@ local function isCastLaneFree()
     if (mq.TLO.Me.CastTimeLeft() or 0) > 0 and mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
     local rc = state.getRunconfig()
     if state.getRunState() == state.STATES.casting and rc.CurSpell and rc.CurSpell.sub then return false end
-    if mq.TLO.Me.Class.ShortName() == 'BRD' and rc.bardNotmatarWait then return false end
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and rc.bardTwistOnceWait then return false end
     return state.canStartBusyState(state.STATES.casting)
 end
 

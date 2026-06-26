@@ -118,7 +118,7 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
         id = idPrefix .. '_dontstack',
         label = "Don't stack:",
         labelTooltip =
-        "If target already has any of these categories (e.g. Snared), don't cast this spell and interrupt if it appears while casting.",
+        "If target already has any of these categories (e.g. Snared), don't cast. Bards: matar debuffs with dontStack use /twist once when needed instead of joining the combat twist.",
         options = DONTSTACK_OPTIONS,
         value = entry.dontStack or {},
         columns = 4,
@@ -144,7 +144,7 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
             id = idPrefix .. '_stopwhen',
             label = 'Stop when:',
             labelTooltip =
-            'Omit from bard combat twist / skip cast when target already has any of these (e.g. Slowed for Occlusion of Sound after slow lands).',
+            'Bards: matar debuffs with stopWhen use /twist once when needed instead of joining the combat twist. Skip cast when target already has any of these (e.g. Slowed for Occlusion of Sound after slow lands).',
             options = STOPWHEN_OPTIONS,
             value = entry.stopWhen or {},
             columns = 4,

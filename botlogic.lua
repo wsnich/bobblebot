@@ -62,7 +62,7 @@ local function charState_Always()
     -- Skip when BRD is in notanktar (mez) wait so we don't clear state before the song finishes.
     if state.getRunState() == state.STATES.casting then
         local rc = state.getRunconfig()
-        if not rc.bardNotmatarWait and not spellutils.IsMemorizing() then
+        if not rc.bardTwistOnceWait and not spellutils.IsMemorizing() then
             local castTimeLeft = mq.TLO.Me.CastTimeLeft() or 0
             local effectivelyIdle = state.getMobCount() == 0 and not mq.TLO.Me.Casting() and castTimeLeft == 0
             local deadlineStuck = state.runStateDeadlinePassed() and castTimeLeft == 0

@@ -27,7 +27,7 @@
 ---@field domelee boolean|nil
 ---@field dopull boolean|nil
 ---@field dosongs boolean|nil session-only bard twist; default on at start, not saved to config
----@field bardNotmatarWait table|nil BRD notmatar twist-once wait (mez/add debuff flow)
+---@field bardTwistOnceWait table|nil BRD twist-once wait (conditional matar debuff, mez/add debuff flow)
 ---@field burnUntil number|nil mq.gettime() end of the burn window; nil = not burning. Gates debuff bands with a burn targetphase.
 ---@field pulledmob number|nil
 ---@field pullreturntimer number|nil

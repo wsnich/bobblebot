@@ -782,7 +782,7 @@ function botmelee.getHookFn(name)
             end
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             local rc = state.getRunconfig()
-            if rc.bardNotmatarWait and mq.TLO.Me.Class.ShortName() == 'BRD' then return end
+            if rc.bardTwistOnceWait and mq.TLO.Me.Class.ShortName() == 'BRD' then return end
             if botmove.isBeyondFollowDistance() and not spawnutils.shouldChaseOutsideCamp(rc) then
                 rc.engageTargetId = nil
                 rc.attackCommandEngage = nil

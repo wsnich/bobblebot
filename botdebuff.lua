@@ -143,8 +143,31 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
     return spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
 end
 
---- True when a matar debuff should be in bard combat twist (or cast via doDebuff).
+--- True when a bard matar debuff uses twist-once (not permanent combat twist).
+function botdebuff.BardMatarDebuffIsConditional(spellIndex)
+    if mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
+    local entry = botconfig.getSpellEntry('debuff', spellIndex)
+    if not entry or entry.enabled == false then return false end
+    local gem = entry.gem
+    if type(gem) ~= 'number' or gem < 1 or gem > 12 then return false end
+    if spellutils.IsMezSpell(entry) then return false end
+    local db = DebuffBands[spellIndex]
+    if not db or not db.matar then return false end
+    if type(entry.precondition) == 'string' then
+        local pre = entry.precondition:match('^%s*(.-)%s*$') or entry.precondition
+        if pre ~= '' and pre ~= 'true' then return true end
+    end
+    if entry.dontStack and #entry.dontStack > 0 then return true end
+    if entry.stopWhen and #entry.stopWhen > 0 then return true end
+    local assistpct = (botconfig.config.melee and botconfig.config.melee.assistpct) or 99
+    local mobMax = db.mobMax or 100
+    if mobMax < 100 and mobMax ~= assistpct then return true end
+    return false
+end
+
+--- True when a conditional matar debuff should be sung via twist-once (or cast via doDebuff).
 function botdebuff.MatarDebuffNeededForTwist(index)
+    if not botdebuff.BardMatarDebuffIsConditional(index) then return false end
     local entry = botconfig.getSpellEntry('debuff', index)
     if not entry or entry.enabled == false then return false end
     if spellutils.IsMezSpell(entry) then return false end
@@ -161,7 +184,8 @@ function botdebuff.MatarDebuffNeededForTwist(index)
     if not castutils.hpEvalSpawn(chosenTargetId, { min = db.mobMin, max = db.mobMax }) then return false end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == chosenTargetId then
-            return DebuffSpawnNeedsSpell(entry, ctx, v, 'matar')
+            if not DebuffSpawnNeedsSpell(entry, ctx, v, 'matar') then return false end
+            return spellutils.PreCondCheck('debuff', index, chosenTargetId)
         end
     end
     return false
@@ -524,7 +548,7 @@ local function retargetMaTargetAfterBardMez()
     return nil
 end
 
-local function updateBardNotmatarDebuffState(entry, evalId)
+local function updateBardTwistOnceDebuffState(entry, evalId)
     if not entry or not evalId then return end
     local durationSec = spellutils.GetSpellDurationSec(entry)
     if durationSec > 0 then
@@ -541,14 +565,14 @@ local function updateBardNotmatarDebuffState(entry, evalId)
     end
 end
 
---- BRD notmatar twist-once: wait for song, update debuff state, re-target MA's target, resume combat twist.
-local function DebuffCheckHandleBardNotmatarWait(rc)
-    if mq.TLO.Me.Class.ShortName() ~= 'BRD' or not rc.bardNotmatarWait then
+--- BRD twist-once wait: wait for song, update debuff state, re-target if needed, resume combat twist.
+local function DebuffCheckHandleBardTwistOnceWait(rc)
+    if mq.TLO.Me.Class.ShortName() ~= 'BRD' or not rc.bardTwistOnceWait then
         return false
     end
-    local w = rc.bardNotmatarWait
+    local w = rc.bardTwistOnceWait
     if not w or not w.entry or not w.EvalID then
-        rc.bardNotmatarWait = nil
+        rc.bardTwistOnceWait = nil
         state.clearRunState()
         return false
     end
@@ -557,69 +581,82 @@ local function DebuffCheckHandleBardNotmatarWait(rc)
     if stillSinging then w.singingStarted = true end
     if w.deadline and now < w.deadline then
         -- Keep waiting while the song is in progress, or before it has begun (mq2twist queues a tick
-        -- before casting actually starts). Otherwise we'd phantom-complete and record a mez that never
-        -- landed, leaving the add un-mezzed but treated as handled.
+        -- before casting actually starts). Otherwise we'd phantom-complete and record a debuff that never
+        -- landed, leaving the mob untreated but marked as handled.
         if stillSinging or not w.singingStarted then
             return true
         end
     end
-    if not w.singingStarted then
-        rc.bardNotmatarWait = nil
+    local function finishTwistOnceWait()
+        rc.bardTwistOnceWait = nil
         state.clearRunState()
-        retargetMaTargetAfterBardMez()
-        bardtwist.RestoreCombatTwistAfterNotmatar()
+        if w.targethit == 'notmatar' then
+            retargetMaTargetAfterBardMez()
+        end
+        bardtwist.RestoreCombatTwistAfterTwistOnce()
+    end
+    if not w.singingStarted then
+        finishTwistOnceWait()
         return true
     end
-    rc.bardNotmatarWait = nil
-    state.clearRunState()
-    -- Only record the mez if we actually sang it. A deadline that expires without ever singing is a
+    -- Only record the debuff if we actually sang it. A deadline that expires without ever singing is a
     -- failed cast: clean up and resume, but do not mark the debuff as landed.
     if w.singingStarted then
-        updateBardNotmatarDebuffState(w.entry, w.EvalID)
+        updateBardTwistOnceDebuffState(w.entry, w.EvalID)
     end
-    retargetMaTargetAfterBardMez()
-    bardtwist.RestoreCombatTwistAfterNotmatar()
+    finishTwistOnceWait()
     return true
 end
 
---- Twist-once bard mez on a single target (notmatar debuff hook and CH/Gate interrupt).
+--- Twist-once bard debuff on a single target (conditional matar, notmatar mez, CH/Gate interrupt).
+---@param targethit string 'matar' | 'notmatar'
 ---@param reason string|nil When set, logs as interrupt (e.g. 'Complete Heal/Gate') instead of add mez.
-function botdebuff.CastBardMezOnce(spellIndex, EvalID, runPriority, reason)
+function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPriority, reason)
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
     local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry or type(entry.gem) ~= 'number' then return false end
     local spellName = entry.spell or ('gem' .. tostring(entry.gem))
     local targetName = (mq.TLO.Spawn(EvalID) and mq.TLO.Spawn(EvalID).CleanName()) or tostring(EvalID)
-    mq.cmd('/squelch /attack off')
-    targeting.TargetAndWait(EvalID, 500)
-    if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed()
-        and spellutils.SpawnMezActive(EvalID)
-        and not spellutils.SpawnHasDebuffSpell(entry.spell, EvalID) then
-        printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
-        spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
-        retargetMaTargetAfterBardMez()
-        bardtwist.RestoreCombatTwistAfterNotmatar()
-        return true
-    end
-    if reason and reason ~= '' then
-        printf('\ayCZBot:\ax interrupting \ag%s\ax on \at%s\ax (%s)', spellName, targetName, reason)
+    if targethit == 'notmatar' then
+        mq.cmd('/squelch /attack off')
+        targeting.TargetAndWait(EvalID, 500)
+        if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed()
+            and spellutils.SpawnMezActive(EvalID)
+            and not spellutils.SpawnHasDebuffSpell(entry.spell, EvalID) then
+            printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
+            spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
+            retargetMaTargetAfterBardMez()
+            bardtwist.RestoreCombatTwistAfterTwistOnce()
+            return true
+        end
+        if reason and reason ~= '' then
+            printf('\ayCZBot:\ax interrupting \ag%s\ax on \at%s\ax (%s)', spellName, targetName, reason)
+        else
+            printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
+        end
+    elseif targethit == 'matar' then
+        if mq.TLO.Target.ID() ~= EvalID then
+            targeting.TargetAndWait(EvalID, 500)
+        end
+        printf('\ayCZBot:\ax [Debuff] twist-once \am%s\ax on \at%s\ax (id %s)', spellName, targetName, EvalID)
     else
-        printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
+        return false
     end
     bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
     local castTimeMs = (castTime and castTime > 0) and castTime or 3000
-    rc.bardNotmatarWait = {
+    rc.bardTwistOnceWait = {
         spellIndex = spellIndex,
         EvalID = EvalID,
         entry = entry,
+        targethit = targethit,
         singingStarted = false,
         deadline = mq.gettime() + castTimeMs + 100,
     }
     if not state.canStartBusyState(state.STATES.casting) then
-        rc.bardNotmatarWait = nil
+        rc.bardTwistOnceWait = nil
         return false
     end
     state.setRunState(state.STATES.casting, {
@@ -629,9 +666,24 @@ function botdebuff.CastBardMezOnce(spellIndex, EvalID, runPriority, reason)
     return true
 end
 
-local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, runPriority, _spellcheckResume)
-    if sub ~= 'debuff' or targethit ~= 'notmatar' or mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
-    return botdebuff.CastBardMezOnce(spellIndex, EvalID, runPriority, nil)
+--- Twist-once bard mez (notmatar); used by CH/Gate interrupt.
+function botdebuff.CastBardMezOnce(spellIndex, EvalID, runPriority, reason)
+    return botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, 'notmatar', runPriority, reason)
+end
+
+local function DebuffCheckBardTwistOnceCast(spellIndex, EvalID, targethit, sub, runPriority, _spellcheckResume)
+    if sub ~= 'debuff' or mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
+    if targethit == 'notmatar' then
+        return botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPriority, nil)
+    end
+    if targethit == 'matar' then
+        if botdebuff.BardMatarDebuffIsConditional(spellIndex) then
+            return botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPriority, nil)
+        end
+        -- Unconditional matar: sustained by combat twist, not a separate cast.
+        return true
+    end
+    return false
 end
 
 local function DebuffEntryValid(i)
@@ -802,7 +854,7 @@ end
 
 local function refreshBardCombatTwistIfNeeded()
     local rc = state.getRunconfig()
-    if rc.bardNotmatarWait then return end
+    if rc.bardTwistOnceWait then return end
     if mq.TLO.Me.Class.ShortName() == 'BRD' and state.getMobCount() > 0 then
         bardtwist.EnsureDefaultTwistRunning()
     end
@@ -813,12 +865,12 @@ function botdebuff.DebuffCheck(runPriority)
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     ---@type RunConfig
     local rc = state.getRunconfig()
-    if DebuffCheckHandleBardNotmatarWait(rc) then return false end
+    if DebuffCheckHandleBardTwistOnceWait(rc) then return false end
     if spellutils.handleSpellCheckReentry('debuff', { runPriority = runPriority, skipInterruptForBRD = true }) then
         return false
     end
     if state.getMobCount() <= 0 then return false end
-    if rc.MobList and rc.MobList[1] and not rc.bardNotmatarWait then
+    if rc.MobList and rc.MobList[1] and not rc.bardTwistOnceWait then
         local desiredPetTargetId = rc.engageTargetId
         local _, _, maTargetId = spellutils.GetAssistInfo(true)
         if maTargetId == 0 then maTargetId = nil end
@@ -850,7 +902,7 @@ function botdebuff.DebuffCheck(runPriority)
         mezDebug = mq.TLO.Me.Class.ShortName() == 'BRD',
         immuneCheck = true,
         beforeCast = DebuffOnBeforeCast,
-        customCastFn = DebuffCheckBardNotmatarCast,
+        customCastFn = DebuffCheckBardTwistOnceCast,
         entryValid = DebuffEntryValid,
         afterCast = function(i, EvalID, targethit)
             return DebuffCheckAfterCast(i, EvalID, targethit, ctx.mobcountstart)

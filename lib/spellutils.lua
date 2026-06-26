@@ -1872,7 +1872,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
 
     -- Stuck casting recovery: clear if we've been in casting state past deadline. Do not clear while memorizing or bard mez wait.
     if state.getRunState() == state.STATES.casting and state.runStateDeadlinePassed() then
-        if not rc.bardNotmatarWait and not spellutils.IsMemorizing() then
+        if not rc.bardTwistOnceWait and not spellutils.IsMemorizing() then
             spellutils.clearCastingStateOrResume()
             return false
         end

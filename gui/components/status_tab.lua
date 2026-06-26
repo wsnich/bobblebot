@@ -303,7 +303,7 @@ local function twistListText(gems)
 end
 
 local function safeTwistList(mode)
-    -- GetTwistListForMode('combat') reaches into the debuff eval (MatarDebuffNeededForTwist); isolate
+    -- GetTwistListForMode('combat') may reach into debuff eval; isolate
     -- any failure so one mode can't break the panel.
     local ok, list = pcall(bardtwist.GetTwistListForMode, mode)
     if ok and type(list) == 'table' then return list end

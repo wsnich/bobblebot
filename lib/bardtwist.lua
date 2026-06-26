@@ -128,11 +128,9 @@ function bardtwist.BuildCombatTwistList()
             local entry = debuffs[i]
             if entry and entry.enabled ~= false and type(entry.gem) == 'number' and entry.gem >= 1 and entry.gem <= 12 then
                 if debuffHasMatar(entry) then
-                    local needed = true
-                    if botdebuff and botdebuff.MatarDebuffNeededForTwist then
-                        needed = botdebuff.MatarDebuffNeededForTwist(i)
-                    end
-                    if needed then
+                    local conditional = botdebuff and botdebuff.BardMatarDebuffIsConditional
+                        and botdebuff.BardMatarDebuffIsConditional(i)
+                    if not conditional then
                         out[#out + 1] = entry.gem
                     end
                 end
@@ -221,7 +219,7 @@ end
 
 --- Set twist list for mode. Only issue /twist when not twisting or list differs (avoid restart every tick). For travel with no song, stop twist.
 function bardtwist.EnsureTwistForMode(mode)
-    if state.getRunconfig().bardNotmatarWait then return end
+    if state.getRunconfig().bardTwistOnceWait then return end
     if not bardtwist.SongsEnabled() then return end
     local desiredGems = bardtwist.GetTwistListForMode(mode)
     if not desiredGems or #desiredGems == 0 then
@@ -245,7 +243,7 @@ function bardtwist.EnsureTwistForMode(mode)
 end
 
 function bardtwist.EnsureDefaultTwistRunning()
-    if state.getRunconfig().bardNotmatarWait then return end
+    if state.getRunconfig().bardTwistOnceWait then return end
     if utils.isNearPrimaryBindPoint() then
         bardtwist.StopTwist()
         return
@@ -302,12 +300,15 @@ function bardtwist.getLastTwistOnceGem()
     return lastTwistOnceGem
 end
 
---- Restore combat twist after BRD notmatar wait ends. Call only when bardNotmatarWait was just cleared.
-function bardtwist.RestoreCombatTwistAfterNotmatar()
+--- Restore combat twist after BRD twist-once wait ends. Call only when bardTwistOnceWait was just cleared.
+function bardtwist.RestoreCombatTwistAfterTwistOnce()
     twistOnceActive = false
     clearTwistOnceGemHint()
     if not bardtwist.SongsEnabled() then return end
     bardtwist.EnsureTwistForMode('combat')
 end
+
+---@deprecated use RestoreCombatTwistAfterTwistOnce
+bardtwist.RestoreCombatTwistAfterNotmatar = bardtwist.RestoreCombatTwistAfterTwistOnce
 
 return bardtwist
