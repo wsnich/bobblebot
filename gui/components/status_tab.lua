@@ -926,6 +926,22 @@ function M.draw()
     -- Spell-upgrade prompt + scribe button.
     drawSpellUpgradesSection()
 
+    -- Window title: optionally rename the EQ window/taskbar to this character's name (off by default) so
+    -- multiboxed instances are tellable apart in the taskbar / alt-tab.
+    ImGui.Spacing()
+    ImGui.Separator()
+    local wtChecked = (botconfig.config.settings.winTitle == true)
+    local wtVal, wtPressed = ImGui.Checkbox('Rename EQ window to character name##misc_wintitle', wtChecked)
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip(
+            'Sets the EQ window/taskbar title to this character\'s name while the bot runs, so multiboxed\ninstances are tellable apart. Restores "EverQuest" when off. (Also /cz wintitle on|off.)')
+    end
+    if wtPressed then
+        botconfig.config.settings.winTitle = wtVal
+        if not wtVal then mq.cmd('/setwintitle EverQuest') end -- restore the default title immediately
+        botconfig.ApplyAndPersist()
+    end
+
     -- Recent activity (newest first): the real actions the bot has taken, so the rapid subsystem-check
     -- ("X Check") idle cycle in the header doesn't hide what actually happened.
     ImGui.Spacing()

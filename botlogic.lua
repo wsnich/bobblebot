@@ -329,6 +329,18 @@ local function _runDoMovementCheck()
     _movementLastRun = mq.gettime() + 1000
 end
 
+-- Rename the EQ window (taskbar entry) to this character's name while the bot runs, so multiboxed
+-- instances are tellable apart. Self-healing + throttled: re-applies if EQ resets the title (e.g. on zone).
+local _winTitleNext = 0
+local function _setWinTitleIfNeeded()
+    if myconfig.settings.winTitle == false then return end
+    if _winTitleNext > mq.gettime() then return end
+    _winTitleNext = mq.gettime() + 5000
+    local name = mq.TLO.Me.CleanName()
+    if not name or name == '' then return end
+    if mq.TLO.EverQuest.WinTitle() ~= name then mq.cmdf('/setwintitle %s', name) end
+end
+
 -- Misc only: inactive click (anti-afk, random 60–90s interval) and drag. Runs only when priority allows (not when casting). Throttled 1s.
 local function _runDoMiscTimer()
     if _miscLastRun > mq.gettime() then return end
@@ -337,6 +349,7 @@ local function _runDoMiscTimer()
     premem.tick() -- pre-load configured gems during downtime so combat spells don't memorize on the fly
     spellupgrade.tick() -- detect when a better in-book version of a configured spell is available
     scribe.tick() -- auto-scribe new spell scrolls after a level-up (when out of combat)
+    _setWinTitleIfNeeded() -- keep the taskbar window titled with this character's name
     _miscLastRun = mq.gettime() + 1000
 end
 

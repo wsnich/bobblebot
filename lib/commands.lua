@@ -799,6 +799,20 @@ local function cmd_aetankdebug(args)
     printf('\ayCZBot:\axAE-tank debug logging %s', botmelee.IsAeTankDebug() and 'on' or 'off')
 end
 
+local function cmd_wintitle(args)
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        botconfig.config.settings.winTitle = true
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        botconfig.config.settings.winTitle = false
+    else
+        botconfig.config.settings.winTitle = not (botconfig.config.settings.winTitle ~= false)
+    end
+    if botconfig.config.settings.winTitle == false then mq.cmd('/setwintitle EverQuest') end -- restore default
+    botconfig.ApplyAndPersist()
+    printf('\ayCZBot:\axWindow title rename %s', (botconfig.config.settings.winTitle ~= false) and 'on' or 'off')
+end
+
 local function cmd_charmpetsetup(args)
     local mode = args[2] and string.lower(args[2]) or ''
     if mode == 'on' or mode == 'true' or mode == '1' then
@@ -1354,6 +1368,7 @@ local handlers = {
     prememdebug = cmd_prememdebug,
     scribe = cmd_scribe,
     autoscribe = cmd_autoscribe,
+    wintitle = cmd_wintitle,
     upgrades = cmd_upgrades,
     applyupgrade = cmd_applyupgrade,
     upgradedebug = cmd_upgradedebug,

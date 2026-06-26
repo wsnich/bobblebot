@@ -22,6 +22,7 @@ local GROUPS = {
         { "/cz import lua <file>", "Import a config from a Lua file." },
         { "/cz export <file>", "Export the current config to a file." },
         { "/cz setvar <section.key> <value>", "Set a config value by path and save it." },
+        { "/cz wintitle on|off", "Rename the EQ taskbar window to this character's name while the bot runs." },
         { "/cz debug", "Toggle general debug output." },
     } },
     { title = "Roles & targeting", cmds = {
