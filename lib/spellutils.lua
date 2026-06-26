@@ -1493,9 +1493,14 @@ function spellutils.GetAssistInfo(includeTarget, assistpct)
     end
 
     if assistar and assistar > 0 then
-        local hp = assistarhp or mq.TLO.Spawn(assistar).PctHPs()
-        if hp and hp <= pct then
-            rc.lastAssistTargetId = assistar
+        if not utils.isAliveEngageSpawn(mq.TLO.Spawn(assistar)) then
+            assistar = nil
+            assistarhp = nil
+        else
+            local hp = assistarhp or mq.TLO.Spawn(assistar).PctHPs()
+            if hp and hp <= pct then
+                rc.lastAssistTargetId = assistar
+            end
         end
     end
 

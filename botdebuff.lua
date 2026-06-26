@@ -182,6 +182,7 @@ function botdebuff.MatarDebuffNeededForTwist(index)
     if not ctx then return false end
     local chosenTargetId = entry.onlyMT and ctx.mtTargetId or ctx.maTargetId
     if not chosenTargetId then return false end
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(chosenTargetId)) then return false end
     if not castutils.hpEvalSpawn(chosenTargetId, { min = db.mobMin, max = db.mobMax }) then return false end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == chosenTargetId then
@@ -205,6 +206,7 @@ local function DebuffEvalMatar(index, ctx)
     if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
     local chosenTargetId = entry.onlyMT and ctx.mtTargetId or ctx.maTargetId
     if not chosenTargetId then return nil, nil end
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(chosenTargetId)) then return nil, nil end
 
     if not castutils.hpEvalSpawn(chosenTargetId, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
@@ -364,10 +366,13 @@ local function debuffGetTargetsForPhase(phase, context)
     local maTargetId = context.maTargetId
     local mtTargetId = context.mtTargetId
     if phase == 'matar' then
-        -- Suspend matar/named entirely when MA has no target.
+        -- Suspend matar/named entirely when MA has no live target.
         if not maTargetId or maTargetId <= 0 then return out end
-        out[#out + 1] = { id = maTargetId, targethit = 'matar' }
-        if mtTargetId and mtTargetId > 0 and mtTargetId ~= maTargetId then
+        if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTargetId)) then
+            out[#out + 1] = { id = maTargetId, targethit = 'matar' }
+        end
+        if mtTargetId and mtTargetId > 0 and mtTargetId ~= maTargetId
+            and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(mtTargetId)) then
             out[#out + 1] = { id = mtTargetId, targethit = 'matar' }
         end
         return out
@@ -501,6 +506,7 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     local entry = botconfig.getSpellEntry('debuff', i)
     if not entry then return false end
     if EvalID and utils.isProtectedSpawn(mq.TLO.Spawn(EvalID)) then return false end
+    if EvalID and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(EvalID)) then return false end
     -- Reactive mode (settings.engageXTargetOnly, opt-in): only debuff/mez/nuke mobs on our XTarget
     -- Auto-Hater list (aggro'd on the group). Stops the bot casting on -- and thereby aggroing -- unwanted
     -- MobList NPCs (e.g. an enchanter slowing/mezzing a mob nobody is fighting). /cz attack bypasses it.
@@ -568,10 +574,21 @@ end
 
 --- True when a BRD twist-once wait should abort (target died, left camp, or fight ended).
 local function bardTwistOnceShouldAbort(w, rc)
+    if state.getRunState() == state.STATES.camp_return then return true end
     local evalId = w.EvalID
     if not evalId or evalId <= 0 then return true end
     if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(evalId)) then return true end
-    if w.targethit == 'matar' and state.getMobCount() <= 0 then return true end
+    if w.targethit == 'matar' then
+        if state.getMobCount() <= 0 then return true end
+        local found = false
+        for _, v in ipairs(rc.MobList or {}) do
+            if v.ID() == evalId then
+                found = true
+                break
+            end
+        end
+        if not found then return true end
+    end
     if w.targethit == 'notmatar' then
         local found = false
         for _, v in ipairs(rc.MobList or {}) do
@@ -588,21 +605,25 @@ end
 local function finishBardTwistOnceWait(rc, w, opts)
     opts = opts or {}
     local recordDebuff = opts.recordDebuff == true
-    if opts.stopTwist and (mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0) then
+    if opts.stopTwist then
         bardtwist.StopTwist()
     end
     rc.bardTwistOnceWait = nil
     state.clearRunState()
     rc.statusMessage = ''
-    if recordDebuff and w.singingStarted then
+    if recordDebuff and w.singingStarted and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)) then
         updateBardTwistOnceDebuffState(w.entry, w.EvalID)
     end
     if w.EvalID and (rc.engageTargetId == w.EvalID or not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID))) then
         rc.engageTargetId = nil
+        if rc.lastAssistTargetId == w.EvalID then
+            rc.lastAssistTargetId = nil
+        end
     end
     if state.getMobCount() <= 0 then
         rc.engageTargetId = nil
         rc.attackCommandEngage = nil
+        rc.lastAssistTargetId = nil
     end
     if w.targethit == 'notmatar' then
         retargetMaTargetAfterBardMez()
@@ -623,27 +644,23 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
         return false
     end
     if bardTwistOnceShouldAbort(w, rc) then
-        finishBardTwistOnceWait(rc, w, { stopTwist = true })
+        local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0
+        finishBardTwistOnceWait(rc, w, {
+            stopTwist = bardtwist.IsTwistOnceActive() or stillSinging,
+        })
+        return true
+    end
+    local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0
+    if bardtwist.IsTwistOnceActive() or stillSinging then
+        w.singingStarted = true
         return true
     end
     local now = mq.gettime()
-    local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
-    if stillSinging then w.singingStarted = true end
-    if w.deadline and now < w.deadline then
-        -- Keep waiting while the song is in progress, or before it has begun (mq2twist queues a tick
-        -- before casting actually starts). Otherwise we'd phantom-complete and record a debuff that never
-        -- landed, leaving the mob untreated but marked as handled.
-        if stillSinging or not w.singingStarted then
-            return true
-        end
-    end
-    if not w.singingStarted then
-        finishBardTwistOnceWait(rc, w, {})
+    if not w.singingStarted and w.deadline and now < w.deadline then
         return true
     end
-    -- Only record the debuff if we actually sang it. A deadline that expires without ever singing is a
-    -- failed cast: clean up and resume, but do not mark the debuff as landed.
-    finishBardTwistOnceWait(rc, w, { recordDebuff = true })
+    local record = w.singingStarted and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID))
+    finishBardTwistOnceWait(rc, w, { recordDebuff = record })
     return true
 end
 
@@ -652,6 +669,12 @@ end
 ---@param reason string|nil When set, logs as interrupt (e.g. 'Complete Heal/Gate') instead of add mez.
 function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPriority, reason)
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
+    if not EvalID or EvalID <= 0 or not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(EvalID)) then
+        return true
+    end
+    if state.getRunState() == state.STATES.camp_return then
+        return true
+    end
     local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry or type(entry.gem) ~= 'number' then return false end

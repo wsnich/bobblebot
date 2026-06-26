@@ -300,6 +300,10 @@ function bardtwist.getLastTwistOnceGem()
     return lastTwistOnceGem
 end
 
+function bardtwist.IsTwistOnceActive()
+    return twistOnceActive
+end
+
 --- Restore twist for current mode after BRD twist-once wait ends. Call only when bardTwistOnceWait was just cleared.
 function bardtwist.RestoreCombatTwistAfterTwistOnce()
     twistOnceActive = false

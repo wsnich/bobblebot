@@ -310,6 +310,17 @@ local function isCorpseAtCamp(corpseID, rc)
 end
 
 local function doLeashResetCombat()
+    local rc = state.getRunconfig()
+    if rc.bardTwistOnceWait then
+        rc.bardTwistOnceWait = nil
+        state.clearRunState()
+        rc.statusMessage = ''
+        local bardtwist = require('lib.bardtwist')
+        bardtwist.StopTwist()
+    end
+    rc.engageTargetId = nil
+    rc.attackCommandEngage = nil
+    rc.lastAssistTargetId = nil
     combat.ResetCombatState()
 end
 
